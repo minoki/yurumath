@@ -24,6 +24,10 @@ dependencies:
 - text
 - mtl
 - transformers
+- containers
+
+default-extensions:
+- BangPatterns
 
 library:
   source-dirs: src

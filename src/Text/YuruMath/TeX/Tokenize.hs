@@ -119,7 +119,7 @@ nextToken = do
               if cc == CCSpace
                 then setSkipSpacesMode
                 else setMiddleOfLineMode
-              return $ Just $ TTCharacter d CCEscape
+              return $ Just $ TTControlSeq (T.singleton d)
             else do -- control word
               setSkipSpacesMode
               return $ Just $ TTControlSeq (T.pack w)

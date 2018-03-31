@@ -1,5 +1,6 @@
 module Text.YuruMath.TeX.Token where
 import Data.Text (Text)
+import Data.Word
 
 data CatCode = CCEscape -- 0
              | CCBeginGroup -- 1
@@ -55,8 +56,9 @@ data MathClass = MathOrd -- \mathord, ordinary object (1)
                | MathInner -- \mathinner, inner formula
                deriving (Eq,Show,Enum,Bounded)
 
-data MathFamily = FamilyRoman -- (0)
-                | FamilyMathItalic -- (1)
+--data MathFamily = FamilyRoman -- (0)
+--                | FamilyMathItalic -- (1)
+type MathFamily = Word8
 
 data MathChar = MathChar !MathClass !MathFamily !Char
 -- "xyzz (15-bit number)

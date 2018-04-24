@@ -1,11 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Main where
-import Text.YuruMath.TeX.Token
-import Text.YuruMath.TeX.Tokenize
+import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.State
+import Text.YuruMath.TeX.Tokenizer
 import Control.Monad.State.Strict
 import Control.Monad.Except
 
-tokenizeAll :: (MonadState TeXTokenState m, MonadError String m) => m [TeXToken]
+tokenizeAll :: (MonadState (TeXState a) m, MonadError String m) => m [TeXToken]
 tokenizeAll = do
   t <- nextToken
   case t of
@@ -15,7 +16,7 @@ tokenizeAll = do
 main :: IO ()
 main = do
   input <- getContents
-  let tokenResult = runExcept (runStateT tokenizeAll (initialTeXTokenState input))
+  let tokenResult = runExcept (runStateT tokenizeAll (initialState input))
   case tokenResult of
     Left err -> putStrLn ("tokenize error: " ++ err)
     Right (tokenList, _state) -> do

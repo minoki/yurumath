@@ -1,0 +1,547 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+module Text.YuruMath.TeX.Expansion where
+import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Tokenizer
+import Text.YuruMath.TeX.State
+import Data.Char
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Map.Strict as Map
+import Control.Monad
+import Control.Monad.State.Class
+import Control.Monad.Error.Class
+import Control.Lens.Cons (_head)
+import Control.Lens.Getter (view,use)
+import Control.Lens.Setter (assign,modifying)
+import Control.Applicative
+
+nextEToken :: (MonadTeXState a m, MonadError String m) => m (Maybe ExpansionToken)
+nextEToken = do
+  pending <- use esPendingTokenList
+  case pending of
+    [] -> do t <- nextToken
+             return (ExpansionToken False <$> t)
+    (_,t):ts -> do
+      assign esPendingTokenList ts
+      return (Just t)
+
+nextETokenWithDepth :: (MonadTeXState a m, MonadError String m) => m (Maybe (Int,ExpansionToken))
+nextETokenWithDepth = do
+  pending <- use esPendingTokenList
+  case pending of
+    [] -> do t <- nextToken
+             return (((,) 0 . ExpansionToken False) <$> t)
+    t:ts -> do
+      assign esPendingTokenList ts
+      return (Just t)
+
+unreadETokens :: (MonadTeXState a m, MonadError String m) => Int -> [ExpansionToken] -> m ()
+unreadETokens !depth ts = do
+  limit <- use esMaxPendingToken
+  ts' <- use esPendingTokenList
+  maxDepth <- use esMaxDepth
+  when (depth >= maxDepth) $ throwError "recursion too deep"
+  when (length ts' + length ts > limit) $ throwError "token list too long"
+  assign esPendingTokenList (map ((,) depth) ts ++ ts')
+
+readUntilEndGroup :: (MonadTeXState a m, MonadError String m) => Int -> [TeXToken] -> m [TeXToken]
+readUntilEndGroup !depth revTokens = do
+  t <- nextEToken
+  case t of
+    Nothing -> throwError "unexpected end of input when reading an argument"
+    Just (ExpansionToken _ t@(TTCharacter _ CCEndGroup))
+      | depth == 0 -> return (reverse revTokens)
+      | otherwise -> readUntilEndGroup (depth - 1) (t : revTokens)
+    Just (ExpansionToken _ t@(TTCharacter _ CCBeginGroup))
+      -> readUntilEndGroup (depth + 1) (t : revTokens)
+    Just (ExpansionToken _ t)
+      -> readUntilEndGroup depth (t : revTokens)
+
+readArgument :: (MonadTeXState a m, MonadError String m) => m [TeXToken]
+readArgument = do
+  t <- nextEToken
+  case t of
+    Nothing -> throwError "unexpected end of input when expecting an argument"
+    Just (ExpansionToken _ (TTCharacter _ CCSpace)) -> readArgument
+    Just (ExpansionToken _ (TTCharacter _ CCEndGroup)) -> throwError "unexpected end of group"
+    Just (ExpansionToken _ (TTCharacter _ CCBeginGroup)) -> readUntilEndGroup 0 []
+    Just (ExpansionToken _ t) -> return [t]
+
+isExpandableName :: (MonadTeXState a m) => TeXToken -> m Bool
+isExpandableName t = case t of
+  TTControlSeq name -> do
+    m <- use (localStates . _head . tsDefinitions)
+    return $ case Map.lookup name m of
+               Just (Left e) -> True
+               _ -> False
+  TTCharacter c CCActive -> do
+    m <- use (localStates . _head . tsActiveDefinitions)
+    return $ case Map.lookup c m of
+               Just (Left e) -> True
+               _ -> False
+  _ -> return False
+
+expandOnce :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
+expandOnce et@(ExpansionToken True _) = return [et]
+expandOnce et@(ExpansionToken False t) = case t of
+  TTControlSeq name -> do
+    m <- use (localStates . _head . tsDefinitions)
+    case Map.lookup name m of
+      Just (Left (ExpandableCommand c)) -> runExpandableCommand c
+      _ -> return [et]
+  TTCharacter c CCActive -> do
+    m <- use (localStates . _head . tsActiveDefinitions)
+    case Map.lookup c m of
+      Just (Left (ExpandableCommand c)) -> runExpandableCommand c
+      _ -> return [et]
+  _ -> return [et]
+
+expandedOnce :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+expandedOnce = do
+  t <- required nextEToken
+  expandOnce t
+
+-- used by \csname
+expandedTotally :: (MonadTeXState a m, MonadError String m) => m (Either ExpandableValue ExpansionToken)
+expandedTotally = do
+  (d,t) <- required nextETokenWithDepth
+  let doExpand u = case u of
+        Just (Left (ExpandableValue v)) -> return $ Left v
+        Just (Left (ExpandableCommand c)) -> do
+          r <- runExpandableCommand c
+          unreadETokens (d+1) r
+          expandedTotally
+        _ -> return (Right t)
+  case t of
+    ExpansionToken False (TTControlSeq name) -> do
+      m <- use (localStates . _head . tsDefinitions)
+      doExpand (Map.lookup name m)
+    ExpansionToken False (TTCharacter c CCActive) -> do
+      m <- use (localStates . _head . tsActiveDefinitions)
+      doExpand (Map.lookup c m)
+    _ -> return (Right t)
+
+-- used by number reading
+evalToken :: (MonadTeXState a m, MonadError String m) => m (ExpansionToken,Either ExpandableValue (Value a))
+evalToken = do
+  (d,t) <- required nextETokenWithDepth
+  let doExpand cn u = case u of
+        Just (Left (ExpandableValue v)) -> return (t,Left v)
+        Just (Left (ExpandableCommand c)) -> do
+          r <- runExpandableCommand c
+          unreadETokens (d+1) r
+          evalToken
+        Just (Right v) -> return (t,Right v) -- non-expandable commands are not executed
+        Nothing -> return (t,Right $ Undefined cn)
+  case t of
+    ExpansionToken False (TTControlSeq name) -> do
+      m <- use (localStates . _head . tsDefinitions)
+      doExpand (NControlSeq name) (Map.lookup name m)
+    ExpansionToken False (TTCharacter c CCActive) -> do
+      m <- use (localStates . _head . tsActiveDefinitions)
+      doExpand (NActiveChar c) (Map.lookup c m)
+    ExpansionToken True (TTControlSeq name) -> do
+      return (t,Right (Unexpanded (NControlSeq name)))
+    ExpansionToken True (TTCharacter c CCActive) -> do
+      return (t,Right (Unexpanded (NActiveChar c)))
+    ExpansionToken False (TTCharacter c cc) ->
+      return (t,Right (Character c cc))
+
+required :: (MonadError String m) => m (Maybe a) -> m a
+required m = do a <- m
+                case a of
+                  Nothing -> throwError "unexpected end of input"
+                  Just a -> return a
+
+expandafterCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+expandafterCommand = do
+  t1 <- required nextEToken
+  t2 <- required nextEToken
+  (t1:) <$> expandOnce t2
+
+noexpandCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+noexpandCommand = do
+  t <- required nextEToken
+  f <- isExpandableName (etToken t)
+  if f
+    then return [ExpansionToken True (etToken t)]
+    else return [t]
+
+readUntilEndcsname :: (MonadTeXState a m, MonadError String m) => [Char] -> m [Char]
+readUntilEndcsname revName = do
+  t <- expandedTotally
+  case t of
+    Left Eendcsname -> return (reverse revName)
+    Left e -> throwError $ "unexpected " ++ show e ++ " while looking for \\endcsname"
+    Right (ExpansionToken _ (TTCharacter c _)) -> readUntilEndcsname (c:revName)
+    Right (ExpansionToken _ (TTControlSeq name)) -> throwError $ "unexpected \\" ++ show name ++ " while looking for \\endcsname"
+
+csnameCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+csnameCommand = do
+  name <- readUntilEndcsname []
+  let tname = T.pack name
+
+  -- SIDE EFFECT OF \csname
+  d <- use (localStates . _head . tsDefinitions)
+  when (Map.notMember tname d)
+    $ modifying (localStates . _head . tsDefinitions) (Map.insert tname (Right Relax))
+
+  return [ExpansionToken False (TTControlSeq tname)]
+
+stringToEToken :: (MonadTeXState a m, MonadError String m) => String -> m [ExpansionToken]
+stringToEToken [] = return []
+stringToEToken (' ':xs) = (ExpansionToken False (TTCharacter ' ' CCSpace) :) <$> stringToEToken xs
+stringToEToken (x:xs) = (ExpansionToken False (TTCharacter x CCOther) :) <$> stringToEToken xs
+
+stringCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+stringCommand = do
+  t <- required nextEToken
+  case t of
+    ExpansionToken _ (TTControlSeq name) ->
+      stringToEToken ('\\' : T.unpack name)
+    ExpansionToken _ (TTCharacter c _) ->
+      stringToEToken [c]
+
+readOptionalSigns :: (MonadTeXState a m, MonadError String m) => Int -> m Int
+readOptionalSigns !s = do
+  (t,v) <- evalToken
+  case v of
+    Left e -> unreadETokens 0 [t] >> return s
+    Right v -> case v of
+      Character ' ' CCSpace -> readOptionalSigns s -- space: ignored
+      Character '+' CCOther -> readOptionalSigns s
+      Character '-' CCOther -> readOptionalSigns (-s)
+      _ -> unreadETokens 0 [t] >> return s
+
+readUnsignedDecimal :: (MonadTeXState a m, MonadError String m) => Char -> m Integer
+readUnsignedDecimal c = readRest (fromIntegral (digitToInt c))
+  where readRest !x = do
+          (t,v) <- evalToken
+          case v of
+            Left _ -> unreadETokens 0 [t] >> return x
+            Right v -> case v of
+              Character c CCOther | isDigit c -> do
+                                      readRest (10 * x + fromIntegral (digitToInt c))
+              Character ' ' CCSpace -> return x -- consumed
+              _ -> unreadETokens 0 [t] >> return x
+
+readUnsignedOctal :: (MonadTeXState a m, MonadError String m) => m Integer
+readUnsignedOctal = do
+  (t,v) <- evalToken
+  case v of
+    Left e -> throwError $ "unexpected token while reading octal: " ++ show t
+    Right v -> case v of
+      Character c CCOther | isOctDigit c -> do
+                              readRest (fromIntegral (digitToInt c))
+      _ -> throwError $ "unexpected token while reading octal: " ++ show t
+  where readRest !x = do
+          (t,v) <- evalToken
+          case v of
+            Left _ -> unreadETokens 0 [t] >> return x
+            Right v -> case v of
+              Character c CCOther | isOctDigit c -> do
+                                      readRest (8 * x + fromIntegral (digitToInt c))
+              Character ' ' CCSpace -> return x -- consumed
+              _ -> unreadETokens 0 [t] >> return x
+
+readUnsignedHex :: (MonadTeXState a m, MonadError String m) => m Integer
+readUnsignedHex = do
+  (t,v) <- evalToken
+  case v of
+    Left e -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
+    Right v -> case v of
+      Character c CCOther | isUpperHexDigit c -> do
+                              let c0 = digitToInt c
+                              readRest (fromIntegral c0)
+      _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
+  where readRest !x = do
+          (t,v) <- evalToken
+          case v of
+            Left _ -> unreadETokens 0 [t] >> return x
+            Right v -> case v of
+              Character c CCOther | isUpperHexDigit c -> do
+                                      readRest (16 * x + fromIntegral (digitToInt c))
+              Character ' ' CCSpace -> return x -- consumed
+              _ -> unreadETokens 0 [t] >> return x
+        isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
+
+readCharacterCode :: (MonadTeXState a m, MonadError String m) => m Integer
+readCharacterCode = do
+  t <- required nextEToken
+  case t of
+    ExpansionToken _ (TTControlSeq name) -> case T.unpack name of
+      [c] -> return (fromIntegral $ ord c)
+      _ -> throwError "Improper alphabetic constant."
+    ExpansionToken _ (TTCharacter c _) -> return (fromIntegral $ ord c)
+
+readNumber :: (MonadTeXState a m, MonadError String m) => m Integer
+readNumber = do
+  sign <- readOptionalSigns 1
+  (t,v) <- evalToken
+  case v of
+    Left e -> throwError $ "unexpected token while reading number: " ++ show t
+    Right v -> do
+      x <- case v of
+             Character '\'' CCOther -> readUnsignedOctal
+             Character '"' CCOther -> readUnsignedHex
+             Character '`' CCOther -> readCharacterCode
+             Character c CCOther | isDigit c -> readUnsignedDecimal c
+             DefinedCharacter c -> return (fromIntegral $ ord c)
+             -- IntegerConstant x -> return x
+             _ -> throwError $ "unexpected token while reading number: " ++ show t
+      return (fromIntegral sign * x)
+
+numberCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+numberCommand = do
+  x <- readNumber
+  stringToEToken (show x)
+
+-- to be used by conditionals, \or, \else
+shallowEval :: (MonadTeXState a m, MonadError String m) => m (Maybe (Expandable a))
+shallowEval = do
+  t <- required nextEToken
+  case t of
+    ExpansionToken False (TTControlSeq name) -> do
+      m <- use (localStates . _head . tsDefinitions)
+      case Map.lookup name m of
+        Nothing -> return Nothing -- undefined
+        Just (Left e) -> return (Just e) -- expandable
+        Just (Right _) -> return Nothing -- non-expandable
+    ExpansionToken False (TTCharacter c CCActive) -> do
+      m <- use (localStates . _head . tsActiveDefinitions)
+      case Map.lookup c m of
+        Nothing -> return Nothing -- undefined
+        Just (Left e) -> return (Just e) -- expandable
+        Just (Right _) -> return Nothing -- non-expandable
+    _ -> return Nothing -- non-expandable
+
+-- True if encountered \else, False if encountered \fi
+skipUntilElse :: (MonadTeXState a m, MonadError String m) => Int -> m Bool
+skipUntilElse !level = do
+  x <- shallowEval
+  case x of
+    Just (ExpandableValue Eelse) | level == 0 -> return True
+    Just (ExpandableValue Efi) | level == 0 -> return False
+                               | otherwise -> skipUntilElse (level - 1)
+    Just (ExpandableValue Eor) | level == 0 -> throwError "Extra \\or"
+    Just (ExpandableCommand (BooleanConditionalCommand _)) -> skipUntilElse (level + 1)
+    Just (ExpandableCommand IfCase) -> skipUntilElse (level + 1)
+    _ -> skipUntilElse level
+
+skipUntilFi :: (MonadTeXState a m, MonadError String m) => Int -> m ()
+skipUntilFi !level = do
+  x <- shallowEval
+  case x of
+    Just (ExpandableValue Efi) | level == 0 -> return ()
+                               | otherwise -> skipUntilFi (level - 1)
+    Just (ExpandableCommand (BooleanConditionalCommand _)) -> skipUntilFi (level + 1)
+    Just (ExpandableCommand IfCase) -> skipUntilFi (level + 1)
+    _ -> skipUntilFi level
+
+data SkipUntilOr = FoundOr
+                 | FoundElse
+                 | FoundFi
+
+skipUntilOr :: (MonadTeXState a m, MonadError String m) => Int -> m SkipUntilOr
+skipUntilOr !level = do
+  x <- shallowEval
+  case x of
+    Just (ExpandableValue Eor) | level == 0 -> return FoundOr
+    Just (ExpandableValue Eelse) | level == 0 -> return FoundElse
+    Just (ExpandableValue Efi) | level == 0 -> return FoundFi
+                               | otherwise -> skipUntilOr (level - 1)
+    Just (ExpandableCommand (BooleanConditionalCommand _)) -> skipUntilOr (level + 1)
+    Just (ExpandableCommand IfCase) -> skipUntilOr (level + 1)
+    _ -> skipUntilOr level
+
+doBooleanConditional :: (MonadTeXState a m, MonadError String m) => Bool -> m ()
+doBooleanConditional True = do
+  modifying conditionals (CondTruthy:)
+doBooleanConditional False = do
+  e <- skipUntilElse 0
+  when e (modifying conditionals (CondFalsy:))
+
+elseCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+elseCommand = do
+  cs <- use conditionals
+  case cs of
+    CondTruthy:css -> do
+      -- \iftrue ... >>>\else<<< ... \fi
+      skipUntilFi 0
+      assign conditionals css
+      return []
+    CondCase:css -> do
+      -- \ifcase ... \or ... >>>\else<<< ... \fi
+      skipUntilFi 0
+      assign conditionals css
+      return []
+    _ -> throwError "Extra \\else"
+
+fiCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+fiCommand = do
+  cs <- use conditionals
+  case cs of
+    [] -> throwError "Extra \\fi"
+    _:css -> do
+      -- \iftrue ... >>>\fi<<<
+      -- OR
+      -- \iffalse ... \else ... >>>\fi<<<
+      assign conditionals css
+      return []
+
+orCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+orCommand = do
+  cs <- use conditionals
+  case cs of
+    CondCase:css -> do
+      -- \ifcase N ... >>>\or<<< ... \fi
+      skipUntilFi 0
+      assign conditionals css
+      return []
+    _ -> throwError "Extra \\or"
+
+doIfCase :: (MonadTeXState a m, MonadError String m) => Integer -> m ()
+doIfCase 0 = do
+  modifying conditionals (CondCase:)
+doIfCase n = do
+  k <- skipUntilOr 0
+  case k of
+    FoundFi -> return ()
+    FoundElse -> modifying conditionals (CondFalsy:)
+    FoundOr -> doIfCase (n - 1)
+
+ifcaseCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+ifcaseCommand = do
+  x <- readNumber
+  doIfCase x
+  return []
+
+runExpandableCommand :: (MonadTeXState a m, MonadError String m) => ExpandableCommand a -> m [ExpansionToken]
+runExpandableCommand (MkExpandableCommand f) = f
+runExpandableCommand (BooleanConditionalCommand c) = do
+  b <- c
+  doBooleanConditional b
+  return []
+runExpandableCommand IfCase = ifcaseCommand
+
+iftrueCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+iftrueCommand = return True
+
+iffalseCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+iffalseCommand = return False
+
+-- used by \if, \ifcat
+readIfArgument :: (MonadTeXState a m, MonadError String m) => m TeXToken
+readIfArgument = do
+  (t,u) <- evalToken
+  case u of
+    Left Eelse -> do
+      unreadETokens 0 [t]
+      return (TTControlSeq "relax")
+    Left Efi -> do
+      unreadETokens 0 [t]
+      return (TTControlSeq "relax")
+    Left Eor -> do
+      throwError "Extra \\or"
+    _ -> return (etToken t)
+
+-- \if: test character codes
+ifCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifCommand = do
+  t1 <- readIfArgument
+  t2 <- readIfArgument
+  case (t1, t2) of
+    (TTCharacter c1 _, TTCharacter c2 _) -> return $ c1 == c2
+    (TTControlSeq _, TTControlSeq _) -> return True
+    (_, _) -> return False
+
+-- \ifcat: test category codes
+ifcatCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifcatCommand = do
+  t1 <- readIfArgument
+  t2 <- readIfArgument
+  case (t1, t2) of
+    (TTCharacter _ cc1, TTCharacter _ cc2) -> return $ cc1 == cc2
+    (TTControlSeq _, TTControlSeq _) -> return True
+    (_, _) -> return False
+
+meaning :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m (Either (Expandable a) (Value a))
+meaning t = do
+  case t of
+    ExpansionToken True (TTCharacter c CCActive) -> return (Right (Unexpanded (NActiveChar c)))
+    ExpansionToken True (TTControlSeq name) -> return (Right (Unexpanded (NControlSeq name)))
+    ExpansionToken False (TTCharacter c cc)
+      | cc /= CCActive -> return (Right (Character c cc))
+      | cc == CCActive -> do
+          m <- use (localStates . _head . tsActiveDefinitions)
+          case Map.lookup c m of
+            Nothing -> return (Right (Undefined (NActiveChar c)))
+            Just v -> return v
+    ExpansionToken False (TTControlSeq name) -> do
+          m <- use (localStates . _head . tsDefinitions)
+          case Map.lookup name m of
+            Nothing -> return (Right (Undefined (NControlSeq name)))
+            Just v -> return v
+
+-- \ifx: test category codes
+ifxCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifxCommand = do
+  t1 <- required nextEToken >>= meaning
+  t2 <- required nextEToken >>= meaning
+  case (t1, t2) of
+    (Left (ExpandableValue v1), Left (ExpandableValue v2)) -> return $ v1 == v2
+    (Left (ExpandableCommand IfCase), Left (ExpandableCommand IfCase)) -> return True
+    -- TODO: other expandable commands
+    (Right (Character c1 cc1), Right (Character c2 cc2)) -> return $ c1 == c2 && cc1 == cc2
+    (Right (DefinedCharacter c1), Right (DefinedCharacter c2)) -> return $ c1 == c2
+    (Right (DefinedMathCharacter c1), Right (DefinedMathCharacter c2)) -> return $ c1 == c2
+    (Right (Unexpanded c1), Right (Unexpanded c2)) -> return $ c1 == c2
+    (Right (Undefined c1), Right (Undefined c2)) -> return $ c1 == c2
+    (Right Relax, Right Relax) -> return True
+    -- Note: \noexpand-ed token and \relax are not equivalent in the sense of \ifx
+    (_, _) -> return False
+
+
+-- TeX primitives:
+-- \expandafter
+-- \csname
+-- \string
+-- \number
+-- \romannumeral
+-- \if
+-- \ifcase .. \or .. \else .. \fi
+-- \ifcat
+-- \ifdim
+-- \ifeof
+-- \iffalse
+-- \ifhbox
+-- \ifhmode
+-- \ifinner
+-- \ifmmode
+-- \ifnum
+-- \ifodd
+-- \iftrue
+-- \ifvbox
+-- \ifvmode
+-- \ifvoid
+-- \ifx
+-- \input
+-- \jobname
+-- \else
+-- \fi
+-- \noexpand
+-- e-TeX:
+-- \ifdefined
+-- \ifcsname
+-- \unless
+-- \unexpanded
+-- \detokenize
+-- \scantokens
+-- LaTeX
+-- \arabic
+-- \@arabic
+-- \Roman
+-- \roman
+-- \Alph
+-- \alph

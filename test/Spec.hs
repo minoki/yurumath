@@ -1,2 +1,86 @@
-main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
+import Test.HUnit
+import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.State
+import Text.YuruMath.TeX.Tokenizer
+import Text.YuruMath.TeX.Expansion
+import Control.Monad.State.Strict
+import Control.Monad.Except
+import Control.Lens.Cons (_head)
+import Control.Lens.Setter (modifying)
+import qualified Data.Map.Strict as Map
+
+defineBuiltins :: (MonadState (TeXState a) m, MonadError String m) => m ()
+defineBuiltins = do
+  modifying (localStates . _head . tsDefinitions)
+    $ mappend (Map.fromList [("expandafter",ecmd expandafterCommand)
+                            ,("noexpand",ecmd noexpandCommand)
+                            ,("csname",ecmd csnameCommand)
+                            ,("string",ecmd stringCommand)
+                            ,("number",ecmd numberCommand)
+                            ,("romannumeral",ecmd romannumeralCommand)
+                            ,("else",Left (ExpandableValue Eelse))
+                            ,("fi",Left (ExpandableValue Efi))
+                            ,("or",Left (ExpandableValue Eor))
+                            ,("ifcase",Left (ExpandableCommand IfCase))
+                            ,("iftrue",Left (ExpandableCommand (BooleanConditionalCommand iftrueCommand)))
+                            ,("iffalse",Left (ExpandableCommand (BooleanConditionalCommand iffalseCommand)))
+                            ,("if",Left (ExpandableCommand (BooleanConditionalCommand ifCommand)))
+                            ,("ifcat",Left (ExpandableCommand (BooleanConditionalCommand ifcatCommand)))
+                            ,("ifx",Left (ExpandableCommand (BooleanConditionalCommand ifxCommand)))
+                            ,("ifnum",Left (ExpandableCommand (BooleanConditionalCommand ifnumCommand)))
+                            ,("ifodd",Left (ExpandableCommand (BooleanConditionalCommand ifoddCommand)))
+                            ,("ifdefined",Left (ExpandableCommand (BooleanConditionalCommand ifdefinedCommand)))
+                            ,("ifcsname",Left (ExpandableCommand (BooleanConditionalCommand ifcsnameCommand)))
+                            ,("unless",ecmd unlessCommand)
+                            ,("unexpanded",ecmd unexpandedCommand)
+                            ])
+  where
+    ecmd :: (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken]) -> Either (Expandable a) v
+    ecmd c = Left (ExpandableCommand (MkExpandableCommand c))
+
+tokenizeAll :: (MonadState (TeXState a) m, MonadError String m) => m [TeXToken]
+tokenizeAll = do
+  t <- nextToken
+  case t of
+    Nothing -> return []
+    Just t -> (t:) <$> tokenizeAll
+
+tokenizeAllString :: String -> Either String [TeXToken]
+tokenizeAllString input = runExcept (evalStateT tokenizeAll (initialState input))
+
+expandAll :: (MonadState (TeXState a) m, MonadError String m) => m [Value a]
+expandAll = do
+  t <- evalToValue
+  case t of
+    Nothing -> return []
+    Just v -> (v:) <$> expandAll
+
+expandAllString :: String -> Either String [Value ()]
+expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
+
+test1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
+  where
+    expected = Right [TTControlSeq "foo"
+                     ,TTCharacter 'b' CCLetter
+                     ,TTCharacter 'a' CCLetter
+                     ,TTCharacter 'r' CCLetter
+                     ,TTCharacter ' ' CCSpace
+                     ,TTControlSeq " "
+                     ,TTCharacter '1' CCOther
+                     ,TTControlSeq "2"
+                     ,TTCharacter '3' CCOther
+                     ]
+
+test2 = TestCase $ assertEqual "Expand" expected (expandAllString "\\ifnum\"F>14 Y\\else N\\fi")
+  where
+    expected = Right [Character 'Y' CCLetter
+                     ]
+
+tests = TestList [TestLabel "Tokenization 1" test1
+                 ,TestLabel "Expansion 1" test2
+                 ]
+
+main = runTestTT tests

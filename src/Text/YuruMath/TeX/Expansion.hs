@@ -45,29 +45,47 @@ unreadETokens !depth ts = do
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (map ((,) depth) ts ++ ts')
 
-readUntilEndGroup :: (MonadTeXState a m, MonadError String m) => Int -> [TeXToken] -> m [TeXToken]
-readUntilEndGroup !depth revTokens = do
+readUntilEndGroup :: (MonadTeXState a m, MonadError String m) => Bool -> Int -> [TeXToken] -> m [TeXToken]
+readUntilEndGroup !isLong !depth revTokens = do
   t <- nextEToken
   case t of
     Nothing -> throwError "unexpected end of input when reading an argument"
     Just (ExpansionToken _ t@(TTCharacter _ CCEndGroup))
       | depth == 0 -> return (reverse revTokens)
-      | otherwise -> readUntilEndGroup (depth - 1) (t : revTokens)
+      | otherwise -> readUntilEndGroup isLong (depth - 1) (t : revTokens)
     Just (ExpansionToken _ t@(TTCharacter _ CCBeginGroup))
-      -> readUntilEndGroup (depth + 1) (t : revTokens)
+      -> readUntilEndGroup isLong (depth + 1) (t : revTokens)
+    Just (ExpansionToken _ (TTControlSeq par))
+      | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
     Just (ExpansionToken _ t)
-      -> readUntilEndGroup depth (t : revTokens)
+      -> readUntilEndGroup isLong depth (t : revTokens)
 
-readArgument :: (MonadTeXState a m, MonadError String m) => m [TeXToken]
-readArgument = do
+readArgument :: (MonadTeXState a m, MonadError String m) => Bool -> m [TeXToken]
+readArgument !isLong = do
   t <- nextEToken
   case t of
     Nothing -> throwError "unexpected end of input when expecting an argument"
-    Just (ExpansionToken _ (TTCharacter _ CCSpace)) -> readArgument
+    Just (ExpansionToken _ (TTCharacter _ CCSpace)) -> readArgument isLong
     Just (ExpansionToken _ (TTCharacter _ CCEndGroup)) -> throwError "unexpected end of group"
-    Just (ExpansionToken _ (TTCharacter _ CCBeginGroup)) -> readUntilEndGroup 0 []
+    Just (ExpansionToken _ (TTCharacter _ CCBeginGroup)) -> readUntilEndGroup isLong 0 []
+    Just (ExpansionToken _ (TTControlSeq par)) | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
     Just (ExpansionToken _ t) -> return [t]
 
+-- used by \unexpanded
+isExpandableNameF :: (MonadTeXState a m) => m (TeXToken -> Bool)
+isExpandableNameF = do
+  cd <- use (localStates . _head . tsDefinitions)
+  ad <- use (localStates . _head . tsActiveDefinitions)
+  return $ \t -> case t of
+    TTControlSeq name -> case Map.lookup name cd of
+                           Just (Left _) -> True
+                           _ -> False
+    TTCharacter c CCActive -> case Map.lookup c ad of
+                                Just (Left _) -> True
+                                _ -> False
+    _ -> False
+
+-- used by \noexpand
 isExpandableName :: (MonadTeXState a m) => TeXToken -> m Bool
 isExpandableName t = case t of
   TTControlSeq name -> do
@@ -82,6 +100,7 @@ isExpandableName t = case t of
                _ -> False
   _ -> return False
 
+-- used by \expandafter
 expandOnce :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
 expandOnce et@(ExpansionToken True _) = return [et]
 expandOnce et@(ExpansionToken False t) = case t of
@@ -96,11 +115,6 @@ expandOnce et@(ExpansionToken False t) = case t of
       Just (Left (ExpandableCommand c)) -> runExpandableCommand c
       _ -> return [et]
   _ -> return [et]
-
-expandedOnce :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
-expandedOnce = do
-  t <- required nextEToken
-  expandOnce t
 
 -- used by \csname
 expandedTotally :: (MonadTeXState a m, MonadError String m) => m (Either ExpandableValue ExpansionToken)
@@ -122,7 +136,7 @@ expandedTotally = do
       doExpand (Map.lookup c m)
     _ -> return (Right t)
 
--- used by number reading
+-- used by number reading, \if and \ifcat argument, general text
 evalToken :: (MonadTeXState a m, MonadError String m) => m (ExpansionToken,Either ExpandableValue (Value a))
 evalToken = do
   (d,t) <- required nextETokenWithDepth
@@ -148,6 +162,33 @@ evalToken = do
     ExpansionToken False (TTCharacter c cc) ->
       return (t,Right (Character c cc))
 
+evalToValue :: (MonadTeXState a m, MonadError String m) => m (Maybe (Value a))
+evalToValue = do
+  et <- nextETokenWithDepth
+  case et of
+    Just (d,t) -> do
+      let doExpand cn u = case u of
+            Just (Left e) -> do
+              r <- runExpandable e
+              unreadETokens (d+1) r
+              evalToValue
+            Just (Right v) -> return (Just v)
+            Nothing -> return (Just (Undefined cn))
+      case t of
+        ExpansionToken False (TTControlSeq name) -> do
+          m <- use (localStates . _head . tsDefinitions)
+          doExpand (NControlSeq name) (Map.lookup name m)
+        ExpansionToken False (TTCharacter c CCActive) -> do
+          m <- use (localStates . _head . tsActiveDefinitions)
+          doExpand (NActiveChar c) (Map.lookup c m)
+        ExpansionToken True (TTControlSeq name) -> do
+          return (Just (Unexpanded (NControlSeq name)))
+        ExpansionToken True (TTCharacter c CCActive) -> do
+          return (Just (Unexpanded (NActiveChar c)))
+        ExpansionToken False (TTCharacter c cc) ->
+          return (Just (Character c cc))
+    Nothing -> return Nothing
+
 required :: (MonadError String m) => m (Maybe a) -> m a
 required m = do a <- m
                 case a of
@@ -168,6 +209,7 @@ noexpandCommand = do
     then return [ExpansionToken True (etToken t)]
     else return [t]
 
+-- used by \csname and \ifcsname
 readUntilEndcsname :: (MonadTeXState a m, MonadError String m) => [Char] -> m [Char]
 readUntilEndcsname revName = do
   t <- expandedTotally
@@ -254,6 +296,9 @@ readUnsignedHex = do
       Character c CCOther | isUpperHexDigit c -> do
                               let c0 = digitToInt c
                               readRest (fromIntegral c0)
+      Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
+                              let c0 = digitToInt c
+                              readRest (fromIntegral c0)
       _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
   where readRest !x = do
           (t,v) <- evalToken
@@ -261,6 +306,8 @@ readUnsignedHex = do
             Left _ -> unreadETokens 0 [t] >> return x
             Right v -> case v of
               Character c CCOther | isUpperHexDigit c -> do
+                                      readRest (16 * x + fromIntegral (digitToInt c))
+              Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
                                       readRest (16 * x + fromIntegral (digitToInt c))
               Character ' ' CCSpace -> return x -- consumed
               _ -> unreadETokens 0 [t] >> return x
@@ -296,6 +343,26 @@ numberCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 numberCommand = do
   x <- readNumber
   stringToEToken (show x)
+
+showRomannumeral :: Int -> String
+showRomannumeral !x
+  | x <= 0 = "" -- cannot be expressed
+  | otherwise = let (e1,d1) = x `quotRem` 10
+                    (e2,d2) = e1 `quotRem` 10
+                    (d4,d3) = e2 `quotRem` 10
+                in replicate d4 'm' ++ (a3 !! d3) ++ (a2 !! d2) ++ (a1 !! d1)
+  where a3 = ["", "c", "cc", "ccc", "cd", "d", "dc", "dcc", "dccc", "cm"]
+        a2 = ["", "x", "xx", "xxx", "xl", "l", "lx", "lxx", "lxxx", "xc"]
+        a1 = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"]
+
+romannumeralCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+romannumeralCommand = do
+  x <- readNumber
+  if x < 0
+    then return []
+    else if x > fromIntegral (maxBound :: Int)
+         then throwError "\\romannumeral: too large"
+         else stringToEToken (showRomannumeral (fromIntegral x))
 
 -- to be used by conditionals, \or, \else
 shallowEval :: (MonadTeXState a m, MonadError String m) => m (Maybe (Expandable a))
@@ -417,6 +484,12 @@ ifcaseCommand = do
   doIfCase x
   return []
 
+runExpandableValue :: (MonadTeXState a m, MonadError String m) => ExpandableValue -> m [ExpansionToken]
+runExpandableValue Eelse = elseCommand
+runExpandableValue Efi = fiCommand
+runExpandableValue Eor = orCommand
+runExpandableValue Eendcsname = throwError "Extra \\endcsname"
+
 runExpandableCommand :: (MonadTeXState a m, MonadError String m) => ExpandableCommand a -> m [ExpansionToken]
 runExpandableCommand (MkExpandableCommand f) = f
 runExpandableCommand (BooleanConditionalCommand c) = do
@@ -424,6 +497,10 @@ runExpandableCommand (BooleanConditionalCommand c) = do
   doBooleanConditional b
   return []
 runExpandableCommand IfCase = ifcaseCommand
+
+runExpandable :: (MonadTeXState a m, MonadError String m) => Expandable a -> m [ExpansionToken]
+runExpandable (ExpandableValue v) = runExpandableValue v
+runExpandable (ExpandableCommand c) = runExpandableCommand c
 
 iftrueCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 iftrueCommand = return True
@@ -502,6 +579,61 @@ ifxCommand = do
     -- Note: \noexpand-ed token and \relax are not equivalent in the sense of \ifx
     (_, _) -> return False
 
+ifnumCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifnumCommand = do
+  x <- readNumber
+  rel <- required nextEToken >>= meaning
+  y <- readNumber
+  case rel of
+    Right (Character '<' CCOther) -> return $ x < y
+    Right (Character '=' CCOther) -> return $ x == y
+    Right (Character '>' CCOther) -> return $ x > y
+    _ -> throwError "unrecognized relation for \\ifnum"
+
+ifoddCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifoddCommand = odd <$> readNumber
+
+-- e-TeX extension: \ifdefined
+ifdefinedCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifdefinedCommand = do
+  t <- required nextEToken >>= meaning
+  case t of
+    Right (Undefined _) -> return False
+    _ -> return True
+
+-- e-TeX extension: \ifcsname
+ifcsnameCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifcsnameCommand = do
+  name <- readUntilEndcsname []
+  let tname = T.pack name
+  d <- use (localStates . _head . tsDefinitions)
+  return (Map.member tname d)
+
+-- e-TeX extension: \unless
+unlessCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+unlessCommand = do
+  test <- required nextEToken >>= meaning
+  case test of
+    Left (ExpandableCommand (BooleanConditionalCommand c)) -> do
+      b <- c
+      doBooleanConditional (not b)
+      return []
+    _ -> throwError "\\unless must be followed by a boolean conditional command"
+
+readGeneralText :: (MonadTeXState a m, MonadError String m) => m [TeXToken]
+readGeneralText = do
+  (t,v) <- evalToken
+  case v of
+    Right (Character ' ' CCSpace) -> readGeneralText -- optional spaces: ignored
+    Right (Character _ CCBeginGroup) -> readUntilEndGroup True 0 []
+    Right Relax -> readGeneralText -- relax: ignored
+    _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
+
+-- e-TeX extension: \unexpanded
+unexpandedCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+unexpandedCommand = do
+  ie <- isExpandableNameF
+  map (\t -> ExpansionToken (ie t) t) <$> readGeneralText
 
 -- TeX primitives:
 -- \expandafter

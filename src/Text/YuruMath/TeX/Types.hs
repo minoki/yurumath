@@ -103,7 +103,7 @@ data ExpandableValue = Eelse -- \else
                      deriving (Eq)
 
 data ExpandableCommand a = MkExpandableCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken])
-                         | BooleanConditionalCommand { runConditionalCommand :: forall m. (MonadState (TeXState a) m, MonadError String m) => m Bool }
+                         | BooleanConditionalCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m Bool)
                          | IfCase -- \ifcase
 --Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
 
@@ -118,7 +118,7 @@ data Value a = Character !Char !CatCode -- character with category code
              | Unexpanded !CommandName -- prefixed with \noexpand
              | Undefined !CommandName
              | ExtraValue a
-             deriving (Eq)
+             deriving (Eq,Show)
 
 data LocalState a = LocalState
                     { _ttCategoryCodeOf :: Map.Map Char CatCode -- Char -> CatCode

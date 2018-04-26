@@ -12,7 +12,7 @@ import Control.Monad
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import Control.Lens.Cons (_head)
-import Control.Lens.Getter (view,use)
+import Control.Lens.Getter (view,use,uses)
 import Control.Lens.Setter (assign,modifying)
 import Control.Applicative
 
@@ -60,6 +60,7 @@ readUntilEndGroup !isLong !depth revTokens = do
     Just (ExpansionToken _ t)
       -> readUntilEndGroup isLong depth (t : revTokens)
 
+-- reads undelimited macro argument
 readArgument :: (MonadTeXState a m, MonadError String m) => Bool -> m [TeXToken]
 readArgument !isLong = do
   t <- nextEToken
@@ -215,16 +216,18 @@ readUntilEndcsname revName = do
   t <- expandedTotally
   case t of
     Left Eendcsname -> return (reverse revName)
-    Left e -> throwError $ "unexpected " ++ show e ++ " while looking for \\endcsname"
+    Left e -> do r <- runExpandableValue e
+                 unreadETokens 0 r -- TODO: ???
+                 readUntilEndcsname (revName)
     Right (ExpansionToken _ (TTCharacter c _)) -> readUntilEndcsname (c:revName)
-    Right (ExpansionToken _ (TTControlSeq name)) -> throwError $ "unexpected \\" ++ show name ++ " while looking for \\endcsname"
+    Right (ExpansionToken _ (TTControlSeq name)) -> throwError $ "unexpected \\" ++ T.unpack name ++ " while looking for \\endcsname"
 
 csnameCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 csnameCommand = do
   name <- readUntilEndcsname []
   let tname = T.pack name
 
-  -- SIDE EFFECT OF \csname
+  -- THE DREADED SIDE EFFECT OF \csname
   d <- use (localStates . _head . tsDefinitions)
   when (Map.notMember tname d)
     $ modifying (localStates . _head . tsDefinitions) (Map.insert tname (Right Relax))
@@ -593,6 +596,18 @@ ifnumCommand = do
 ifoddCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifoddCommand = odd <$> readNumber
 
+ifhmodeCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifhmodeCommand = uses mode isHMode
+
+ifvmodeCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifvmodeCommand = uses mode isVMode
+
+ifmmodeCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifmmodeCommand = uses mode isMMode
+
+ifinnerCommand :: (MonadTeXState a m, MonadError String m) => m Bool
+ifinnerCommand = uses mode isInnerMode
+
 -- e-TeX extension: \ifdefined
 ifdefinedCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifdefinedCommand = do
@@ -670,6 +685,9 @@ unexpandedCommand = do
 -- \unexpanded
 -- \detokenize
 -- \scantokens
+-- pdfTeX:
+-- \ifincsname
+-- \expanded
 -- LaTeX
 -- \arabic
 -- \@arabic

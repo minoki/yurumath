@@ -3,6 +3,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Text.YuruMath.TeX.Types where
+import Data.Int
 import Data.Word
 import Data.Text (Text)
 import Control.Monad.State.Class
@@ -52,14 +53,14 @@ data MathStyle = MathDisplayStyle
                | MathScriptScriptStyleCramped
                deriving (Eq,Show,Enum,Bounded)
 
-data MathClass = MathOrd   -- \mathord, ordinary object (1)
-               | MathOp    -- \mathop, large operator (2)
-               | MathBin   -- \mathbin, binary operation (3)
-               | MathRel   -- \mathrel, relation (4)
-               | MathOpen  -- \mathopen, opening symbol (5)
-               | MathClose -- \mathclose, closing symbol (6)
-               | MathPunct -- \mathpunct, punctuation symbol (7)
-               -- variable family? (8)
+data MathClass = MathOrd   -- \mathord,   ordinary object    (0)
+               | MathOp    -- \mathop,    large operator     (1)
+               | MathBin   -- \mathbin,   binary operation   (2)
+               | MathRel   -- \mathrel,   relation           (3)
+               | MathOpen  -- \mathopen,  opening symbol     (4)
+               | MathClose -- \mathclose, closing symbol     (5)
+               | MathPunct -- \mathpunct, punctuation symbol (6)
+               -- variable family? (7)
                | MathInner -- \mathinner, inner formula
                deriving (Eq,Show,Enum,Bounded)
 
@@ -85,10 +86,13 @@ data DocumentCommandParamSpec = StandardMandatory
 
 type MathFamily = Word8
 
-data MathChar = MathChar !MathClass !MathFamily !Char
-              | MathActive
+data MathCode = MathCode !Word16 -- "xyzz (15-bit number) or "8000 (math active)
+              | UMathCode !Int32 -- 8 bits for the math family, 3 bits for the math class, 21 bits for the character code
               deriving (Eq,Show)
--- "xyzz (15-bit number)
+
+data DelimiterCode = DelimiterCode !Int32 -- "uvvxyy (24-bit number), where uvv: the small variant, xyy: the large variant
+                   | UDelimiterCode !Int32
+                   deriving (Eq,Show)
 
 data ExpansionToken = ExpansionToken { etNoexpand :: !Bool -- True if prefixed by \noexpand
                                      , etToken :: !TeXToken
@@ -112,7 +116,7 @@ data Expandable a = ExpandableCommand !(ExpandableCommand a)
 
 data Value a = Character !Char !CatCode -- character with category code
              | DefinedCharacter !Char -- defined with \chardef
-             | DefinedMathCharacter !MathChar -- Word16? -- defined with \mathchardef
+             | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
              --  IntegerConstant !Integer
              | Relax
              | Unexpanded !CommandName -- prefixed with \noexpand
@@ -120,12 +124,31 @@ data Value a = Character !Char !CatCode -- character with category code
              | ExtraValue a
              deriving (Eq,Show)
 
+data Mode = HorizontalMode
+          | RestrictedHorizontalMode
+          | VerticalMode
+          | InternalVerticalMode
+          | MathMode
+          | DisplayMathMode
+          deriving (Eq,Show)
+
+isHMode, isVMode, isMMode, isInnerMode :: Mode -> Bool
+isHMode m = m == HorizontalMode || m == RestrictedHorizontalMode
+isVMode m = m == VerticalMode || m == InternalVerticalMode
+isMMode m = m == MathMode || m == DisplayMathMode
+isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m == MathMode
+
 data LocalState a = LocalState
-                    { _ttCategoryCodeOf :: Map.Map Char CatCode -- Char -> CatCode
-                    , _tsDefinitions :: Map.Map Text (Either (Expandable a) (Value a)) -- definitions of control sequences
+                    { _tsDefinitions :: Map.Map Text (Either (Expandable a) (Value a)) -- definitions of control sequences
                     , _tsActiveDefinitions :: Map.Map Char (Either (Expandable a) (Value a)) -- definitions of active characters
-                    , _mathCodes :: Map.Map Char MathChar
-                    -- delcode, sfcode, lccode, upcode
+                    , _ttCategoryCodeOf :: Map.Map Char CatCode -- Char -> CatCode
+                    , _lcCodes   :: Map.Map Char Char
+                    , _ucCodes   :: Map.Map Char Char
+                    , _mathCodes :: Map.Map Char MathCode
+                    , _delCodes  :: Map.Map Char DelimiterCode
+                    -- sfcode    :: Map.Map Char Int
+                    , _mathStyle :: !MathStyle
+                    -- make extensible?
                     }
 
 data ConditionalKind = CondTruthy
@@ -140,7 +163,7 @@ data TeXState a = TeXState
                   , _esMaxPendingToken :: !Int
                   , _esPendingTokenList :: [(Int,ExpansionToken)]
                   , _localStates :: [LocalState a]
-                  , _isMathMode :: !Bool
+                  , _mode :: !Mode
                   , _conditionals :: [ConditionalKind]
                   }
 

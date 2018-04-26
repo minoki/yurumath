@@ -1,14 +1,17 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Text.YuruMath.TeX.Math where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
+import Text.YuruMath.TeX.Expansion
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad.Identity
 
+-- sqrt, overline
 makeCramped :: MathStyle -> MathStyle
 makeCramped MathDisplayStyle = MathDisplayStyleCramped
 makeCramped MathTextStyle = MathTextStyleCramped
@@ -16,6 +19,7 @@ makeCramped MathScriptStyle = MathScriptStyleCramped
 makeCramped MathScriptScriptStyle = MathScriptScriptStyleCramped
 makeCramped style = style
 
+-- superscript
 superscriptStyle :: MathStyle -> MathStyle
 superscriptStyle MathDisplayStyle = MathScriptStyle
 superscriptStyle MathDisplayStyleCramped = MathScriptStyleCramped
@@ -25,20 +29,23 @@ superscriptStyle MathScriptStyle = MathScriptScriptStyle
 superscriptStyle MathScriptStyleCramped = MathScriptScriptStyleCramped
 superscriptStyle scriptscriptstyle = scriptscriptstyle
 
+-- subscript
 subscriptStyle :: MathStyle -> MathStyle
 subscriptStyle = makeCramped . superscriptStyle
 
+-- numerator
+smallerStyle :: MathStyle -> MathStyle
+smallerStyle MathDisplayStyle = MathTextStyle
+smallerStyle MathDisplayStyleCramped = MathTextStyleCramped
+smallerStyle MathTextStyle = MathScriptStyle
+smallerStyle MathTextStyleCramped = MathScriptStyleCramped
+smallerStyle MathScriptStyle = MathScriptScriptStyle
+smallerStyle MathScriptStyleCramped = MathScriptScriptStyleCramped
+smallerStyle scriptscriptstyle = scriptscriptstyle
 
---data MathFamily = FamilyRoman -- (0)
---                | FamilyMathItalic -- (1)
-
-data DelimiterVariant = DelimiterVariant !MathFamily !Char
-data DelimiterCode = DelimiterCode {-small variant-} !DelimiterVariant {-large variant-} !DelimiterVariant
--- "uvvxyy (27-bit number)
--- uvv: the small variant of the delimiter
--- xyy: the large variant
--- u, x: the font families of the variant
--- vv, yy: locations
+-- denominator
+denominatorStyle :: MathStyle -> MathStyle
+denominatorStyle = makeCramped . smallerStyle
 
 -- Radicals
 
@@ -47,8 +54,62 @@ data DelimiterCode = DelimiterCode {-small variant-} !DelimiterVariant {-large v
 -- y: the family
 -- zz: the character
 
--- mathClassOf :: Char -> MathClass
--- Map.Map Char MathClass
+data AtomType = AOrd   -- ordinary
+              | AOp    -- large operator
+              | ABin   -- binary operation
+              | ARel   -- relation
+              | AOpen  -- opening
+              | AClose -- closing
+              | APunct -- punctuation
+              | AInner -- inner
+              | AOver  -- overline
+              | AUnder -- underline
+              | AAcc   -- accented
+              | ARad   -- radical
+              | AVcent -- vcenter
+              deriving (Eq,Show)
+
+data MathField = MFEmpty
+               | MFSymbol {-family number-} !Word {-position number-} !Char
+               | MFBox
+               | MFSubList MathList
+
+data Atom = Atom { atomType        :: !AtomType
+                 , atomNucleus     :: !MathField
+                 , atomSuperscript :: !MathField
+                 , atomSubscript   :: !MathField
+                 }
+
+-- generalized fraction
+data GenFrac = GFOver
+             | GFAtop
+             | GFAbove {-dimen-}
+             | GFOverWithDelims {-delim-} {-delim-}
+             | GFAtopWithDelims {-delim-} {-delim-}
+             | GFAboveWithDelims {-delim-} {-delim-} {-dimen-}
+
+data BoundaryType = BoundaryLeft | BoundaryRight
+                  deriving (Eq)
+
+data MathItem = IAtom !Atom
+              | IHorizontalMaterial
+              | IVerticalMaterial -- \mark or \insert or \vadjust
+              | IGlue -- \hskip or \mskip or \nonscript
+              | IKern -- \kern or \mkern
+              | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
+              | IGenFrac !GenFrac MathList MathList -- \above, \over, etc -- \over | \atop | above
+              | IBoundary !BoundaryType {-delimiter-} -- \left or \right
+              | IChoice MathList MathList MathList MathList -- \mathchoice
+
+type MathList = [MathItem]
+
+{-
+<character> ::= <letter> | <otherchar> | \char<8-bit number> | <chardef token>
+<math character> ::= \mathchar<15-bit number> | <mathchardef token> | \delimiter<27-bit number>
+<math symbol> ::= <character> | <math character>
+<math field> ::= <math symbol> | <filler>{<math mode material>}
+<delim> ::= <filler>\delimiter<27-bit number> | <filler><letter> | <filler><otherchar>
+-}
 
 data Formula = Identifier !Text
              | Numeral !Text
@@ -62,44 +123,44 @@ data Formula = Identifier !Text
              | Overscript Formula Formula
              | UnderOver Formula Formula Formula
 
-mathCommands :: Map.Map Text MathChar
+mathCommands :: Map.Map Text MathCode
 mathCommands = Map.fromList
   -- Ordinary Symbols
-  [("infty",MathChar MathOrd 0 '\x221E')
-  ,("forall",MathChar MathOrd 0 '\x2200')
-  ,("exists",MathChar MathOrd 0 '\x2203')
-  ,("emptyset",MathChar MathOrd 0 '\x2205')
+  [("infty",mkMathCode MathOrd 0 '\x221E')
+  ,("forall",mkMathCode MathOrd 0 '\x2200')
+  ,("exists",mkMathCode MathOrd 0 '\x2203')
+  ,("emptyset",mkMathCode MathOrd 0 '\x2205')
 
   -- Large Operators
-  ,("sum",MathChar MathOp 0 '\x2211')
-  ,("int",MathChar MathOp 0 '\x222B') -- nolimits
-  ,("prod",MathChar MathOp 0 '\x220F')
+  ,("sum",mkMathCode MathOp 0 '\x2211')
+  ,("int",mkMathCode MathOp 0 '\x222B') -- nolimits
+  ,("prod",mkMathCode MathOp 0 '\x220F')
 
   -- Binary Symbols
-  ,("cap",MathChar MathBin 0 '\x2229')
-  ,("cup",MathChar MathBin 0 '\x222A')
-  ,("pm",MathChar MathBin 0 '\x00B1')
-  ,("mp",MathChar MathBin 0 '\x2213')
-  ,("times",MathChar MathBin 0 '\x00D7')
+  ,("cap",mkMathCode MathBin 0 '\x2229')
+  ,("cup",mkMathCode MathBin 0 '\x222A')
+  ,("pm",mkMathCode MathBin 0 '\x00B1')
+  ,("mp",mkMathCode MathBin 0 '\x2213')
+  ,("times",mkMathCode MathBin 0 '\x00D7')
 
   -- Relations
-  ,("mid",MathChar MathRel 0 '|') -- ?
-  ,("leftarrow",MathChar MathRel 0 '\x2190')
-  ,("rightarrow",MathChar MathRel 0 '\x2192')
-  ,("in",MathChar MathRel 0 '\x2208')
-  ,("ni",MathChar MathRel 0 '\x220B')
-  ,("leq",MathChar MathRel 0 '\x2264')
-  ,("le",MathChar MathRel 0 '\x2264')
-  ,("geq",MathChar MathRel 0 '\x2265')
-  ,("ge",MathChar MathRel 0 '\x2265')
-  ,("subset",MathChar MathRel 0 '\x2282')
-  ,("supset",MathChar MathRel 0 '\x2283')
+  ,("mid",mkMathCode MathRel 0 '|') -- ?
+  ,("leftarrow",mkMathCode MathRel 0 '\x2190')
+  ,("rightarrow",mkMathCode MathRel 0 '\x2192')
+  ,("in",mkMathCode MathRel 0 '\x2208')
+  ,("ni",mkMathCode MathRel 0 '\x220B')
+  ,("leq",mkMathCode MathRel 0 '\x2264')
+  ,("le",mkMathCode MathRel 0 '\x2264')
+  ,("geq",mkMathCode MathRel 0 '\x2265')
+  ,("ge",mkMathCode MathRel 0 '\x2265')
+  ,("subset",mkMathCode MathRel 0 '\x2282')
+  ,("supset",mkMathCode MathRel 0 '\x2283')
 
   -- Punctuation symbols
-  ,("colon",MathChar MathPunct 0 ':')
-  ,("cdots",MathChar MathPunct 0 '\x22EF')
-  ,("vdots",MathChar MathPunct 0 '\x22EE')
-  ,("ddots",MathChar MathPunct 0 '\x22F1')
+  ,("colon",mkMathCode MathPunct 0 ':')
+  ,("cdots",mkMathCode MathPunct 0 '\x22EF')
+  ,("vdots",mkMathCode MathPunct 0 '\x22EE')
+  ,("ddots",mkMathCode MathPunct 0 '\x22F1')
 
   -- TODO: Accents
   -- TODO: Radicals
@@ -107,6 +168,7 @@ mathCommands = Map.fromList
 
 data LimitsSpec = Limits
                 | NoLimits
+                | DisplayLimits
                 deriving (Eq,Show)
 
 mathFunctions :: [(String,LimitsSpec)]
@@ -132,63 +194,47 @@ mathFunctions = [("log",NoLimits)
                 ,("deg",NoLimits)
                 ]
 
--- \frac
-
-data Command = Action ()
-             | MathCharacter !MathChar
-
-data TeXToMathState = TeXToMathState { definedCommands :: Map.Map Text Command
-                                     }
-
+execMath :: (MonadTeXState a m, MonadError String m) => m ()
+execMath = return ()
 {-
-type LaTeXMathReaderT m = StateT TeXToMathState (StateT (TeXState m) (ExceptT String m))
-type LaTeXMathReader = LaTeXMathReaderT Identity
-
-nextToken' :: LaTeXMathReader (Maybe TeXToken)
-nextToken' = lift nextToken
-
-nextRequiredToken :: String -> LaTeXMathReader TeXToken
-nextRequiredToken m = do
-  t <- lift nextToken
-  case t of
-    Just t -> return t
-    Nothing -> throwError m
-
-readRestOfBalancedText :: Bool -> Bool -> LaTeXMathReader [TeXToken]
-readRestOfBalancedText !includeEndGroup !isLong = do
-  t <- nextRequiredToken "unexpected EOF"
-  case t of
-    TTCharacter _ CCBeginGroup -> do
-      u <- readRestOfBalancedText True isLong
-      v <- readRestOfBalancedText includeEndGroup isLong
-      return $ t : (u ++ v)
-    TTCharacter _ CCEndGroup -> do
-      return (if includeEndGroup then [t] else [])
-    TTControlSeq "par" | not isLong -> throwError "unexpected \\par"
-    t -> do
-      (t:) <$> readRestOfBalancedText includeEndGroup isLong
-
-nextNonBlankToken :: String -> LaTeXMathReader TeXToken
-nextNonBlankToken m = do
-  t <- nextRequiredToken m
-  case t of
-    TTCharacter _ CCSpace -> nextNonBlankToken m
-    _ -> return t
-
-readArgument :: Bool -> LaTeXMathReader [TeXToken]
-readArgument !isLong = do
-  t <- nextNonBlankToken "expected an argument, but got EOF"
-  case t of
-    TTCharacter _ CCBeginGroup -> do
-      readRestOfBalancedText False isLong
-    TTCharacter _ CCEndGroup -> throwError "unexpected end of group"
-    TTControlSeq "par" | not isLong -> throwError "unexpected \\par"
-    t -> return [t]
+'{' ... '}'
+   '{' -> new math list
+   '}' -> new Ord atom or single Acc atom
+<math symbol>
+  -> new atom
+<math atom><math field>
+  (<math atom> = \mathord | \mathop | \mathbin | \mathrel | \mathopen
+                   | \mathclose | \mathpunct | \mathinner | \underline | \overline)
+  -> new atom
+\mathaccent<15-bit number><math field>
+  -> new Acc atom
+\radical<27-bit number><math field>
+  -> new Rad atom
+<superscript><math field>
+  -> new Ord with empty field if the current list does not end with an atom
+     the superscript field of this atom is filled by <math field>
+<subscript><math field>
+  -> like <superscript> but with subscript field
+\displaylimits, \limits, \nolimits
+  -> the current list must end with an Op atom
+     modify a special field in that Op atom
+\/
+  -> ...
+\discretionaly<general text><general text><general text>
+  -> ...
+\- = \discretionary{ - }{}{}
+\mathchoice<general text><general text><general text><general text>
+  -> ....
+\displaystyle, \textstyle, \scriptstyle, \scriptscriptstyle
+[LuaTeX: \crampeddisplaystyle, \crampedtextstyle, \crampedscriptstyle, \crampedscriptscriptstyle]
+  -> style-change item
+\left<delim><math mode material>\right<delim>
+  -> ...
+<generalized fraction command>
+[LuaTeX: \Ustack {... <generalized fraction command> ...}]
+  -> ...
 -}
 
---readOptionalArgument :: LaTeXMathReader (Maybe [TeXToken])
---hasStar :: LaTeXMathReader Bool
---table =
 {-
 ('.',MathChar MathOrd 1 '.') -- "013A
 ('/',MathChar MathOrd 1 '/') -- "013D

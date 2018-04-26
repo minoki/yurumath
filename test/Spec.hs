@@ -21,6 +21,7 @@ defineBuiltins = do
                             ,("string",ecmd stringCommand)
                             ,("number",ecmd numberCommand)
                             ,("romannumeral",ecmd romannumeralCommand)
+                            ,("endcsname",Left (ExpandableValue Eendcsname))
                             ,("else",Left (ExpandableValue Eelse))
                             ,("fi",Left (ExpandableValue Efi))
                             ,("or",Left (ExpandableValue Eor))
@@ -61,7 +62,7 @@ expandAll = do
 expandAllString :: String -> Either String [Value ()]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
-test1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
+ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
   where
     expected = Right [TTControlSeq "foo"
                      ,TTCharacter 'b' CCLetter
@@ -74,13 +75,31 @@ test1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeA
                      ,TTCharacter '3' CCOther
                      ]
 
-test2 = TestCase $ assertEqual "Expand" expected (expandAllString "\\ifnum\"F>14 Y\\else N\\fi")
+etest1 = TestCase $ assertEqual "Expand" expected (expandAllString "\\ifnum\"F>14 Y\\else N\\fi")
   where
     expected = Right [Character 'Y' CCLetter
                      ]
 
-tests = TestList [TestLabel "Tokenization 1" test1
-                 ,TestLabel "Expansion 1" test2
+etest2 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue \\csname fo\\else \\fi o\\endcsname")
+  where
+    expected = Right [Relax
+                     ]
+
+etest3 = TestCase $ assertEqual "Expand" expected (expandAllString "\\romannumeral'123 ")
+  where
+    expected = Right [Character 'l' CCOther
+                     ,Character 'x' CCOther
+                     ,Character 'x' CCOther
+                     ,Character 'x' CCOther
+                     ,Character 'i' CCOther
+                     ,Character 'i' CCOther
+                     ,Character 'i' CCOther
+                     ]
+
+tests = TestList [TestLabel "Tokenization 1" ttest1
+                 ,TestLabel "Expansion 1" etest1
+                 ,TestLabel "Expansion 2" etest2
+                 ,TestLabel "Expansion 3" etest3
                  ]
 
 main = runTestTT tests

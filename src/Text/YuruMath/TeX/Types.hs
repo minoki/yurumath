@@ -141,12 +141,12 @@ isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m 
 data LocalState a = LocalState
                     { _tsDefinitions :: Map.Map Text (Either (Expandable a) (Value a)) -- definitions of control sequences
                     , _tsActiveDefinitions :: Map.Map Char (Either (Expandable a) (Value a)) -- definitions of active characters
-                    , _ttCategoryCodeOf :: Map.Map Char CatCode -- Char -> CatCode
-                    , _lcCodes   :: Map.Map Char Char
-                    , _ucCodes   :: Map.Map Char Char
-                    , _mathCodes :: Map.Map Char MathCode
-                    , _delCodes  :: Map.Map Char DelimiterCode
-                    -- sfcode    :: Map.Map Char Int
+                    , _catcodeMap  :: Map.Map Char CatCode
+                    , _lccodeMap   :: Map.Map Char Char
+                    , _uccodeMap   :: Map.Map Char Char
+                    , _mathcodeMap :: Map.Map Char MathCode
+                    , _delcodeMap  :: Map.Map Char DelimiterCode
+                    -- sfcodeMap   :: Map.Map Char Int
                     , _mathStyle :: !MathStyle
                     -- make extensible?
                     }

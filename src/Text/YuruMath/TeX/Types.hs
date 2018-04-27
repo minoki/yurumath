@@ -43,14 +43,14 @@ data SpacingState = SSNewLine
                   | SSMiddleOfLine
                   deriving (Eq,Show)
 
-data MathStyle = MathDisplayStyle
-               | MathDisplayStyleCramped
-               | MathTextStyle
-               | MathTextStyleCramped
-               | MathScriptStyle
-               | MathScriptStyleCramped
-               | MathScriptScriptStyle
-               | MathScriptScriptStyleCramped
+data MathStyle = DisplayStyle             -- \displaystyle, 0
+               | CrampedDisplayStyle      -- \crampeddisplaystyle, 1
+               | TextStyle                -- \textstyle, 2
+               | CrampedTextStyle         -- \crampedtextstyle, 3
+               | ScriptStyle              -- \scriptstyle, 4
+               | CrampedScriptStyle       -- \crampedscriptstyle, 5
+               | ScriptScriptStyle        -- \scriptscriptstyle, 6
+               | CrampedScriptScriptStyle -- \crampedscriptscriptstyle, 7
                deriving (Eq,Show,Enum,Bounded)
 
 data MathClass = MathOrd   -- \mathord,   ordinary object    (0)

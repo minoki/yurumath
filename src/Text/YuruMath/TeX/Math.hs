@@ -13,20 +13,20 @@ import Control.Monad.Identity
 
 -- sqrt, overline
 makeCramped :: MathStyle -> MathStyle
-makeCramped MathDisplayStyle = MathDisplayStyleCramped
-makeCramped MathTextStyle = MathTextStyleCramped
-makeCramped MathScriptStyle = MathScriptStyleCramped
-makeCramped MathScriptScriptStyle = MathScriptScriptStyleCramped
-makeCramped style = style
+makeCramped DisplayStyle      = CrampedDisplayStyle
+makeCramped TextStyle         = CrampedTextStyle
+makeCramped ScriptStyle       = CrampedScriptStyle
+makeCramped ScriptScriptStyle = CrampedScriptScriptStyle
+makeCramped crampedstyle = crampedstyle
 
 -- superscript
 superscriptStyle :: MathStyle -> MathStyle
-superscriptStyle MathDisplayStyle = MathScriptStyle
-superscriptStyle MathDisplayStyleCramped = MathScriptStyleCramped
-superscriptStyle MathTextStyle = MathScriptStyle
-superscriptStyle MathTextStyleCramped = MathScriptStyleCramped
-superscriptStyle MathScriptStyle = MathScriptScriptStyle
-superscriptStyle MathScriptStyleCramped = MathScriptScriptStyleCramped
+superscriptStyle        DisplayStyle =        ScriptStyle
+superscriptStyle CrampedDisplayStyle = CrampedScriptStyle
+superscriptStyle        TextStyle    =        ScriptStyle
+superscriptStyle CrampedTextStyle    = CrampedScriptStyle
+superscriptStyle        ScriptStyle  =        ScriptScriptStyle
+superscriptStyle CrampedScriptStyle  = CrampedScriptScriptStyle
 superscriptStyle scriptscriptstyle = scriptscriptstyle
 
 -- subscript
@@ -35,12 +35,12 @@ subscriptStyle = makeCramped . superscriptStyle
 
 -- numerator
 smallerStyle :: MathStyle -> MathStyle
-smallerStyle MathDisplayStyle = MathTextStyle
-smallerStyle MathDisplayStyleCramped = MathTextStyleCramped
-smallerStyle MathTextStyle = MathScriptStyle
-smallerStyle MathTextStyleCramped = MathScriptStyleCramped
-smallerStyle MathScriptStyle = MathScriptScriptStyle
-smallerStyle MathScriptStyleCramped = MathScriptScriptStyleCramped
+smallerStyle        DisplayStyle =        TextStyle
+smallerStyle CrampedDisplayStyle = CrampedTextStyle
+smallerStyle        TextStyle    =        ScriptStyle
+smallerStyle CrampedTextStyle    = CrampedScriptStyle
+smallerStyle        ScriptStyle  =        ScriptScriptStyle
+smallerStyle CrampedScriptStyle  = CrampedScriptScriptStyle
 smallerStyle scriptscriptstyle = scriptscriptstyle
 
 -- denominator

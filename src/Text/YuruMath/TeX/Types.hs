@@ -173,6 +173,7 @@ data LocalState a = LocalState
 data ConditionalKind = CondTruthy
                      | CondFalsy
                      | CondCase
+                     | CondTest
 
 data TeXState a = TeXState
                   { _ttInput :: String

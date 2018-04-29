@@ -110,46 +110,52 @@ expandOnce :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m [E
 expandOnce et@(ETCommandName False name) = do
   m <- use (localState . definitionAt name)
   case m of
-    Left (ExpandableCommand c) -> runExpandableCommand c
+    Left e -> runExpandable e
     _ -> return [et]
 expandOnce et = return [et]
 
 -- used by number reading, \if and \ifcat argument, general text
-evalToken :: (MonadTeXState a m, MonadError String m) => m (ExpansionToken,Either ExpandableValue (Value a))
+evalToken :: (MonadTeXState a m, MonadError String m) => m (ExpansionToken,Value a)
 evalToken = do
   (d,t) <- required nextETokenWithDepth
-  let doExpand cn u = case u of
-        Left (ExpandableValue v) -> return (t,Left v)
-        Left (ExpandableCommand c) -> do
-          -- runExpandable?
-          r <- runExpandableCommand c
-          unreadETokens (d+1) r
-          evalToken
-        Right v -> return (t,Right v) -- non-expandable commands are not executed
   case t of
     ETCommandName False name -> do
       m <- use (localState . definitionAt name)
-      doExpand name m
+      case m of
+        Left e@(ExpandableValue v) -> do
+          cs <- use conditionals
+          case cs of
+            CondTest:_ -> do
+              unreadETokens d [t]
+              return (ETCommandName False (NControlSeq "relax"), Relax)
+            _ -> do
+              r <- runExpandable e
+              unreadETokens (d+1) r
+              evalToken
+        Left e -> do
+          r <- runExpandable e
+          unreadETokens (d+1) r
+          evalToken
+        Right v -> return (t,v) -- non-expandable commands are not executed
     ETCommandName True name -> do
-      return (t,Right (Unexpanded name))
+      return (t,Unexpanded name)
     ETCharacter c cc ->
-      return (t,Right (Character c cc))
+      return (t,Character c cc)
 
 evalToValue :: (MonadTeXState a m, MonadError String m) => m (Maybe (Value a))
 evalToValue = do
   et <- nextETokenWithDepth
   case et of
     Just (d,t) -> do
-      let doExpand cn u = case u of
+      case t of
+        ETCommandName False name -> do
+          m <- use (localState . definitionAt name)
+          case m of
             Left e -> do
               r <- runExpandable e
               unreadETokens (d+1) r
               evalToValue
             Right v -> return (Just v)
-      case t of
-        ETCommandName False name -> do
-          m <- use (localState . definitionAt name)
-          doExpand name m
         ETCommandName True name -> do
           return (Just (Unexpanded name))
         ETCharacter c cc ->
@@ -185,11 +191,8 @@ readUntilEndcsname :: (MonadTeXState a m, MonadError String m) => [Char] -> m [C
 readUntilEndcsname revName = do
   (t,v) <- evalToken
   case v of
-    Left e -> do r <- runExpandableValue e
-                 unreadETokens 0 r -- TODO: ???
-                 readUntilEndcsname (revName)
-    Right Endcsname -> return (reverse revName)
-    Right _ -> case t of
+    Endcsname -> return (reverse revName)
+    _ -> case t of
       ETCommandName _ name -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
       ETCharacter c _ -> readUntilEndcsname (c:revName) -- non-active character
 
@@ -244,68 +247,56 @@ readOptionalSigns :: (MonadTeXState a m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
   (t,v) <- evalToken
   case v of
-    Left e -> unreadETokens 0 [t] >> return s
-    Right v -> case v of
-      Character ' ' CCSpace -> readOptionalSigns s -- space: ignored
-      Character '+' CCOther -> readOptionalSigns s
-      Character '-' CCOther -> readOptionalSigns (-s)
-      _ -> unreadETokens 0 [t] >> return s
+    Character ' ' CCSpace -> readOptionalSigns s -- space: ignored
+    Character '+' CCOther -> readOptionalSigns s
+    Character '-' CCOther -> readOptionalSigns (-s)
+    _ -> unreadETokens 0 [t] >> return s
 
 readUnsignedDecimal :: (MonadTeXState a m, MonadError String m) => Char -> m Integer
 readUnsignedDecimal c = readRest (fromIntegral (digitToInt c))
   where readRest !x = do
           (t,v) <- evalToken
           case v of
-            Left _ -> unreadETokens 0 [t] >> return x
-            Right v -> case v of
-              Character c CCOther | isDigit c -> do
-                                      readRest (10 * x + fromIntegral (digitToInt c))
-              Character ' ' CCSpace -> return x -- consumed
-              _ -> unreadETokens 0 [t] >> return x
+            Character c CCOther | isDigit c -> do
+                                    readRest (10 * x + fromIntegral (digitToInt c))
+            Character ' ' CCSpace -> return x -- consumed
+            _ -> unreadETokens 0 [t] >> return x
 
 readUnsignedOctal :: (MonadTeXState a m, MonadError String m) => m Integer
 readUnsignedOctal = do
   (t,v) <- evalToken
   case v of
-    Left e -> throwError $ "unexpected token while reading octal: " ++ show t
-    Right v -> case v of
-      Character c CCOther | isOctDigit c -> do
-                              readRest (fromIntegral (digitToInt c))
-      _ -> throwError $ "unexpected token while reading octal: " ++ show t
+    Character c CCOther | isOctDigit c -> do
+                            readRest (fromIntegral (digitToInt c))
+    _ -> throwError $ "unexpected token while reading octal: " ++ show t
   where readRest !x = do
           (t,v) <- evalToken
           case v of
-            Left _ -> unreadETokens 0 [t] >> return x
-            Right v -> case v of
-              Character c CCOther | isOctDigit c -> do
-                                      readRest (8 * x + fromIntegral (digitToInt c))
-              Character ' ' CCSpace -> return x -- consumed
-              _ -> unreadETokens 0 [t] >> return x
+            Character c CCOther | isOctDigit c -> do
+                                    readRest (8 * x + fromIntegral (digitToInt c))
+            Character ' ' CCSpace -> return x -- consumed
+            _ -> unreadETokens 0 [t] >> return x
 
 readUnsignedHex :: (MonadTeXState a m, MonadError String m) => m Integer
 readUnsignedHex = do
   (t,v) <- evalToken
   case v of
-    Left e -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
-    Right v -> case v of
-      Character c CCOther | isUpperHexDigit c -> do
-                              let c0 = digitToInt c
-                              readRest (fromIntegral c0)
-      Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
-                              let c0 = digitToInt c
-                              readRest (fromIntegral c0)
-      _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
+    Character c CCOther | isUpperHexDigit c -> do
+                            let c0 = digitToInt c
+                            readRest (fromIntegral c0)
+    Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
+                             let c0 = digitToInt c
+                             readRest (fromIntegral c0)
+    _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
   where readRest !x = do
           (t,v) <- evalToken
           case v of
-            Left _ -> unreadETokens 0 [t] >> return x
-            Right v -> case v of
-              Character c CCOther | isUpperHexDigit c -> do
-                                      readRest (16 * x + fromIntegral (digitToInt c))
-              Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
-                                      readRest (16 * x + fromIntegral (digitToInt c))
-              Character ' ' CCSpace -> return x -- consumed
-              _ -> unreadETokens 0 [t] >> return x
+            Character c CCOther | isUpperHexDigit c -> do
+                                    readRest (16 * x + fromIntegral (digitToInt c))
+            Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
+                                     readRest (16 * x + fromIntegral (digitToInt c))
+            Character ' ' CCSpace -> return x -- consumed
+            _ -> unreadETokens 0 [t] >> return x
         isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
 readCharacterCode :: (MonadTeXState a m, MonadError String m) => m Integer
@@ -323,18 +314,14 @@ readNumber :: (MonadTeXState a m, MonadError String m) => m Integer
 readNumber = do
   sign <- readOptionalSigns 1
   (t,v) <- evalToken
-  case v of
-    Left e -> throwError $ "unexpected token while reading number: " ++ show t
-    Right v -> do
-      x <- case v of
-             Character '\'' CCOther -> readUnsignedOctal
-             Character '"' CCOther -> readUnsignedHex
-             Character '`' CCOther -> readCharacterCode
-             Character c CCOther | isDigit c -> readUnsignedDecimal c
-             DefinedCharacter c -> return (fromIntegral $ ord c)
-             IntegerConstant x -> return (fromIntegral x)
-             _ -> throwError $ "unexpected token while reading number: " ++ show t
-      return (fromIntegral sign * x)
+  (fromIntegral sign *) <$> case v of
+    Character '\'' CCOther -> readUnsignedOctal
+    Character '"' CCOther -> readUnsignedHex
+    Character '`' CCOther -> readCharacterCode
+    Character c CCOther | isDigit c -> readUnsignedDecimal c
+    DefinedCharacter c -> return (fromIntegral $ ord c)
+    IntegerConstant x -> return (fromIntegral x)
+    _ -> throwError $ "unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
 
 numberCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 numberCommand = do
@@ -422,10 +409,12 @@ skipUntilOr !level = do
 
 doBooleanConditional :: (MonadTeXState a m, MonadError String m) => Bool -> m ()
 doBooleanConditional True = do
-  modifying conditionals (CondTruthy:)
+  modifying conditionals (\(CondTest:xs) -> CondTruthy:xs)
 doBooleanConditional False = do
   e <- skipUntilElse 0
-  when e (modifying conditionals (CondFalsy:))
+  if e
+    then modifying conditionals (\(CondTest:xs) -> CondFalsy:xs)
+    else modifying conditionals tail
 
 elseCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 elseCommand = do
@@ -441,6 +430,7 @@ elseCommand = do
       skipUntilFi 0
       assign conditionals css
       return []
+    CondTest:_ -> throwError "internal error: \\else expansion in conditional"
     _ -> throwError "Extra \\else"
 
 fiCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
@@ -448,6 +438,7 @@ fiCommand = do
   cs <- use conditionals
   case cs of
     [] -> throwError "Extra \\fi"
+    CondTest:_ -> throwError "internal error: \\fi expansion in conditional"
     _:css -> do
       -- \iftrue ... >>>\fi<<<
       -- OR
@@ -464,6 +455,7 @@ orCommand = do
       skipUntilFi 0
       assign conditionals css
       return []
+    CondTest:_ -> throwError "internal error: \\or expansion in conditional"
     _ -> throwError "Extra \\or"
 
 doIfCase :: (MonadTeXState a m, MonadError String m) => Integer -> m ()
@@ -482,22 +474,19 @@ ifcaseCommand = do
   doIfCase x
   return []
 
-runExpandableValue :: (MonadTeXState a m, MonadError String m) => ExpandableValue -> m [ExpansionToken]
-runExpandableValue Eelse = elseCommand
-runExpandableValue Efi = fiCommand
-runExpandableValue Eor = orCommand
-
-runExpandableCommand :: (MonadTeXState a m, MonadError String m) => ExpandableCommand a -> m [ExpansionToken]
-runExpandableCommand (MkExpandableCommand f) = f
-runExpandableCommand (BooleanConditionalCommand c) = do
-  b <- c
-  doBooleanConditional b
-  return []
-runExpandableCommand IfCase = ifcaseCommand
-
 runExpandable :: (MonadTeXState a m, MonadError String m) => Expandable a -> m [ExpansionToken]
-runExpandable (ExpandableValue v) = runExpandableValue v
-runExpandable (ExpandableCommand c) = runExpandableCommand c
+runExpandable (ExpandableValue v) = case v of
+  Eelse -> elseCommand
+  Efi -> fiCommand
+  Eor -> orCommand
+runExpandable (ExpandableCommand c) = case c of
+  MkExpandableCommand f -> f
+  BooleanConditionalCommand c -> do
+    modifying conditionals (CondTest:)
+    b <- c
+    doBooleanConditional b
+    return []
+  IfCase -> ifcaseCommand
 
 iftrueCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 iftrueCommand = return True
@@ -505,26 +494,11 @@ iftrueCommand = return True
 iffalseCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 iffalseCommand = return False
 
--- used by \if, \ifcat
-readIfArgument :: (MonadTeXState a m, MonadError String m) => m TeXToken
-readIfArgument = do
-  (t,u) <- evalToken
-  case u of
-    Left Eelse -> do
-      unreadETokens 0 [t]
-      return (TTControlSeq "relax")
-    Left Efi -> do
-      unreadETokens 0 [t]
-      return (TTControlSeq "relax")
-    Left Eor -> do
-      throwError "Extra \\or"
-    _ -> return (fromEToken t)
-
 -- \if: test character codes
 ifCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifCommand = do
-  t1 <- readIfArgument
-  t2 <- readIfArgument
+  t1 <- (fromEToken . fst) <$> evalToken
+  t2 <- (fromEToken . fst) <$> evalToken
   case (t1, t2) of
     (TTCharacter c1 _, TTCharacter c2 _) -> return $ c1 == c2
     (TTControlSeq _, TTControlSeq _) -> return True
@@ -533,8 +507,8 @@ ifCommand = do
 -- \ifcat: test category codes
 ifcatCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifcatCommand = do
-  t1 <- readIfArgument
-  t2 <- readIfArgument
+  t1 <- (fromEToken . fst) <$> evalToken
+  t2 <- (fromEToken . fst) <$> evalToken
   case (t1, t2) of
     (TTCharacter _ cc1, TTCharacter _ cc2) -> return $ cc1 == cc2
     (TTControlSeq _, TTControlSeq _) -> return True
@@ -613,6 +587,7 @@ unlessCommand = do
   test <- required nextEToken >>= meaning
   case test of
     Left (ExpandableCommand (BooleanConditionalCommand c)) -> do
+      modifying conditionals (CondTest:)
       b <- c
       doBooleanConditional (not b)
       return []
@@ -622,9 +597,9 @@ readGeneralText :: (MonadTeXState a m, MonadError String m) => m [TeXToken]
 readGeneralText = do
   (t,v) <- evalToken
   case v of
-    Right (Character ' ' CCSpace) -> readGeneralText -- optional spaces: ignored
-    Right (Character _ CCBeginGroup) -> readUntilEndGroup True 0 []
-    Right Relax -> readGeneralText -- relax: ignored
+    Character ' ' CCSpace -> readGeneralText -- optional spaces: ignored
+    Character _ CCBeginGroup -> readUntilEndGroup True 0 []
+    Relax -> readGeneralText -- relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
 -- e-TeX extension: \unexpanded

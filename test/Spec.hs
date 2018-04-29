@@ -96,10 +96,23 @@ etest3 = TestCase $ assertEqual "Expand" expected (expandAllString "\\romannumer
                      ,Character 'i' CCOther
                      ]
 
+etest4 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue\\ifnum1<0\\else x\\fi\\fi")
+  where
+    expected = Right [Character 'x' CCLetter
+                     ]
+
+etest5 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue\\number\"1\\else\\fi 0 ")
+  where
+    expected = Right [Character '1' CCOther
+                     ,Character '6' CCOther
+                     ]
+
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1
                  ,TestLabel "Expansion 2" etest2
                  ,TestLabel "Expansion 3" etest3
+                 ,TestLabel "Expansion 4" etest4
+                 ,TestLabel "Expansion 5" etest5
                  ]
 
 main = runTestTT tests

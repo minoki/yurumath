@@ -208,6 +208,7 @@ noexpandCommand = do
       m <- use (localState . definitionAt name)
       return $ case m of
         Left _ -> [ETCommandName True name] -- expandable
+        Right (Undefined _) -> [ETCommandName True name] -- undefined
         Right _ -> [t] -- not expandable
     _ -> return [t]
 

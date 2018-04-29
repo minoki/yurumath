@@ -21,7 +21,7 @@ defineBuiltins = do
                             ,("string",ecmd stringCommand)
                             ,("number",ecmd numberCommand)
                             ,("romannumeral",ecmd romannumeralCommand)
-                            ,("endcsname",Left (ExpandableValue Eendcsname))
+                            ,("endcsname",Right Endcsname)
                             ,("else",Left (ExpandableValue Eelse))
                             ,("fi",Left (ExpandableValue Efi))
                             ,("or",Left (ExpandableValue Eor))

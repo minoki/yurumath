@@ -105,21 +105,6 @@ isExpandableNameF = do
                                 _ -> False
     _ -> False
 
--- used by \noexpand
-isExpandableName :: (MonadTeXState a m) => TeXToken -> m Bool
-isExpandableName t = case t of
-  TTControlSeq name -> do
-    m <- use (localState . tsDefinitions)
-    return $ case Map.lookup name m of
-               Just (Left e) -> True
-               _ -> False
-  TTCharacter c CCActive -> do
-    m <- use (localState . tsActiveDefinitions)
-    return $ case Map.lookup c m of
-               Just (Left e) -> True
-               _ -> False
-  _ -> return False
-
 -- used by \expandafter
 expandOnce :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
 expandOnce et@(ETCommandName False name) = do
@@ -128,23 +113,6 @@ expandOnce et@(ETCommandName False name) = do
     Left (ExpandableCommand c) -> runExpandableCommand c
     _ -> return [et]
 expandOnce et = return [et]
-
--- used by \csname
-expandedTotally :: (MonadTeXState a m, MonadError String m) => m (Either ExpandableValue ExpansionToken)
-expandedTotally = do
-  (d,t) <- required nextETokenWithDepth
-  let doExpand u = case u of
-        Left (ExpandableValue v) -> return $ Left v
-        Left (ExpandableCommand c) -> do
-          r <- runExpandableCommand c
-          unreadETokens (d+1) r
-          expandedTotally
-        _ -> return (Right t)
-  case t of
-    ETCommandName False name -> do
-      m <- use (localState . definitionAt name)
-      doExpand m
-    _ -> return (Right t)
 
 -- used by number reading, \if and \ifcat argument, general text
 evalToken :: (MonadTeXState a m, MonadError String m) => m (ExpansionToken,Either ExpandableValue (Value a))
@@ -215,14 +183,15 @@ noexpandCommand = do
 -- used by \csname and \ifcsname
 readUntilEndcsname :: (MonadTeXState a m, MonadError String m) => [Char] -> m [Char]
 readUntilEndcsname revName = do
-  t <- expandedTotally
-  case t of
-    Left Eendcsname -> return (reverse revName)
+  (t,v) <- evalToken
+  case v of
     Left e -> do r <- runExpandableValue e
                  unreadETokens 0 r -- TODO: ???
                  readUntilEndcsname (revName)
-    Right (ETCommandName _ name) -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
-    Right (ETCharacter c _) -> readUntilEndcsname (c:revName) -- non-active character
+    Right Endcsname -> return (reverse revName)
+    Right _ -> case t of
+      ETCommandName _ name -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
+      ETCharacter c _ -> readUntilEndcsname (c:revName) -- non-active character
 
 csnameCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 csnameCommand = do
@@ -517,7 +486,6 @@ runExpandableValue :: (MonadTeXState a m, MonadError String m) => ExpandableValu
 runExpandableValue Eelse = elseCommand
 runExpandableValue Efi = fiCommand
 runExpandableValue Eor = orCommand
-runExpandableValue Eendcsname = throwError "Extra \\endcsname"
 
 runExpandableCommand :: (MonadTeXState a m, MonadError String m) => ExpandableCommand a -> m [ExpansionToken]
 runExpandableCommand (MkExpandableCommand f) = f
@@ -676,7 +644,7 @@ expandableDefinitions = Map.fromList
   ,("romannumeral",ecmd romannumeralCommand)
   ,("the",         ecmd theCommand)
   ,("meaning",     ecmd meaningCommand)
-  ,("endcsname",   ExpandableValue Eendcsname)
+  -- ,("endcsname",   ExpandableValue Eendcsname)
   ,("else",        ExpandableValue Eelse)
   ,("fi",          ExpandableValue Efi)
   ,("or",          ExpandableValue Eor)

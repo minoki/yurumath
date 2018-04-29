@@ -106,7 +106,6 @@ data LimitsSpec = Limits
 data ExpandableValue = Eelse -- \else
                      | Efi -- \fi
                      | Eor -- \or
-                     | Eendcsname -- \endcsname
                      deriving (Eq)
 
 data ExpandableCommand a = MkExpandableCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken])
@@ -130,6 +129,7 @@ data Value a = Character !Char !CatCode -- character with category code
              | Relax
              | Unexpanded !CommandName -- prefixed with \noexpand
              | Undefined !CommandName
+             | Endcsname
              | ExtraValue a
              deriving (Show)
 
@@ -191,7 +191,7 @@ type MonadTeXState a m = MonadState (TeXState a) m
 instance Show ExpandableValue where
   show Eelse = "\\else"
   show Efi = "\\fi"
-  show Eendcsname = "\\endcsname"
+  show Eor = "\\or"
 
 makeLenses ''LocalState
 makeLenses ''TeXState

@@ -125,7 +125,17 @@ data Value a = Character !Char !CatCode -- character with category code
              | Unexpanded !CommandName -- prefixed with \noexpand
              | Undefined !CommandName
              | ExtraValue a
-             deriving (Eq,Show)
+             deriving (Show)
+
+instance Eq a => Eq (Value a) where
+  Character c cc == Character c' cc' = c == c' && cc == cc'
+  DefinedCharacter c == DefinedCharacter c' = c == c'
+  DefinedMathCharacter c == DefinedMathCharacter c' = c == c'
+  IntegerConstant x == IntegerConstant x' = x == x'
+  Relax == Relax = True
+  Unexpanded _ == Unexpanded _ = True
+  Undefined _ == Undefined _ = True
+  ExtraValue x == ExtraValue x' = x == x'
 
 data Mode = HorizontalMode
           | RestrictedHorizontalMode

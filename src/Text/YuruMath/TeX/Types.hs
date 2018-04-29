@@ -117,6 +117,12 @@ data ExpandableCommand a = MkExpandableCommand (forall m. (MonadState (TeXState 
 data Expandable a = ExpandableCommand !(ExpandableCommand a)
                   | ExpandableValue !ExpandableValue
 
+-- \ifcase or \ifXXX
+isConditional :: Expandable a -> Bool
+isConditional (ExpandableCommand (BooleanConditionalCommand _)) = True
+isConditional (ExpandableCommand IfCase) = True
+isConditional _ = False
+
 data Value a = Character !Char !CatCode -- character with category code
              | DefinedCharacter !Char -- defined with \chardef
              | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef

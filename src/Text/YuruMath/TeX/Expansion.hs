@@ -424,8 +424,7 @@ skipUntilElse !level = do
     Just (ExpandableValue Efi) | level == 0 -> return False
                                | otherwise -> skipUntilElse (level - 1)
     Just (ExpandableValue Eor) | level == 0 -> throwError "Extra \\or"
-    Just (ExpandableCommand (BooleanConditionalCommand _)) -> skipUntilElse (level + 1)
-    Just (ExpandableCommand IfCase) -> skipUntilElse (level + 1)
+    Just c | isConditional c -> skipUntilElse (level + 1)
     _ -> skipUntilElse level
 
 skipUntilFi :: (MonadTeXState a m, MonadError String m) => Int -> m ()
@@ -434,8 +433,7 @@ skipUntilFi !level = do
   case x of
     Just (ExpandableValue Efi) | level == 0 -> return ()
                                | otherwise -> skipUntilFi (level - 1)
-    Just (ExpandableCommand (BooleanConditionalCommand _)) -> skipUntilFi (level + 1)
-    Just (ExpandableCommand IfCase) -> skipUntilFi (level + 1)
+    Just c | isConditional c -> skipUntilFi (level + 1)
     _ -> skipUntilFi level
 
 data SkipUntilOr = FoundOr
@@ -450,8 +448,7 @@ skipUntilOr !level = do
     Just (ExpandableValue Eelse) | level == 0 -> return FoundElse
     Just (ExpandableValue Efi) | level == 0 -> return FoundFi
                                | otherwise -> skipUntilOr (level - 1)
-    Just (ExpandableCommand (BooleanConditionalCommand _)) -> skipUntilOr (level + 1)
-    Just (ExpandableCommand IfCase) -> skipUntilOr (level + 1)
+    Just c | isConditional c -> skipUntilOr (level + 1)
     _ -> skipUntilOr level
 
 doBooleanConditional :: (MonadTeXState a m, MonadError String m) => Bool -> m ()

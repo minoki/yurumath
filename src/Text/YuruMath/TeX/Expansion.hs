@@ -591,8 +591,8 @@ ifxCommand = do
     (Right (Character c1 cc1), Right (Character c2 cc2)) -> return $ c1 == c2 && cc1 == cc2
     (Right (DefinedCharacter c1), Right (DefinedCharacter c2)) -> return $ c1 == c2
     (Right (DefinedMathCharacter c1), Right (DefinedMathCharacter c2)) -> return $ c1 == c2
-    (Right (Unexpanded c1), Right (Unexpanded c2)) -> return $ c1 == c2
-    (Right (Undefined c1), Right (Undefined c2)) -> return $ c1 == c2
+    (Right (Unexpanded c1), Right (Unexpanded c2)) -> return True
+    (Right (Undefined c1), Right (Undefined c2)) -> return True
     (Right Relax, Right Relax) -> return True
     -- Note: \noexpand-ed token and \relax are not equivalent in the sense of \ifx
     (_, _) -> return False

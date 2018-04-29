@@ -115,6 +115,8 @@ nextToken = do
                                    then do unreadChar (chr (ord e `xor` 0x40))
                                            nextToken
                                    else throwError "invalid double superscript notation for >= U+0080"
+                                 -- TODO: ^^xx
+                                 -- TODO: ^^^^xxxx, ^^^^^^xxxxxx (LuaTeX extension)
                              | otherwise -> do
                                  unreadChar d
                                  setMiddleOfLineMode
@@ -125,3 +127,6 @@ nextToken = do
           -- CCParam, CCSub, CCLetter, CCOther, CCActive
           setMiddleOfLineMode
           return $ Just $ TTCharacter c cc
+
+-- context: Char -> CatCode
+-- state: SSNewLine, SSSkipSpaces, SSMiddleOfLine

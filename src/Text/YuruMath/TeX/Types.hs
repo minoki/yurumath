@@ -11,27 +11,26 @@ import Control.Monad.Error.Class
 import qualified Data.Map as Map
 import Control.Lens.TH
 
-data CatCode = CCEscape -- 0
-             | CCBeginGroup -- 1
-             | CCEndGroup -- 2
-             | CCMathShift -- 3
+data CatCode = CCEscape       -- 0
+             | CCBeginGroup   -- 1
+             | CCEndGroup     -- 2
+             | CCMathShift    -- 3
              | CCAlignmentTab -- 4
-             | CCEndLine -- 5
-             | CCParam -- 6
-             | CCSup -- 7
-             | CCSub -- 8
-             | CCIgnored -- 9
-             | CCSpace -- 10
-             | CCLetter -- 11
-             | CCOther -- 12
-             | CCActive -- 13
-             | CCComment -- 14
-             | CCInvalid -- 15
+             | CCEndLine      -- 5
+             | CCParam        -- 6
+             | CCSup          -- 7
+             | CCSub          -- 8
+             | CCIgnored      -- 9
+             | CCSpace        -- 10
+             | CCLetter       -- 11
+             | CCOther        -- 12
+             | CCActive       -- 13
+             | CCComment      -- 14
+             | CCInvalid      -- 15
              deriving (Eq,Show,Enum,Bounded)
 
 data TeXToken = TTControlSeq !Text
               | TTCharacter !Char !CatCode
---              | TTParameter !Int
               deriving (Eq,Show)
 
 data CommandName = NControlSeq !Text
@@ -94,6 +93,11 @@ data DelimiterCode = DelimiterCode !Int32 -- "uvvxyy (24-bit number), where uvv:
                    | UDelimiterCode !Int32
                    deriving (Eq,Show)
 
+data LimitsSpec = Limits
+                | NoLimits
+                | DisplayLimits
+                deriving (Eq,Show)
+
 data ExpansionToken = ExpansionToken { etNoexpand :: !Bool -- True if prefixed by \noexpand
                                      , etToken :: !TeXToken
                                      }
@@ -117,7 +121,7 @@ data Expandable a = ExpandableCommand !(ExpandableCommand a)
 data Value a = Character !Char !CatCode -- character with category code
              | DefinedCharacter !Char -- defined with \chardef
              | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
-             --  IntegerConstant !Integer
+             | IntegerConstant !Int
              | Relax
              | Unexpanded !CommandName -- prefixed with \noexpand
              | Undefined !CommandName

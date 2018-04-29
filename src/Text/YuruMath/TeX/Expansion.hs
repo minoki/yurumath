@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
@@ -144,6 +145,7 @@ evalToken = do
   let doExpand cn u = case u of
         Just (Left (ExpandableValue v)) -> return (t,Left v)
         Just (Left (ExpandableCommand c)) -> do
+          -- runExpandable?
           r <- runExpandableCommand c
           unreadETokens (d+1) r
           evalToken
@@ -234,6 +236,13 @@ csnameCommand = do
 
   return [ExpansionToken False (TTControlSeq tname)]
 
+-- LuaTeX extension: \begincsname
+begincsnameCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+begincsnameCommand = do
+  name <- readUntilEndcsname []
+  let tname = T.pack name
+  return [ExpansionToken False (TTControlSeq tname)]
+
 stringToEToken :: (MonadTeXState a m, MonadError String m) => String -> m [ExpansionToken]
 stringToEToken [] = return []
 stringToEToken (' ':xs) = (ExpansionToken False (TTCharacter ' ' CCSpace) :) <$> stringToEToken xs
@@ -245,6 +254,16 @@ stringCommand = do
   case t of
     ExpansionToken _ (TTControlSeq name) ->
       stringToEToken ('\\' : T.unpack name)
+    ExpansionToken _ (TTCharacter c _) ->
+      stringToEToken [c]
+
+-- LuaTeX extension: \csstring
+csstringCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+csstringCommand = do
+  t <- required nextEToken
+  case t of
+    ExpansionToken _ (TTControlSeq name) ->
+      stringToEToken (T.unpack name)
     ExpansionToken _ (TTCharacter c _) ->
       stringToEToken [c]
 
@@ -319,6 +338,7 @@ readUnsignedHex = do
 readCharacterCode :: (MonadTeXState a m, MonadError String m) => m Integer
 readCharacterCode = do
   t <- required nextEToken
+  -- TODO: read an optional space
   case t of
     ExpansionToken _ (TTControlSeq name) -> case T.unpack name of
       [c] -> return (fromIntegral $ ord c)
@@ -338,7 +358,7 @@ readNumber = do
              Character '`' CCOther -> readCharacterCode
              Character c CCOther | isDigit c -> readUnsignedDecimal c
              DefinedCharacter c -> return (fromIntegral $ ord c)
-             -- IntegerConstant x -> return x
+             IntegerConstant x -> return (fromIntegral x)
              _ -> throwError $ "unexpected token while reading number: " ++ show t
       return (fromIntegral sign * x)
 
@@ -346,6 +366,16 @@ numberCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 numberCommand = do
   x <- readNumber
   stringToEToken (show x)
+
+theCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+theCommand = do
+  x <- readNumber
+  -- TODO: support other quantities
+  stringToEToken (show x)
+
+meaningCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+meaningCommand = do
+  throwError "\\meaning: not implemented yet"
 
 showRomannumeral :: Int -> String
 showRomannumeral !x
@@ -368,6 +398,7 @@ romannumeralCommand = do
          else stringToEToken (showRomannumeral (fromIntegral x))
 
 -- to be used by conditionals, \or, \else
+-- does not actually expand the token.
 shallowEval :: (MonadTeXState a m, MonadError String m) => m (Maybe (Expandable a))
 shallowEval = do
   t <- required nextEToken
@@ -650,48 +681,67 @@ unexpandedCommand = do
   ie <- isExpandableNameF
   map (\t -> ExpansionToken (ie t) t) <$> readGeneralText
 
--- TeX primitives:
--- \expandafter
--- \csname
--- \string
--- \number
--- \romannumeral
--- \if
--- \ifcase .. \or .. \else .. \fi
--- \ifcat
--- \ifdim
--- \ifeof
--- \iffalse
--- \ifhbox
--- \ifhmode
--- \ifinner
--- \ifmmode
--- \ifnum
--- \ifodd
--- \iftrue
--- \ifvbox
--- \ifvmode
--- \ifvoid
--- \ifx
--- \input
--- \jobname
--- \else
--- \fi
--- \noexpand
+expandableDefinitions :: Map.Map Text (Expandable a)
+expandableDefinitions = Map.fromList
+  [("expandafter", ecmd expandafterCommand)
+  ,("noexpand",    ecmd noexpandCommand)
+  ,("csname",      ecmd csnameCommand)
+  ,("string",      ecmd stringCommand)
+  ,("number",      ecmd numberCommand)
+  ,("romannumeral",ecmd romannumeralCommand)
+  ,("the",         ecmd theCommand)
+  ,("meaning",     ecmd meaningCommand)
+  ,("endcsname",   ExpandableValue Eendcsname)
+  ,("else",        ExpandableValue Eelse)
+  ,("fi",          ExpandableValue Efi)
+  ,("or",          ExpandableValue Eor)
+  ,("ifcase",      ExpandableCommand IfCase)
+  ,("iftrue",      ExpandableCommand (BooleanConditionalCommand iftrueCommand))
+  ,("iffalse",     ExpandableCommand (BooleanConditionalCommand iffalseCommand))
+  ,("if",          ExpandableCommand (BooleanConditionalCommand ifCommand))
+  ,("ifcat",       ExpandableCommand (BooleanConditionalCommand ifcatCommand))
+  ,("ifx",         ExpandableCommand (BooleanConditionalCommand ifxCommand))
+  ,("ifnum",       ExpandableCommand (BooleanConditionalCommand ifnumCommand))
+  ,("ifodd",       ExpandableCommand (BooleanConditionalCommand ifoddCommand))
+  ,("ifhmode",     ExpandableCommand (BooleanConditionalCommand ifhmodeCommand))
+  ,("ifvmode",     ExpandableCommand (BooleanConditionalCommand ifvmodeCommand))
+  ,("ifmmode",     ExpandableCommand (BooleanConditionalCommand ifmmodeCommand))
+  ,("ifinner",     ExpandableCommand (BooleanConditionalCommand ifinnerCommand))
+
+  -- e-TeX extension:
+  ,("ifdefined",   ExpandableCommand (BooleanConditionalCommand ifdefinedCommand))
+  ,("ifcsname",    ExpandableCommand (BooleanConditionalCommand ifcsnameCommand))
+  ,("unless",      ecmd unlessCommand)
+  ,("unexpanded",  ecmd unexpandedCommand)
+
+  -- LuaTeX extension:
+  ,("begincsname", ecmd begincsnameCommand)
+  ,("csstring",    ecmd csstringCommand)
+  ]
+  where
+    ecmd :: (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken]) -> Expandable a
+    ecmd c = ExpandableCommand (MkExpandableCommand c)
+
+-- other expandable primitives:
+--   \ifdim
+--   \ifeof
+--   \ifhbox
+--   \ifvbox
+--   \ifvoid
+--   \input
+--   \jobname
 -- e-TeX:
--- \ifdefined
--- \ifcsname
--- \unless
--- \unexpanded
--- \detokenize
--- \scantokens
+--   \detokenize
+--   \scantokens
 -- pdfTeX:
--- \ifincsname
--- \expanded
+--   \ifincsname
+--   \expanded
+-- LuaTeX:
+--   \lastnamedcs
 -- LaTeX
--- \arabic
--- \@arabic
--- \Roman
--- \roman
--- \Alph
--- \alph
+--   \arabic
+--   \@arabic
+--   \Roman
+--   \roman
+--   \Alph
+--   \alph

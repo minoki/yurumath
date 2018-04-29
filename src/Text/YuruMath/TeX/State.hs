@@ -75,10 +75,20 @@ lcCodeOf c = do
   m <- use (localStates . _head . lccodeMap)
   pure (Map.findWithDefault (if isAlpha c then toLower c else '\0') c m)
 
+lcCodeFn :: MonadTeXState a m => m (Char -> Char)
+lcCodeFn = do
+  m <- use (localStates . _head . lccodeMap)
+  pure (\c -> Map.findWithDefault (if isAlpha c then toLower c else '\0') c m)
+
 ucCodeOf :: MonadTeXState a m => Char -> m Char
 ucCodeOf c = do
   m <- use (localStates . _head . uccodeMap)
   pure (Map.findWithDefault (if isAlpha c then toUpper c else '\0') c m)
+
+ucCodeFn :: MonadTeXState a m => m (Char -> Char)
+ucCodeFn = do
+  m <- use (localStates . _head . uccodeMap)
+  pure (\c -> Map.findWithDefault (if isAlpha c then toUpper c else '\0') c m)
 
 mkMathCode :: MathClass -> Word8 -> Char -> MathCode
 mkMathCode cls fam code = MathCode
@@ -94,51 +104,28 @@ mkUMathCode cls fam code = UMathCode
 
 defaultMathCodeOf :: Char -> MathCode
 defaultMathCodeOf c = case c of
-{-  -- plain TeX:
-  '.'  -> MathCode 0x013A -- ord, fam 1, 3A
-  '/'  -> MathCode 0x013D -- ord, fam 1, 3D
-  '\\' -> MathCode 0x026E -- ord, fam 2, 6E
-  '|'  -> MathCode 0x026A -- ord, fam 2, 6A
-  '+'  -> MathCode 0x202B
-  -- '-'  -> MathCode 0x2200
-  -- '*'  -> MathCode 0x2203
-  -- ':'  -> MathCode 0x303A
-  '='  -> MathCode 0x303D
-  '<'  -> MathCode 0x313C
-  '>'  -> MathCode 0x313E
-  '('  -> MathCode 0x4028
-  '['  -> MathCode 0x405B
-  '{'  -> MathCode 0x4266
-  '!'  -> MathCode 0x5021
-  ')'  -> MathCode 0x5029
-  '?'  -> MathCode 0x503F
-  ']'  -> MathCode 0x505D
-  '}'  -> MathCode 0x5267
-  ';'  -> MathCode 0x603B
-  ','  -> MathCode 0x613B
-  ' '  -> MathCode 0x8000 -- active
-  '\'' -> MathCode 0x8000 -- active
-  '_'  -> MathCode 0x8000 -- active
--}
-  -- LaTeX
-  '!' -> mkMathCode MathClose operators '\x21'
-  --'*'->mkMathCode MathBin   symbols   '\x03'
-  '+' -> mkMathCode MathBin   operators '\x2B'
-  ',' -> mkMathCode MathPunct letters   '\x3B'
-  --'-'->mkMathCode MathBin   symbols   '\x00'
-  '.' -> mkMathCode MathOrd   letters   '\x3A'
-  --':'->mkMathCode MathRel   operators '\x3A'
-  ';' -> mkMathCode MathPunct operators '\x3B'
-  '=' -> mkMathCode MathRel   operators '\x3D'
-  '?' -> mkMathCode MathClose operators '\x3F'
-  '(' -> mkMathCode MathOpen  operators '\x28'
-  ')' -> mkMathCode MathClose operators '\x29'
-  '/' -> mkMathCode MathOrd   letters   '\x3D'
-  '[' -> mkMathCode MathOpen  operators '\x5B'
-  ']' -> mkMathCode MathClose operators '\x5D'
-  '|' -> mkMathCode MathOrd   symbols   '\x6A'
-  '<' -> mkMathCode MathRel   letters   '\x3C'
-  '>' -> mkMathCode MathRel   letters   '\x3E'
+  -- plain TeX & LaTeX
+  '!' -> mkMathCode MathClose operators '!'    -- "21
+  --'*'->mkMathCode MathBin   symbols   '\x03' -- "03
+  '+' -> mkMathCode MathBin   operators '+'    -- "2B
+  ',' -> mkMathCode MathPunct letters   '\x3B' -- "3B
+  --'-'->mkMathCode MathBin   symbols   '\x00' -- "00
+  '.' -> mkMathCode MathOrd   letters   '\x3A' -- "3A
+  --':'->mkMathCode MathRel   operators ':'    -- "3A
+  ';' -> mkMathCode MathPunct operators ';'    -- "3B
+  '=' -> mkMathCode MathRel   operators '='    -- "3D
+  '?' -> mkMathCode MathClose operators '?'    -- "3F
+  '(' -> mkMathCode MathOpen  operators '('    -- "28
+  ')' -> mkMathCode MathClose operators ')'    -- "29
+  '/' -> mkMathCode MathOrd   letters   '\x3D' -- "3D
+  '[' -> mkMathCode MathOpen  operators '['    -- "5B
+  ']' -> mkMathCode MathClose operators ']'    -- "5D
+  '|' -> mkMathCode MathOrd   symbols   '\x6A' -- "6A
+  '<' -> mkMathCode MathRel   letters   '<'    -- "3C
+  '>' -> mkMathCode MathRel   letters   '>'    -- "3E
+  '\\'-> mkMathCode MathOrd   symbols   '\x6E' -- "6E
+  '{' -> mkMathCode MathOpen  symbols   '\x66' -- "66 (plain TeX only)
+  '}' -> mkMathCode MathClose symbols   '\x67' -- "67 (plain TeX only)
   ' '  -> MathCode 0x8000 -- active
   '\'' -> MathCode 0x8000 -- active
   '_'  -> MathCode 0x8000 -- active
@@ -154,8 +141,8 @@ defaultMathCodeOf c = case c of
     | otherwise -> UMathCode (fromIntegral (ord c)) -- ???
 
   where
-    letters = 1
     operators = 0
+    letters = 1
     symbols = 2 -- ?
 
 mathCodeOf :: MonadTeXState a m => Char -> m MathCode

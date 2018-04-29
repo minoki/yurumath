@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 import Test.HUnit
+import Data.Semigroup
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Tokenizer
@@ -15,32 +15,7 @@ import qualified Data.Map.Strict as Map
 defineBuiltins :: (MonadState (TeXState a) m, MonadError String m) => m ()
 defineBuiltins = do
   modifying (localStates . _head . tsDefinitions)
-    $ mappend (Map.fromList [("expandafter",ecmd expandafterCommand)
-                            ,("noexpand",ecmd noexpandCommand)
-                            ,("csname",ecmd csnameCommand)
-                            ,("string",ecmd stringCommand)
-                            ,("number",ecmd numberCommand)
-                            ,("romannumeral",ecmd romannumeralCommand)
-                            ,("endcsname",Right Endcsname)
-                            ,("else",Left (ExpandableValue Eelse))
-                            ,("fi",Left (ExpandableValue Efi))
-                            ,("or",Left (ExpandableValue Eor))
-                            ,("ifcase",Left (ExpandableCommand IfCase))
-                            ,("iftrue",Left (ExpandableCommand (BooleanConditionalCommand iftrueCommand)))
-                            ,("iffalse",Left (ExpandableCommand (BooleanConditionalCommand iffalseCommand)))
-                            ,("if",Left (ExpandableCommand (BooleanConditionalCommand ifCommand)))
-                            ,("ifcat",Left (ExpandableCommand (BooleanConditionalCommand ifcatCommand)))
-                            ,("ifx",Left (ExpandableCommand (BooleanConditionalCommand ifxCommand)))
-                            ,("ifnum",Left (ExpandableCommand (BooleanConditionalCommand ifnumCommand)))
-                            ,("ifodd",Left (ExpandableCommand (BooleanConditionalCommand ifoddCommand)))
-                            ,("ifdefined",Left (ExpandableCommand (BooleanConditionalCommand ifdefinedCommand)))
-                            ,("ifcsname",Left (ExpandableCommand (BooleanConditionalCommand ifcsnameCommand)))
-                            ,("unless",ecmd unlessCommand)
-                            ,("unexpanded",ecmd unexpandedCommand)
-                            ])
-  where
-    ecmd :: (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken]) -> Either (Expandable a) v
-    ecmd c = Left (ExpandableCommand (MkExpandableCommand c))
+    $ mappend (fmap Left expandableDefinitions <> Map.singleton "endcsname" (Right Endcsname))
 
 tokenizeAll :: (MonadState (TeXState a) m, MonadError String m) => m [TeXToken]
 tokenizeAll = do

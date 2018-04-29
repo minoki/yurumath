@@ -103,23 +103,21 @@ data LimitsSpec = Limits
                 | DisplayLimits
                 deriving (Eq,Show)
 
-data ExpandableValue = Eelse -- \else
-                     | Efi -- \fi
-                     | Eor -- \or
-                     deriving (Eq)
+data ConditionalMarker = Eelse -- \else
+                       | Efi -- \fi
+                       | Eor -- \or
+                       deriving (Eq)
 
-data ExpandableCommand a = MkExpandableCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken])
-                         | BooleanConditionalCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m Bool)
-                         | IfCase -- \ifcase
---Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
-
-data Expandable a = ExpandableCommand !(ExpandableCommand a)
-                  | ExpandableValue !ExpandableValue
+data Expandable a = ExpandableCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken])
+                  | BooleanConditionalCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m Bool)
+                  | IfCase -- \ifcase
+                  | ConditionalMarker !ConditionalMarker -- \else, \fi, \or
+                  --Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
 
 -- \ifcase or \ifXXX
 isConditional :: Expandable a -> Bool
-isConditional (ExpandableCommand (BooleanConditionalCommand _)) = True
-isConditional (ExpandableCommand IfCase) = True
+isConditional (BooleanConditionalCommand _) = True
+isConditional IfCase = True
 isConditional _ = False
 
 data Value a = Character !Char !CatCode -- character with category code
@@ -189,7 +187,7 @@ data TeXState a = TeXState
 
 type MonadTeXState a m = MonadState (TeXState a) m
 
-instance Show ExpandableValue where
+instance Show ConditionalMarker where
   show Eelse = "\\else"
   show Efi = "\\fi"
   show Eor = "\\or"

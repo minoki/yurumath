@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
@@ -122,7 +121,7 @@ evalToken = do
     ETCommandName False name -> do
       m <- use (localState . definitionAt name)
       case m of
-        Left e@(ExpandableValue v) -> do
+        Left e@(ConditionalMarker v) -> do
           cs <- use conditionals
           case cs of
             CondTest:_ -> do
@@ -376,10 +375,10 @@ skipUntilElse :: (MonadTeXState a m, MonadError String m) => Int -> m Bool
 skipUntilElse !level = do
   x <- shallowEval
   case x of
-    Just (ExpandableValue Eelse) | level == 0 -> return True
-    Just (ExpandableValue Efi) | level == 0 -> return False
-                               | otherwise -> skipUntilElse (level - 1)
-    Just (ExpandableValue Eor) | level == 0 -> throwError "Extra \\or"
+    Just (ConditionalMarker Eelse) | level == 0 -> return True
+    Just (ConditionalMarker Efi) | level == 0 -> return False
+                                 | otherwise -> skipUntilElse (level - 1)
+    Just (ConditionalMarker Eor) | level == 0 -> throwError "Extra \\or"
     Just c | isConditional c -> skipUntilElse (level + 1)
     _ -> skipUntilElse level
 
@@ -387,8 +386,8 @@ skipUntilFi :: (MonadTeXState a m, MonadError String m) => Int -> m ()
 skipUntilFi !level = do
   x <- shallowEval
   case x of
-    Just (ExpandableValue Efi) | level == 0 -> return ()
-                               | otherwise -> skipUntilFi (level - 1)
+    Just (ConditionalMarker Efi) | level == 0 -> return ()
+                                 | otherwise -> skipUntilFi (level - 1)
     Just c | isConditional c -> skipUntilFi (level + 1)
     _ -> skipUntilFi level
 
@@ -400,10 +399,10 @@ skipUntilOr :: (MonadTeXState a m, MonadError String m) => Int -> m SkipUntilOr
 skipUntilOr !level = do
   x <- shallowEval
   case x of
-    Just (ExpandableValue Eor) | level == 0 -> return FoundOr
-    Just (ExpandableValue Eelse) | level == 0 -> return FoundElse
-    Just (ExpandableValue Efi) | level == 0 -> return FoundFi
-                               | otherwise -> skipUntilOr (level - 1)
+    Just (ConditionalMarker Eor) | level == 0 -> return FoundOr
+    Just (ConditionalMarker Eelse) | level == 0 -> return FoundElse
+    Just (ConditionalMarker Efi) | level == 0 -> return FoundFi
+                                 | otherwise -> skipUntilOr (level - 1)
     Just c | isConditional c -> skipUntilOr (level + 1)
     _ -> skipUntilOr level
 
@@ -475,18 +474,17 @@ ifcaseCommand = do
   return []
 
 runExpandable :: (MonadTeXState a m, MonadError String m) => Expandable a -> m [ExpansionToken]
-runExpandable (ExpandableValue v) = case v of
+runExpandable (ConditionalMarker v) = case v of
   Eelse -> elseCommand
   Efi -> fiCommand
   Eor -> orCommand
-runExpandable (ExpandableCommand c) = case c of
-  MkExpandableCommand f -> f
-  BooleanConditionalCommand c -> do
+runExpandable (ExpandableCommand c) = c
+runExpandable (BooleanConditionalCommand c) = do
     modifying conditionals (CondTest:)
     b <- c
     doBooleanConditional b
     return []
-  IfCase -> ifcaseCommand
+runExpandable IfCase = ifcaseCommand
 
 iftrueCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 iftrueCommand = return True
@@ -527,8 +525,8 @@ ifxCommand = do
   t1 <- required nextEToken >>= meaning
   t2 <- required nextEToken >>= meaning
   case (t1, t2) of
-    (Left (ExpandableValue v1), Left (ExpandableValue v2)) -> return $ v1 == v2
-    (Left (ExpandableCommand IfCase), Left (ExpandableCommand IfCase)) -> return True
+    (Left (ConditionalMarker v1), Left (ConditionalMarker v2)) -> return $ v1 == v2
+    (Left IfCase, Left IfCase) -> return True
     -- TODO: other expandable commands
     (Right (Character c1 cc1), Right (Character c2 cc2)) -> return $ c1 == c2 && cc1 == cc2
     (Right (DefinedCharacter c1), Right (DefinedCharacter c2)) -> return $ c1 == c2
@@ -586,7 +584,7 @@ unlessCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 unlessCommand = do
   test <- required nextEToken >>= meaning
   case test of
-    Left (ExpandableCommand (BooleanConditionalCommand c)) -> do
+    Left (BooleanConditionalCommand c) -> do
       modifying conditionals (CondTest:)
       b <- c
       doBooleanConditional (not b)
@@ -611,44 +609,41 @@ unexpandedCommand = do
 
 expandableDefinitions :: Map.Map Text (Expandable a)
 expandableDefinitions = Map.fromList
-  [("expandafter", ecmd expandafterCommand)
-  ,("noexpand",    ecmd noexpandCommand)
-  ,("csname",      ecmd csnameCommand)
-  ,("string",      ecmd stringCommand)
-  ,("number",      ecmd numberCommand)
-  ,("romannumeral",ecmd romannumeralCommand)
-  ,("the",         ecmd theCommand)
-  ,("meaning",     ecmd meaningCommand)
-  -- ,("endcsname",   ExpandableValue Eendcsname)
-  ,("else",        ExpandableValue Eelse)
-  ,("fi",          ExpandableValue Efi)
-  ,("or",          ExpandableValue Eor)
-  ,("ifcase",      ExpandableCommand IfCase)
-  ,("iftrue",      ExpandableCommand (BooleanConditionalCommand iftrueCommand))
-  ,("iffalse",     ExpandableCommand (BooleanConditionalCommand iffalseCommand))
-  ,("if",          ExpandableCommand (BooleanConditionalCommand ifCommand))
-  ,("ifcat",       ExpandableCommand (BooleanConditionalCommand ifcatCommand))
-  ,("ifx",         ExpandableCommand (BooleanConditionalCommand ifxCommand))
-  ,("ifnum",       ExpandableCommand (BooleanConditionalCommand ifnumCommand))
-  ,("ifodd",       ExpandableCommand (BooleanConditionalCommand ifoddCommand))
-  ,("ifhmode",     ExpandableCommand (BooleanConditionalCommand ifhmodeCommand))
-  ,("ifvmode",     ExpandableCommand (BooleanConditionalCommand ifvmodeCommand))
-  ,("ifmmode",     ExpandableCommand (BooleanConditionalCommand ifmmodeCommand))
-  ,("ifinner",     ExpandableCommand (BooleanConditionalCommand ifinnerCommand))
+  [("expandafter", ExpandableCommand expandafterCommand)
+  ,("noexpand",    ExpandableCommand noexpandCommand)
+  ,("csname",      ExpandableCommand csnameCommand)
+  ,("string",      ExpandableCommand stringCommand)
+  ,("number",      ExpandableCommand numberCommand)
+  ,("romannumeral",ExpandableCommand romannumeralCommand)
+  ,("the",         ExpandableCommand theCommand)
+  ,("meaning",     ExpandableCommand meaningCommand)
+  -- ,("endcsname",   Endcsname)
+  ,("else",        ConditionalMarker Eelse)
+  ,("fi",          ConditionalMarker Efi)
+  ,("or",          ConditionalMarker Eor)
+  ,("ifcase",      IfCase)
+  ,("iftrue",      BooleanConditionalCommand iftrueCommand)
+  ,("iffalse",     BooleanConditionalCommand iffalseCommand)
+  ,("if",          BooleanConditionalCommand ifCommand)
+  ,("ifcat",       BooleanConditionalCommand ifcatCommand)
+  ,("ifx",         BooleanConditionalCommand ifxCommand)
+  ,("ifnum",       BooleanConditionalCommand ifnumCommand)
+  ,("ifodd",       BooleanConditionalCommand ifoddCommand)
+  ,("ifhmode",     BooleanConditionalCommand ifhmodeCommand)
+  ,("ifvmode",     BooleanConditionalCommand ifvmodeCommand)
+  ,("ifmmode",     BooleanConditionalCommand ifmmodeCommand)
+  ,("ifinner",     BooleanConditionalCommand ifinnerCommand)
 
   -- e-TeX extension:
-  ,("ifdefined",   ExpandableCommand (BooleanConditionalCommand ifdefinedCommand))
-  ,("ifcsname",    ExpandableCommand (BooleanConditionalCommand ifcsnameCommand))
-  ,("unless",      ecmd unlessCommand)
-  ,("unexpanded",  ecmd unexpandedCommand)
+  ,("ifdefined",   BooleanConditionalCommand ifdefinedCommand)
+  ,("ifcsname",    BooleanConditionalCommand ifcsnameCommand)
+  ,("unless",      ExpandableCommand unlessCommand)
+  ,("unexpanded",  ExpandableCommand unexpandedCommand)
 
   -- LuaTeX extension:
-  ,("begincsname", ecmd begincsnameCommand)
-  ,("csstring",    ecmd csstringCommand)
+  ,("begincsname", ExpandableCommand begincsnameCommand)
+  ,("csstring",    ExpandableCommand csstringCommand)
   ]
-  where
-    ecmd :: (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken]) -> Expandable a
-    ecmd c = ExpandableCommand (MkExpandableCommand c)
 
 -- other expandable primitives:
 --   \ifdim

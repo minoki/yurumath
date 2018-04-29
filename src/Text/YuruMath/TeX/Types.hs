@@ -38,6 +38,10 @@ data CommandName = NControlSeq !Text
                  | NActiveChar !Char
                  deriving (Eq,Show)
 
+data ExpansionToken = ETCommandName {-noexpand-} !Bool !CommandName
+                    | ETCharacter !Char !CatCode -- non-active character
+                      deriving (Eq,Show)
+
 data SpacingState = SSNewLine
                   | SSSkipSpaces
                   | SSMiddleOfLine
@@ -98,12 +102,6 @@ data LimitsSpec = Limits
                 | NoLimits
                 | DisplayLimits
                 deriving (Eq,Show)
-
-data ExpansionToken = ExpansionToken { etNoexpand :: !Bool -- True if prefixed by \noexpand
-                                     , etToken :: !TeXToken
-                                     }
-                      deriving (Eq,Show)
--- ETCommand Bool CommandName | ETChar Char CatCode
 
 data ExpandableValue = Eelse -- \else
                      | Efi -- \fi
@@ -167,7 +165,7 @@ data TeXState a = TeXState
                   , _esMaxDepth :: !Int
                   , _esMaxPendingToken :: !Int
                   , _esPendingTokenList :: [(Int,ExpansionToken)]
-                  , _localStates :: [LocalState a]
+                  , _localStates :: [LocalState a] -- must be non-empty
                   , _mode :: !Mode
                   , _conditionals :: [ConditionalKind]
                   }
@@ -189,3 +187,7 @@ definitionAt cn@(NControlSeq name) = tsDefinitions . lens getter setter
 definitionAt cn@(NActiveChar c) = tsActiveDefinitions . lens getter setter
   where getter = Map.findWithDefault (Right (Undefined cn)) c
         setter s v = Map.insert c v s
+
+localState :: Lens' (TeXState a) (LocalState a)
+localState = localStates . lens head setter
+  where setter (_:xs) x = x:xs

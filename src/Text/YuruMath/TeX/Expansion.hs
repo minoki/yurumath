@@ -12,17 +12,26 @@ import qualified Data.Map.Strict as Map
 import Control.Monad
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
-import Control.Lens.Cons (_head)
 import Control.Lens.Getter (view,use,uses)
 import Control.Lens.Setter (assign,modifying)
 import Control.Applicative
+
+toEToken :: TeXToken -> ExpansionToken
+toEToken (TTControlSeq name) = ETCommandName False (NControlSeq name)
+toEToken (TTCharacter c CCActive) = ETCommandName False (NActiveChar c)
+toEToken (TTCharacter c cc) = ETCharacter c cc
+
+fromEToken :: ExpansionToken -> TeXToken
+fromEToken (ETCommandName _ (NControlSeq name)) = TTControlSeq name
+fromEToken (ETCommandName _ (NActiveChar c)) = TTCharacter c CCActive
+fromEToken (ETCharacter c cc) = TTCharacter c cc
 
 nextEToken :: (MonadTeXState a m, MonadError String m) => m (Maybe ExpansionToken)
 nextEToken = do
   pending <- use esPendingTokenList
   case pending of
     [] -> do t <- nextToken
-             return (ExpansionToken False <$> t)
+             return (toEToken <$> t)
     (_,t):ts -> do
       assign esPendingTokenList ts
       return (Just t)
@@ -32,7 +41,7 @@ nextETokenWithDepth = do
   pending <- use esPendingTokenList
   case pending of
     [] -> do t <- nextToken
-             return (((,) 0 . ExpansionToken False) <$> t)
+             return (((,) 0 . toEToken) <$> t)
     t:ts -> do
       assign esPendingTokenList ts
       return (Just t)
@@ -51,15 +60,15 @@ readUntilEndGroup !isLong !depth revTokens = do
   t <- nextEToken
   case t of
     Nothing -> throwError "unexpected end of input when reading an argument"
-    Just (ExpansionToken _ t@(TTCharacter _ CCEndGroup))
+    Just t@(ETCharacter _ CCEndGroup)
       | depth == 0 -> return (reverse revTokens)
-      | otherwise -> readUntilEndGroup isLong (depth - 1) (t : revTokens)
-    Just (ExpansionToken _ t@(TTCharacter _ CCBeginGroup))
-      -> readUntilEndGroup isLong (depth + 1) (t : revTokens)
-    Just (ExpansionToken _ (TTControlSeq par))
+      | otherwise -> readUntilEndGroup isLong (depth - 1) (fromEToken t : revTokens)
+    Just t@(ETCharacter _ CCBeginGroup)
+      -> readUntilEndGroup isLong (depth + 1) (fromEToken t : revTokens)
+    Just (ETCommandName _ (NControlSeq par))
       | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
-    Just (ExpansionToken _ t)
-      -> readUntilEndGroup isLong depth (t : revTokens)
+    Just t
+      -> readUntilEndGroup isLong depth (fromEToken t : revTokens)
 
 -- reads undelimited macro argument
 readArgument :: (MonadTeXState a m, MonadError String m) => Bool -> m [TeXToken]
@@ -67,27 +76,26 @@ readArgument !isLong = do
   t <- nextEToken
   case t of
     Nothing -> throwError "unexpected end of input when expecting an argument"
-    Just (ExpansionToken _ (TTCharacter _ CCSpace)) -> readArgument isLong
-    Just (ExpansionToken _ (TTCharacter _ CCEndGroup)) -> throwError "unexpected end of group"
-    Just (ExpansionToken _ (TTCharacter _ CCBeginGroup)) -> readUntilEndGroup isLong 0 []
-    Just (ExpansionToken _ (TTControlSeq par)) | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
-    Just (ExpansionToken _ t) -> return [t]
+    Just (ETCharacter _ CCSpace) -> readArgument isLong
+    Just (ETCharacter _ CCEndGroup) -> throwError "unexpected end of group"
+    Just (ETCharacter _ CCBeginGroup) -> readUntilEndGroup isLong 0 []
+    Just (ETCommandName _ (NControlSeq par)) | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
+    Just t -> return [fromEToken t]
 
 -- reads a control sequence or an active character
 readCommandName :: (MonadTeXState a m, MonadError String m) => m CommandName
 readCommandName = do
   t <- required nextEToken
   case t of
-    ExpansionToken _ (TTControlSeq name) -> return (NControlSeq name)
-    ExpansionToken _ (TTCharacter c CCActive) -> return (NActiveChar c)
+    ETCommandName _ name -> return name
     _ -> throwError $ "unexpected character token: " ++ show t
          -- or, "Missing control sequence inserted"
 
 -- used by \unexpanded
 isExpandableNameF :: (MonadTeXState a m) => m (TeXToken -> Bool)
 isExpandableNameF = do
-  cd <- use (localStates . _head . tsDefinitions)
-  ad <- use (localStates . _head . tsActiveDefinitions)
+  cd <- use (localState . tsDefinitions)
+  ad <- use (localState . tsActiveDefinitions)
   return $ \t -> case t of
     TTControlSeq name -> case Map.lookup name cd of
                            Just (Left _) -> True
@@ -101,12 +109,12 @@ isExpandableNameF = do
 isExpandableName :: (MonadTeXState a m) => TeXToken -> m Bool
 isExpandableName t = case t of
   TTControlSeq name -> do
-    m <- use (localStates . _head . tsDefinitions)
+    m <- use (localState . tsDefinitions)
     return $ case Map.lookup name m of
                Just (Left e) -> True
                _ -> False
   TTCharacter c CCActive -> do
-    m <- use (localStates . _head . tsActiveDefinitions)
+    m <- use (localState . tsActiveDefinitions)
     return $ case Map.lookup c m of
                Just (Left e) -> True
                _ -> False
@@ -114,38 +122,28 @@ isExpandableName t = case t of
 
 -- used by \expandafter
 expandOnce :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
-expandOnce et@(ExpansionToken True _) = return [et]
-expandOnce et@(ExpansionToken False t) = case t of
-  TTControlSeq name -> do
-    m <- use (localStates . _head . tsDefinitions)
-    case Map.lookup name m of
-      Just (Left (ExpandableCommand c)) -> runExpandableCommand c
-      _ -> return [et]
-  TTCharacter c CCActive -> do
-    m <- use (localStates . _head . tsActiveDefinitions)
-    case Map.lookup c m of
-      Just (Left (ExpandableCommand c)) -> runExpandableCommand c
-      _ -> return [et]
-  _ -> return [et]
+expandOnce et@(ETCommandName False name) = do
+  m <- use (localState . definitionAt name)
+  case m of
+    Left (ExpandableCommand c) -> runExpandableCommand c
+    _ -> return [et]
+expandOnce et = return [et]
 
 -- used by \csname
 expandedTotally :: (MonadTeXState a m, MonadError String m) => m (Either ExpandableValue ExpansionToken)
 expandedTotally = do
   (d,t) <- required nextETokenWithDepth
   let doExpand u = case u of
-        Just (Left (ExpandableValue v)) -> return $ Left v
-        Just (Left (ExpandableCommand c)) -> do
+        Left (ExpandableValue v) -> return $ Left v
+        Left (ExpandableCommand c) -> do
           r <- runExpandableCommand c
           unreadETokens (d+1) r
           expandedTotally
         _ -> return (Right t)
   case t of
-    ExpansionToken False (TTControlSeq name) -> do
-      m <- use (localStates . _head . tsDefinitions)
-      doExpand (Map.lookup name m)
-    ExpansionToken False (TTCharacter c CCActive) -> do
-      m <- use (localStates . _head . tsActiveDefinitions)
-      doExpand (Map.lookup c m)
+    ETCommandName False name -> do
+      m <- use (localState . definitionAt name)
+      doExpand m
     _ -> return (Right t)
 
 -- used by number reading, \if and \ifcat argument, general text
@@ -153,26 +151,20 @@ evalToken :: (MonadTeXState a m, MonadError String m) => m (ExpansionToken,Eithe
 evalToken = do
   (d,t) <- required nextETokenWithDepth
   let doExpand cn u = case u of
-        Just (Left (ExpandableValue v)) -> return (t,Left v)
-        Just (Left (ExpandableCommand c)) -> do
+        Left (ExpandableValue v) -> return (t,Left v)
+        Left (ExpandableCommand c) -> do
           -- runExpandable?
           r <- runExpandableCommand c
           unreadETokens (d+1) r
           evalToken
-        Just (Right v) -> return (t,Right v) -- non-expandable commands are not executed
-        Nothing -> return (t,Right $ Undefined cn)
+        Right v -> return (t,Right v) -- non-expandable commands are not executed
   case t of
-    ExpansionToken False (TTControlSeq name) -> do
-      m <- use (localStates . _head . tsDefinitions)
-      doExpand (NControlSeq name) (Map.lookup name m)
-    ExpansionToken False (TTCharacter c CCActive) -> do
-      m <- use (localStates . _head . tsActiveDefinitions)
-      doExpand (NActiveChar c) (Map.lookup c m)
-    ExpansionToken True (TTControlSeq name) -> do
-      return (t,Right (Unexpanded (NControlSeq name)))
-    ExpansionToken True (TTCharacter c CCActive) -> do
-      return (t,Right (Unexpanded (NActiveChar c)))
-    ExpansionToken False (TTCharacter c cc) ->
+    ETCommandName False name -> do
+      m <- use (localState . definitionAt name)
+      doExpand name m
+    ETCommandName True name -> do
+      return (t,Right (Unexpanded name))
+    ETCharacter c cc ->
       return (t,Right (Character c cc))
 
 evalToValue :: (MonadTeXState a m, MonadError String m) => m (Maybe (Value a))
@@ -181,24 +173,18 @@ evalToValue = do
   case et of
     Just (d,t) -> do
       let doExpand cn u = case u of
-            Just (Left e) -> do
+            Left e -> do
               r <- runExpandable e
               unreadETokens (d+1) r
               evalToValue
-            Just (Right v) -> return (Just v)
-            Nothing -> return (Just (Undefined cn))
+            Right v -> return (Just v)
       case t of
-        ExpansionToken False (TTControlSeq name) -> do
-          m <- use (localStates . _head . tsDefinitions)
-          doExpand (NControlSeq name) (Map.lookup name m)
-        ExpansionToken False (TTCharacter c CCActive) -> do
-          m <- use (localStates . _head . tsActiveDefinitions)
-          doExpand (NActiveChar c) (Map.lookup c m)
-        ExpansionToken True (TTControlSeq name) -> do
-          return (Just (Unexpanded (NControlSeq name)))
-        ExpansionToken True (TTCharacter c CCActive) -> do
-          return (Just (Unexpanded (NActiveChar c)))
-        ExpansionToken False (TTCharacter c cc) ->
+        ETCommandName False name -> do
+          m <- use (localState . definitionAt name)
+          doExpand name m
+        ETCommandName True name -> do
+          return (Just (Unexpanded name))
+        ETCharacter c cc ->
           return (Just (Character c cc))
     Nothing -> return Nothing
 
@@ -217,10 +203,13 @@ expandafterCommand = do
 noexpandCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 noexpandCommand = do
   t <- required nextEToken
-  f <- isExpandableName (etToken t)
-  if f
-    then return [ExpansionToken True (etToken t)]
-    else return [t]
+  case t of
+    ETCommandName False name -> do
+      m <- use (localState . definitionAt name)
+      return $ case m of
+        Left _ -> [ETCommandName True name] -- expandable
+        Right _ -> [t] -- not expandable
+    _ -> return [t]
 
 -- used by \csname and \ifcsname
 readUntilEndcsname :: (MonadTeXState a m, MonadError String m) => [Char] -> m [Char]
@@ -231,8 +220,8 @@ readUntilEndcsname revName = do
     Left e -> do r <- runExpandableValue e
                  unreadETokens 0 r -- TODO: ???
                  readUntilEndcsname (revName)
-    Right (ExpansionToken _ (TTCharacter c _)) -> readUntilEndcsname (c:revName)
-    Right (ExpansionToken _ (TTControlSeq name)) -> throwError $ "unexpected \\" ++ T.unpack name ++ " while looking for \\endcsname"
+    Right (ETCommandName _ name) -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
+    Right (ETCharacter c _) -> readUntilEndcsname (c:revName) -- non-active character
 
 csnameCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 csnameCommand = do
@@ -240,31 +229,33 @@ csnameCommand = do
   let tname = T.pack name
 
   -- THE DREADED SIDE EFFECT OF \csname
-  d <- use (localStates . _head . tsDefinitions)
+  d <- use (localState . tsDefinitions)
   when (Map.notMember tname d)
-    $ modifying (localStates . _head . tsDefinitions) (Map.insert tname (Right Relax))
+    $ modifying (localState . tsDefinitions) (Map.insert tname (Right Relax))
 
-  return [ExpansionToken False (TTControlSeq tname)]
+  return [ETCommandName False (NControlSeq tname)]
 
 -- LuaTeX extension: \begincsname
 begincsnameCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 begincsnameCommand = do
   name <- readUntilEndcsname []
   let tname = T.pack name
-  return [ExpansionToken False (TTControlSeq tname)]
+  return [ETCommandName False (NControlSeq tname)]
 
 stringToEToken :: (MonadTeXState a m, MonadError String m) => String -> m [ExpansionToken]
 stringToEToken [] = return []
-stringToEToken (' ':xs) = (ExpansionToken False (TTCharacter ' ' CCSpace) :) <$> stringToEToken xs
-stringToEToken (x:xs) = (ExpansionToken False (TTCharacter x CCOther) :) <$> stringToEToken xs
+stringToEToken (' ':xs) = (ETCharacter ' ' CCSpace :) <$> stringToEToken xs
+stringToEToken (x:xs) = (ETCharacter x CCOther :) <$> stringToEToken xs
 
 stringCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 stringCommand = do
   t <- required nextEToken
   case t of
-    ExpansionToken _ (TTControlSeq name) ->
+    ETCommandName _ (NControlSeq name) ->
       stringToEToken ('\\' : T.unpack name)
-    ExpansionToken _ (TTCharacter c _) ->
+    ETCommandName _ (NActiveChar c) ->
+      stringToEToken [c]
+    ETCharacter c _ ->
       stringToEToken [c]
 
 -- LuaTeX extension: \csstring
@@ -272,9 +263,11 @@ csstringCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken
 csstringCommand = do
   t <- required nextEToken
   case t of
-    ExpansionToken _ (TTControlSeq name) ->
+    ETCommandName _ (NControlSeq name) ->
       stringToEToken (T.unpack name)
-    ExpansionToken _ (TTCharacter c _) ->
+    ETCommandName _ (NActiveChar c) ->
+      stringToEToken [c]
+    ETCharacter c _ ->
       stringToEToken [c]
 
 readOptionalSigns :: (MonadTeXState a m, MonadError String m) => Int -> m Int
@@ -350,10 +343,11 @@ readCharacterCode = do
   t <- required nextEToken
   -- TODO: read an optional space
   case t of
-    ExpansionToken _ (TTControlSeq name) -> case T.unpack name of
+    ETCommandName _ (NControlSeq name) -> case T.unpack name of
       [c] -> return (fromIntegral $ ord c)
       _ -> throwError "Improper alphabetic constant."
-    ExpansionToken _ (TTCharacter c _) -> return (fromIntegral $ ord c)
+    ETCommandName _ (NActiveChar c) -> return (fromIntegral $ ord c)
+    ETCharacter c _ -> return (fromIntegral $ ord c)
 
 readNumber :: (MonadTeXState a m, MonadError String m) => m Integer
 readNumber = do
@@ -413,18 +407,11 @@ shallowEval :: (MonadTeXState a m, MonadError String m) => m (Maybe (Expandable 
 shallowEval = do
   t <- required nextEToken
   case t of
-    ExpansionToken False (TTControlSeq name) -> do
-      m <- use (localStates . _head . tsDefinitions)
-      case Map.lookup name m of
-        Nothing -> return Nothing -- undefined
-        Just (Left e) -> return (Just e) -- expandable
-        Just (Right _) -> return Nothing -- non-expandable
-    ExpansionToken False (TTCharacter c CCActive) -> do
-      m <- use (localStates . _head . tsActiveDefinitions)
-      case Map.lookup c m of
-        Nothing -> return Nothing -- undefined
-        Just (Left e) -> return (Just e) -- expandable
-        Just (Right _) -> return Nothing -- non-expandable
+    ETCommandName False name -> do
+      m <- use (localState . definitionAt name)
+      case m of
+        Left e -> return (Just e) -- expandable
+        Right _ -> return Nothing -- non-expandable
     _ -> return Nothing -- non-expandable
 
 -- True if encountered \else, False if encountered \fi
@@ -565,7 +552,7 @@ readIfArgument = do
       return (TTControlSeq "relax")
     Left Eor -> do
       throwError "Extra \\or"
-    _ -> return (etToken t)
+    _ -> return (fromEToken t)
 
 -- \if: test character codes
 ifCommand :: (MonadTeXState a m, MonadError String m) => m Bool
@@ -590,20 +577,9 @@ ifcatCommand = do
 meaning :: (MonadTeXState a m, MonadError String m) => ExpansionToken -> m (Either (Expandable a) (Value a))
 meaning t = do
   case t of
-    ExpansionToken True (TTCharacter c CCActive) -> return (Right (Unexpanded (NActiveChar c)))
-    ExpansionToken True (TTControlSeq name) -> return (Right (Unexpanded (NControlSeq name)))
-    ExpansionToken False (TTCharacter c cc)
-      | cc /= CCActive -> return (Right (Character c cc))
-      | cc == CCActive -> do
-          m <- use (localStates . _head . tsActiveDefinitions)
-          case Map.lookup c m of
-            Nothing -> return (Right (Undefined (NActiveChar c)))
-            Just v -> return v
-    ExpansionToken False (TTControlSeq name) -> do
-          m <- use (localStates . _head . tsDefinitions)
-          case Map.lookup name m of
-            Nothing -> return (Right (Undefined (NControlSeq name)))
-            Just v -> return v
+    ETCommandName True name -> return (Right (Unexpanded name))
+    ETCommandName False name -> use (localState . definitionAt name)
+    ETCharacter c cc -> return (Right (Character c cc))
 
 -- \ifx: test category codes
 ifxCommand :: (MonadTeXState a m, MonadError String m) => m Bool
@@ -662,7 +638,7 @@ ifcsnameCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifcsnameCommand = do
   name <- readUntilEndcsname []
   let tname = T.pack name
-  d <- use (localStates . _head . tsDefinitions)
+  d <- use (localState . tsDefinitions)
   return (Map.member tname d)
 
 -- e-TeX extension: \unless
@@ -689,7 +665,8 @@ readGeneralText = do
 unexpandedCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
 unexpandedCommand = do
   ie <- isExpandableNameF
-  map (\t -> ExpansionToken (ie t) t) <$> readGeneralText
+  -- map (\t -> ExpansionToken (ie t) t) <$> readGeneralText
+  throwError "\\unexpanded: not implemented yet"
 
 expandableDefinitions :: Map.Map Text (Expandable a)
 expandableDefinitions = Map.fromList

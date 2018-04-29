@@ -10,7 +10,6 @@ import Data.Map (Map)
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map as Map
-import Control.Lens.Cons (_head)
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign,modifying)
 
@@ -58,36 +57,36 @@ defaultCategoryCodeOf c = case c of
 
 categoryCodeOf :: MonadTeXState a m => Char -> m CatCode
 categoryCodeOf c = do
-  m <- use (localStates . _head . catcodeMap)
+  m <- use (localState . catcodeMap)
   pure (Map.findWithDefault (defaultCategoryCodeOf c) c m)
 
 categoryCodeFn :: MonadTeXState a m => m (Char -> CatCode)
 categoryCodeFn = do
-  m <- use (localStates . _head . catcodeMap)
+  m <- use (localState . catcodeMap)
   pure (\c -> Map.findWithDefault (defaultCategoryCodeOf c) c m)
 
 setCategoryCodeOf :: MonadTeXState a m => Char -> CatCode -> m ()
 setCategoryCodeOf c cc = do
-  modifying (localStates . _head . catcodeMap) (Map.insert c cc)
+  modifying (localState . catcodeMap) (Map.insert c cc)
 
 lcCodeOf :: MonadTeXState a m => Char -> m Char
 lcCodeOf c = do
-  m <- use (localStates . _head . lccodeMap)
+  m <- use (localState . lccodeMap)
   pure (Map.findWithDefault (if isAlpha c then toLower c else '\0') c m)
 
 lcCodeFn :: MonadTeXState a m => m (Char -> Char)
 lcCodeFn = do
-  m <- use (localStates . _head . lccodeMap)
+  m <- use (localState . lccodeMap)
   pure (\c -> Map.findWithDefault (if isAlpha c then toLower c else '\0') c m)
 
 ucCodeOf :: MonadTeXState a m => Char -> m Char
 ucCodeOf c = do
-  m <- use (localStates . _head . uccodeMap)
+  m <- use (localState . uccodeMap)
   pure (Map.findWithDefault (if isAlpha c then toUpper c else '\0') c m)
 
 ucCodeFn :: MonadTeXState a m => m (Char -> Char)
 ucCodeFn = do
-  m <- use (localStates . _head . uccodeMap)
+  m <- use (localState . uccodeMap)
   pure (\c -> Map.findWithDefault (if isAlpha c then toUpper c else '\0') c m)
 
 mkMathCode :: MathClass -> Word8 -> Char -> MathCode
@@ -147,7 +146,7 @@ defaultMathCodeOf c = case c of
 
 mathCodeOf :: MonadTeXState a m => Char -> m MathCode
 mathCodeOf c = do
-  m <- use (localStates . _head . mathcodeMap)
+  m <- use (localState . mathcodeMap)
   pure (Map.findWithDefault (defaultMathCodeOf c) c m)
 
 isMathActive :: MonadTeXState a m => Char -> m Bool
@@ -183,7 +182,7 @@ defaultDelimiterCodeOf c = case c of
 
 delimiterCodeOf :: MonadTeXState a m => Char -> m DelimiterCode
 delimiterCodeOf c = do
-  m <- use (localStates . _head . delcodeMap)
+  m <- use (localState . delcodeMap)
   pure (Map.findWithDefault (defaultDelimiterCodeOf c) c m)
 
 enterGroup :: MonadTeXState a m => m ()

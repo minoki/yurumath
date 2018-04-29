@@ -16,20 +16,13 @@ import Control.Lens.Setter (assign,modifying)
 
 letCommand :: (MonadTeXState a m, MonadError String m) => m ()
 letCommand = do
-  cs <- required nextEToken
+  name <- readCommandName
   t <- required nextEToken
   t' <- if etToken t == TTCharacter '=' CCOther
         then required nextEToken
         else return t
   v <- meaning t'
-  case etToken cs of
-    TTControlSeq name -> do
-      modifying (localStates . _head . tsDefinitions) (Map.insert name v)
-    TTCharacter c CCActive -> do
-      modifying (localStates . _head . tsActiveDefinitions) (Map.insert c v)
-    _ -> do
-      throwError "unexpected character token after \\let"
-      -- Missing control sequence inserted
+  assign (localStates . _head . definitionAt name) v
 
 uppercaseCommand :: (MonadTeXState a m, MonadError String m) => m ()
 uppercaseCommand = do
@@ -51,7 +44,7 @@ lowercaseCommand = do
 
 chardefCommand :: (MonadTeXState a m, MonadError String m) => m ()
 chardefCommand = do
-  cs <- required nextEToken
+  name <- readCommandName
   t <- required nextEToken
   if etToken t /= TTCharacter '=' CCOther
     then unreadETokens 0 [t]
@@ -61,14 +54,7 @@ chardefCommand = do
   when (v < 0 || v >= 0x110000 || (0xD800 <= v && v < 0xE000))
     $ throwError $ "Bad character code (" ++ show v ++ ")"
   let w = DefinedCharacter (chr (fromInteger v))
-  case etToken cs of
-    TTControlSeq name -> do
-      modifying (localStates . _head . tsDefinitions) (Map.insert name (Right w))
-    TTCharacter c CCActive -> do
-      modifying (localStates . _head . tsActiveDefinitions) (Map.insert c (Right w))
-    _ -> do
-      throwError "unexpected character token after \\chardef"
-      -- Missing control sequence inserted
+  assign (localStates . _head . definitionAt name) (Right w)
 
 -- \mathchardef
 -- \Umathchardef \x = 7+FF+10FFFF

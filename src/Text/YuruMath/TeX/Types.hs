@@ -10,6 +10,7 @@ import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map as Map
 import Control.Lens.TH
+import Control.Lens.Lens (Lens',lens)
 
 data CatCode = CCEscape       -- 0
              | CCBeginGroup   -- 1
@@ -180,3 +181,11 @@ instance Show ExpandableValue where
 
 makeLenses ''LocalState
 makeLenses ''TeXState
+
+definitionAt :: CommandName -> Lens' (LocalState a) (Either (Expandable a) (Value a))
+definitionAt cn@(NControlSeq name) = tsDefinitions . lens getter setter
+  where getter = Map.findWithDefault (Right (Undefined cn)) name
+        setter s v = Map.insert name v s
+definitionAt cn@(NActiveChar c) = tsActiveDefinitions . lens getter setter
+  where getter = Map.findWithDefault (Right (Undefined cn)) c
+        setter s v = Map.insert c v s

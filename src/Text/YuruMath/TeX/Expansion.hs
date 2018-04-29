@@ -73,6 +73,16 @@ readArgument !isLong = do
     Just (ExpansionToken _ (TTControlSeq par)) | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
     Just (ExpansionToken _ t) -> return [t]
 
+-- reads a control sequence or an active character
+readCommandName :: (MonadTeXState a m, MonadError String m) => m CommandName
+readCommandName = do
+  t <- required nextEToken
+  case t of
+    ExpansionToken _ (TTControlSeq name) -> return (NControlSeq name)
+    ExpansionToken _ (TTCharacter c CCActive) -> return (NActiveChar c)
+    _ -> throwError $ "unexpected character token: " ++ show t
+         -- or, "Missing control sequence inserted"
+
 -- used by \unexpanded
 isExpandableNameF :: (MonadTeXState a m) => m (TeXToken -> Bool)
 isExpandableNameF = do

@@ -16,11 +16,12 @@ import Control.Lens.Setter (assign,modifying)
 letCommand :: (MonadTeXState a m, MonadError String m) => m ()
 letCommand = do
   name <- readCommandName
+  readEquals
   t <- required nextEToken
-  t' <- if t == ETCharacter '=' CCOther
-        then required nextEToken
-        else return t
-  v <- meaning t'
+  t <- case t of
+    ETCharacter _ CCSpace -> required nextEToken -- one optional space
+    _ -> return t
+  v <- meaning t
   assign (localState . definitionAt name) v
 
 uppercaseCommand :: (MonadTeXState a m, MonadError String m) => m ()

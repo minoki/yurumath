@@ -90,6 +90,23 @@ readCommandName = do
     _ -> throwError $ "unexpected character token: " ++ show t
          -- or, "Missing control sequence inserted"
 
+readOptionalSpaces :: (MonadTeXState a m, MonadError String m) => m ()
+readOptionalSpaces = do
+  t <- nextETokenWithDepth
+  case t of
+    Just (_,ETCharacter _ CCSpace) -> readOptionalSpaces -- consumed
+    Just (d,t) -> unreadETokens d [t] -- not consumed
+    Nothing -> return ()
+
+readEquals :: (MonadTeXState a m, MonadError String m) => m ()
+readEquals = do
+  t <- nextETokenWithDepth
+  case t of
+    Just (_,ETCharacter _ CCSpace) -> readOptionalSpaces -- consumed
+    Just (_,ETCharacter '=' CCOther) -> return () -- consumed
+    Just (d,t) -> unreadETokens d [t] -- not consumed
+    Nothing -> return ()
+
 -- used by \unexpanded
 isExpandableNameF :: (MonadTeXState a m) => m (TeXToken -> Bool)
 isExpandableNameF = do
@@ -246,7 +263,7 @@ readOptionalSigns :: (MonadTeXState a m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
   (t,v) <- evalToken
   case v of
-    Character ' ' CCSpace -> readOptionalSigns s -- space: ignored
+    Character _ CCSpace -> readOptionalSigns s -- space: ignored
     Character '+' CCOther -> readOptionalSigns s
     Character '-' CCOther -> readOptionalSigns (-s)
     _ -> unreadETokens 0 [t] >> return s
@@ -258,7 +275,7 @@ readUnsignedDecimal c = readRest (fromIntegral (digitToInt c))
           case v of
             Character c CCOther | isDigit c -> do
                                     readRest (10 * x + fromIntegral (digitToInt c))
-            Character ' ' CCSpace -> return x -- consumed
+            Character _ CCSpace -> return x -- consumed
             _ -> unreadETokens 0 [t] >> return x
 
 readUnsignedOctal :: (MonadTeXState a m, MonadError String m) => m Integer
@@ -273,7 +290,7 @@ readUnsignedOctal = do
           case v of
             Character c CCOther | isOctDigit c -> do
                                     readRest (8 * x + fromIntegral (digitToInt c))
-            Character ' ' CCSpace -> return x -- consumed
+            Character _ CCSpace -> return x -- consumed
             _ -> unreadETokens 0 [t] >> return x
 
 readUnsignedHex :: (MonadTeXState a m, MonadError String m) => m Integer
@@ -281,11 +298,9 @@ readUnsignedHex = do
   (t,v) <- evalToken
   case v of
     Character c CCOther | isUpperHexDigit c -> do
-                            let c0 = digitToInt c
-                            readRest (fromIntegral c0)
+                            readRest (fromIntegral (digitToInt c))
     Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
-                             let c0 = digitToInt c
-                             readRest (fromIntegral c0)
+                             readRest (fromIntegral (digitToInt c))
     _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
   where readRest !x = do
           (t,v) <- evalToken
@@ -294,14 +309,17 @@ readUnsignedHex = do
                                     readRest (16 * x + fromIntegral (digitToInt c))
             Character c CCLetter | isHexDigit c && isAsciiUpper c -> do
                                      readRest (16 * x + fromIntegral (digitToInt c))
-            Character ' ' CCSpace -> return x -- consumed
+            Character _ CCSpace -> return x -- consumed
             _ -> unreadETokens 0 [t] >> return x
         isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
 readCharacterCode :: (MonadTeXState a m, MonadError String m) => m Integer
 readCharacterCode = do
   t <- required nextEToken
-  -- TODO: read an optional space
+  (u,v) <- evalToken -- one optional space
+  case v of
+    Character _ CCSpace -> return () -- consumed
+    _ -> unreadETokens 0 [u]
   case t of
     ETCommandName _ (NControlSeq name) -> case T.unpack name of
       [c] -> return (fromIntegral $ ord c)
@@ -595,7 +613,7 @@ readGeneralText :: (MonadTeXState a m, MonadError String m) => m [TeXToken]
 readGeneralText = do
   (t,v) <- evalToken
   case v of
-    Character ' ' CCSpace -> readGeneralText -- optional spaces: ignored
+    Character _ CCSpace -> readGeneralText -- optional spaces: ignored
     Character _ CCBeginGroup -> readUntilEndGroup True 0 []
     Relax -> readGeneralText -- relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted

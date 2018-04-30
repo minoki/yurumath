@@ -24,6 +24,15 @@ letCommand = do
   v <- meaning t
   assign (localState . definitionAt name) v
 
+futureletCommand :: (MonadTeXState a m, MonadError String m) => m ()
+futureletCommand = do
+  name <- readCommandName
+  t1 <- required nextEToken
+  t2 <- required nextEToken
+  unreadETokens 0 [t1,t2]
+  v <- meaning t2
+  assign (localState . definitionAt name) v
+
 uppercaseCommand :: (MonadTeXState a m, MonadError String m) => m ()
 uppercaseCommand = do
   text <- readGeneralText

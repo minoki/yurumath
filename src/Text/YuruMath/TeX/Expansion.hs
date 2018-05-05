@@ -107,6 +107,18 @@ readEquals = do
     Just (d,t) -> unreadETokens d [t] -- not consumed
     Nothing -> return ()
 
+isUnicodeScalarValue :: (Integral a) => a -> Bool
+isUnicodeScalarValue x = 0 <= x && x <= 0x10FFFF && not (0xD800 <= x && x <= 0xDFFF)
+
+-- read a number between 0.."10FFFF excluding "D800.."DFFF, and convert it to a Char
+-- Note: Although neither LuaTeX nor XeTeX seems to forbid surrogate codes ("D800-"DFFF), we do.
+readUnicodeScalarValue :: (MonadTeXState a m, MonadError String m) => m Char
+readUnicodeScalarValue = do
+  x <- readNumber
+  if isUnicodeScalarValue x
+    then return $ chr $ fromIntegral x
+    else throwError $ "Bad character code (" ++ show x ++ ")"
+
 -- used by \unexpanded
 isExpandableNameF :: (MonadTeXState a m) => m (TeXToken -> Bool)
 isExpandableNameF = do
@@ -625,6 +637,12 @@ unexpandedCommand = do
   -- map (\t -> ExpansionToken (ie t) t) <$> readGeneralText
   throwError "\\unexpanded: not implemented yet"
 
+-- LuaTeX extension: \Uchar
+ucharCommand :: (MonadTeXState a m, MonadError String m) => m [ExpansionToken]
+ucharCommand = do
+  x <- readUnicodeScalarValue
+  return [ETCharacter x CCOther] -- TODO: category code?
+
 expandableDefinitions :: Map.Map Text (Expandable a)
 expandableDefinitions = Map.fromList
   [("expandafter", ExpandableCommand expandafterCommand)
@@ -661,6 +679,7 @@ expandableDefinitions = Map.fromList
   -- LuaTeX extension:
   ,("begincsname", ExpandableCommand begincsnameCommand)
   ,("csstring",    ExpandableCommand csstringCommand)
+  ,("Uchar",       ExpandableCommand ucharCommand)
   ]
 
 -- other expandable primitives:

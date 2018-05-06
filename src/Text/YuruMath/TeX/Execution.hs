@@ -9,6 +9,8 @@ import Data.Char
 import Data.Word
 import Data.Bits
 import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Semigroup
 import Control.Monad
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
@@ -16,7 +18,7 @@ import Control.Lens.At (at)
 import Control.Lens.Getter (view,use,uses)
 import Control.Lens.Setter (assign,modifying)
 
-letCommand :: (MonadTeXState a m, MonadError String m) => m ()
+letCommand :: (MonadTeXState s m, MonadError String m) => m ()
 letCommand = do
   name <- readCommandName
   readEquals
@@ -27,7 +29,7 @@ letCommand = do
   v <- meaning t
   assign (localState . definitionAt name) v
 
-futureletCommand :: (MonadTeXState a m, MonadError String m) => m ()
+futureletCommand :: (MonadTeXState s m, MonadError String m) => m ()
 futureletCommand = do
   name <- readCommandName
   t1 <- required nextEToken
@@ -36,7 +38,7 @@ futureletCommand = do
   v <- meaning t2
   assign (localState . definitionAt name) v
 
-uppercaseCommand :: (MonadTeXState a m, MonadError String m) => m ()
+uppercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 uppercaseCommand = do
   text <- readGeneralText
   toUpper <- ucCodeFn
@@ -45,7 +47,7 @@ uppercaseCommand = do
   let text' = map makeUpper text
   unreadETokens 0 (map toEToken text')
 
-lowercaseCommand :: (MonadTeXState a m, MonadError String m) => m ()
+lowercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 lowercaseCommand = do
   text <- readGeneralText
   toLower <- lcCodeFn
@@ -55,27 +57,27 @@ lowercaseCommand = do
   unreadETokens 0 (map toEToken text')
 
 -- \chardef<control sequence><equals><number>
-chardefCommand :: (MonadTeXState a m, MonadError String m) => m ()
+chardefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 chardefCommand = do
   name <- readCommandName
   readEquals
   c <- readUnicodeScalarValue
-  let w = DefinedCharacter c
+  let w = injectCommonValue $ DefinedCharacter c
   assign (localState . definitionAt name) (Right w)
 
 -- \mathchardef<control sequence><equals><15-bit number>
-mathchardefCommand :: (MonadTeXState a m, MonadError String m) => m ()
+mathchardefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 mathchardefCommand = do
   name <- readCommandName
   readEquals
   v <- readNumber
   unless (0 <= v && v <= 0x8000)
     $ throwError $ "\\mathchardef: Bad math code (" ++ show v ++ ")"
-  let w = DefinedMathCharacter (MathCode (fromInteger v))
+  let w = injectCommonValue $ DefinedMathCharacter (MathCode (fromInteger v))
   assign (localState . definitionAt name) (Right w)
 
 -- \Umathchardef<control sequence><equals><3-bit number><8-bit number><21-bit number>
-umathchardefCommand :: (MonadTeXState a m, MonadError String m) => m ()
+umathchardefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 umathchardefCommand = do
   name <- readCommandName
   readEquals
@@ -86,11 +88,11 @@ umathchardefCommand = do
   unless (0 <= fam && fam <= 0xFF)
     $ throwError "\\Umathchardef: Invalid math code"
   c <- readUnicodeScalarValue
-  let w = DefinedMathCharacter $ mkUMathCode (toEnum $ fromIntegral mathclass) (fromIntegral fam) c
+  let w = injectCommonValue $ DefinedMathCharacter $ mkUMathCode (toEnum $ fromIntegral mathclass) (fromIntegral fam) c
   assign (localState . definitionAt name) (Right w)
 
 -- \Umathcharnumdef<control sequence><equals><32-bit number>
-umathcharnumdefCommand :: (MonadTeXState a m, MonadError String m) => m ()
+umathcharnumdefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 umathcharnumdefCommand = do
   name <- readCommandName
   readEquals
@@ -103,13 +105,40 @@ umathcharnumdefCommand = do
       code = 0x1FFFFF .&. valueu
   unless (isUnicodeScalarValue code)
     $ throwError "\\Umathcharnumdef: Invalid math code"
-  let w = DefinedMathCharacter $ UMathCode (fromIntegral valueu)
+  let w = injectCommonValue $ DefinedMathCharacter $ UMathCode (fromIntegral valueu)
   assign (localState . definitionAt name) (Right w)
 
 -- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
 
+-- \catcode<21-bit number><equals><4-bit number>
+catcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
+catcodeSet = do
+  slot <- readUnicodeScalarValue
+  readEquals
+  v <- readNumber
+  unless (0 <= v && v <= 15)
+    $ throwError $ "\\catcode: Invalid code (" ++ show v ++ "), should be in the range 0..15."
+  let w = toEnum (fromInteger v)
+  assign (localState . catcodeMap . at slot) (Just w)
+
+-- \lccode<21-bit number><equals><21-bit number>
+lccodeSet :: (MonadTeXState s m, MonadError String m) => m ()
+lccodeSet = do
+  slot <- readUnicodeScalarValue
+  readEquals
+  v <- readUnicodeScalarValue
+  assign (localState . lccodeMap . at slot) (Just v)
+
+-- \uccode<21-bit number><equals><21-bit number>
+uccodeSet :: (MonadTeXState a m, MonadError String m) => m ()
+uccodeSet = do
+  slot <- readUnicodeScalarValue
+  readEquals
+  v <- readUnicodeScalarValue
+  assign (localState . uccodeMap . at slot) (Just v)
+
 -- \mathcode<21-bit number><equals><15-bit number>
-mathcodeSet :: (MonadTeXState a m, MonadError String m) => m ()
+mathcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 mathcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
@@ -122,7 +151,7 @@ mathcodeSet = do
 -- \UmathcodenumSet
 
 -- \delcode<21-bit number><equals><24-bit number>
-delcodeSet :: (MonadTeXState a m, MonadError String m) => m ()
+delcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 delcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
@@ -133,7 +162,7 @@ delcodeSet = do
   assign (localState . delcodeMap . at slot) (Just w)
 
 -- \Udelcode<21-bit number><equals><8-bit number><21-bit number>
-udelcodeSet :: (MonadTeXState a m, MonadError String m) => m ()
+udelcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 udelcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
@@ -145,7 +174,7 @@ udelcodeSet = do
   assign (localState . delcodeMap . at slot) (Just w)
 
 -- \Udelcodenum<21-bit number><equals><32-bit number>
-udelcodenumSet :: (MonadTeXState a m, MonadError String m) => m ()
+udelcodenumSet :: (MonadTeXState s m, MonadError String m) => m ()
 udelcodenumSet = do
   slot <- readUnicodeScalarValue
   readEquals
@@ -162,7 +191,7 @@ udelcodenumSet = do
   let w = UDelimiterCode (fromIntegral valueu)
   assign (localState . delcodeMap . at slot) (Just w)
 
-defCommand :: (MonadTeXState a m, MonadError String m) => m ()
+defCommand :: (MonadTeXState s m, MonadError String m) => m ()
 defCommand = do
   cs <- required nextEToken
   throwError "\\def: not implemented yet"

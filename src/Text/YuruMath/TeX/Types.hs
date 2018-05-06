@@ -1,7 +1,14 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Text.YuruMath.TeX.Types where
 import Data.Int
 import Data.Word
@@ -9,8 +16,11 @@ import Data.Text (Text)
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map as Map
-import Control.Lens.TH
 import Control.Lens.Lens (Lens',lens)
+import Data.OpenUnion
+import Data.OpenUnion.Internal ((@!>))
+import TypeFun.Data.List (Delete,Elem)
+import Data.Typeable (Typeable)
 
 data CatCode = CCEscape       -- 0
              | CCBeginGroup   -- 1
@@ -108,30 +118,47 @@ data ConditionalMarker = Eelse -- \else
                        | Eor -- \or
                        deriving (Eq)
 
-data Expandable a = ExpandableCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m [ExpansionToken])
-                  | BooleanConditionalCommand (forall m. (MonadState (TeXState a) m, MonadError String m) => m Bool)
-                  | IfCase -- \ifcase
-                  | ConditionalMarker !ConditionalMarker -- \else, \fi, \or
-                  --Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
+-- data Macro = Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
 
--- \ifcase or \ifXXX
-isConditional :: Expandable a -> Bool
-isConditional (BooleanConditionalCommand _) = True
-isConditional IfCase = True
-isConditional _ = False
+class (Eq e) => IsExpandable e where
+  isConditional :: e -> Bool
+  isIfCase :: e -> Bool
+  isConditionalMarker :: e -> Maybe ConditionalMarker
 
-data Value a = Character !Char !CatCode -- character with category code
-             | DefinedCharacter !Char -- defined with \chardef
-             | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
-             | IntegerConstant !Int
-             | Relax
-             | Unexpanded !CommandName -- prefixed with \noexpand
-             | Undefined !CommandName
-             | Endcsname
-             | ExtraValue a
-             deriving (Show)
+instance IsExpandable ConditionalMarker where
+  isConditional _ = False
+  isIfCase _ = False
+  isConditionalMarker = Just
 
-instance Eq a => Eq (Value a) where
+instance IsExpandable (Union '[]) where
+  isConditional = typesExhausted
+  isIfCase = typesExhausted
+  isConditionalMarker = typesExhausted
+
+instance (IsExpandable e, IsExpandable (Union (Delete e es)), Typeable e) => IsExpandable (Union (e : es)) where
+  isConditional = (isConditional :: e -> Bool)
+                  @> (isConditional :: Union (Delete e es) -> Bool)
+  isIfCase = (isIfCase :: e -> Bool)
+             @> (isIfCase :: Union (Delete e es) -> Bool)
+  isConditionalMarker = (isConditionalMarker :: e -> Maybe ConditionalMarker)
+                        @> (isConditionalMarker :: Union (Delete e es) -> Maybe ConditionalMarker)
+
+data CommonValue = Character !Char !CatCode -- character with category code
+                 | DefinedCharacter !Char -- defined with \chardef
+                 | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
+                 | IntegerConstant !Int
+                 | Relax -- \relax
+                 | Unexpanded !CommandName -- prefixed with \noexpand
+                 | Undefined !CommandName
+                 | Endcsname -- \endcsname
+                 | VCatCode   -- \catcode
+                 | VLCCode    -- \lccode
+                 | VUCCode    -- \uccode
+                 | VMathCode  -- \mathcode
+                 | VDelCode   -- \delcode
+                 deriving (Show)
+
+instance Eq CommonValue where
   Character c cc == Character c' cc' = c == c' && cc == cc'
   DefinedCharacter c == DefinedCharacter c' = c == c'
   DefinedMathCharacter c == DefinedMathCharacter c' = c == c'
@@ -139,7 +166,18 @@ instance Eq a => Eq (Value a) where
   Relax == Relax = True
   Unexpanded _ == Unexpanded _ = True
   Undefined _ == Undefined _ = True
-  ExtraValue x == ExtraValue x' = x == x'
+
+class Eq value => IsValue value where
+  injectCommonValue :: CommonValue -> value
+  toCommonValue :: value -> Maybe CommonValue
+
+instance IsValue CommonValue where
+  injectCommonValue = id
+  toCommonValue = Just
+
+instance (Eq (Union s), Elem CommonValue s) => IsValue (Union s) where
+  injectCommonValue = liftUnion
+  toCommonValue = Just @!> \_ -> Nothing
 
 data Mode = HorizontalMode
           | RestrictedHorizontalMode
@@ -155,54 +193,124 @@ isVMode m = m == VerticalMode || m == InternalVerticalMode
 isMMode m = m == MathMode || m == DisplayMathMode
 isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m == MathMode
 
-data LocalState a = LocalState
-                    { _tsDefinitions :: Map.Map Text (Either (Expandable a) (Value a)) -- definitions of control sequences
-                    , _tsActiveDefinitions :: Map.Map Char (Either (Expandable a) (Value a)) -- definitions of active characters
-                    , _catcodeMap  :: Map.Map Char CatCode
-                    , _lccodeMap   :: Map.Map Char Char
-                    , _uccodeMap   :: Map.Map Char Char
-                    , _mathcodeMap :: Map.Map Char MathCode
-                    , _delcodeMap  :: Map.Map Char DelimiterCode
-                    -- sfcodeMap   :: Map.Map Char Int
-                    , _mathStyle :: !MathStyle
-                    -- make extensible?
-                    }
+data CommonLocalState ecommand value
+  = CommonLocalState
+    { _tsDefinitions :: Map.Map Text (Either ecommand value) -- definitions of control sequences
+    , _tsActiveDefinitions :: Map.Map Char (Either ecommand value) -- definitions of active characters
+    , _catcodeMap  :: Map.Map Char CatCode
+    , _lccodeMap   :: Map.Map Char Char
+    , _uccodeMap   :: Map.Map Char Char
+    , _mathcodeMap :: Map.Map Char MathCode
+    , _delcodeMap  :: Map.Map Char DelimiterCode
+    -- sfcodeMap   :: Map.Map Char Int
+    , _mathStyle :: !MathStyle
+    }
 
 data ConditionalKind = CondTruthy
                      | CondFalsy
                      | CondCase
                      | CondTest
 
-data TeXState a = TeXState
-                  { _ttInput :: String
-                  -- currentfile, currentline, currentcolumn
-                  , _ttSpacingState :: !SpacingState
-                  , _esMaxDepth :: !Int
-                  , _esMaxPendingToken :: !Int
-                  , _esPendingTokenList :: [(Int,ExpansionToken)]
-                  , _localStates :: [LocalState a] -- must be non-empty
-                  , _mode :: !Mode
-                  , _conditionals :: [ConditionalKind]
-                  }
+data CommonState localstate
+  = CommonState
+    { _ttInput :: String
+    -- currentfile, currentline, currentcolumn
+    , _ttSpacingState :: !SpacingState
+    , _esMaxDepth :: !Int
+    , _esMaxPendingToken :: !Int
+    , _esPendingTokenList :: [(Int,ExpansionToken)]
+    , _localStates :: [localstate] -- must be non-empty
+    , _mode :: !Mode
+    , _conditionals :: [ConditionalKind]
+    }
 
-type MonadTeXState a m = MonadState (TeXState a) m
+class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => IsLocalState localstate where
+  type ExpandableT localstate
+  type ValueT localstate
+  tsDefinitions       :: Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
+  tsActiveDefinitions :: Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
+  catcodeMap  :: Lens' localstate (Map.Map Char CatCode)
+  lccodeMap   :: Lens' localstate (Map.Map Char Char)
+  uccodeMap   :: Lens' localstate (Map.Map Char Char)
+  mathcodeMap :: Lens' localstate (Map.Map Char MathCode)
+  delcodeMap  :: Lens' localstate (Map.Map Char DelimiterCode)
+  mathStyle   :: Lens' localstate MathStyle
+
+-- state -> localstate
+class (IsLocalState (LocalState state)) => IsState state where
+  type LocalState state
+
+  -- tokenizer
+  ttInput :: Lens' state String
+  ttSpacingState :: Lens' state SpacingState
+
+  -- expansion processor
+  esMaxDepth :: Lens' state Int -- read-only?
+  esMaxPendingToken :: Lens' state Int -- read-only?
+  esPendingTokenList :: Lens' state [(Int,ExpansionToken)]
+
+  -- others
+  localStates :: Lens' state [LocalState state]
+  mode :: Lens' state Mode
+  conditionals :: Lens' state [ConditionalKind]
+
+class (IsExpandable e, Monad m) => DoExpand e m where
+  doExpand :: e -> m [ExpansionToken]
+  evalBooleanConditional :: e -> Maybe (m Bool)
+
+instance (Monad m) => DoExpand (Union '[]) m where
+  doExpand = typesExhausted
+  evalBooleanConditional = typesExhausted
+
+instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpand (Union (e : es)) m where
+  doExpand = (doExpand :: e -> m [ExpansionToken])
+             @> (doExpand :: Union (Delete e es) -> m [ExpansionToken])
+  evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
+                           @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
+
+--instance ... => DoExpand ConditionalMarker m
+
+type Expandable s = ExpandableT (LocalState s)
+type Value s = ValueT (LocalState s)
+
+type MonadTeXState s m = (IsState s, MonadState s m, DoExpand (Expandable s) m)
 
 instance Show ConditionalMarker where
   show Eelse = "\\else"
   show Efi = "\\fi"
   show Eor = "\\or"
 
-makeLenses ''LocalState
-makeLenses ''TeXState
+instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalState ecommand value) where
+  type ExpandableT (CommonLocalState ecommand value) = ecommand
+  type ValueT (CommonLocalState ecommand value) = value
+  tsDefinitions = lens _tsDefinitions (\s v -> s { _tsDefinitions = v })
+  tsActiveDefinitions = lens _tsActiveDefinitions (\s v -> s { _tsActiveDefinitions = v })
+  catcodeMap  = lens _catcodeMap  (\s v -> s { _catcodeMap = v })
+  lccodeMap   = lens _lccodeMap   (\s v -> s { _lccodeMap = v })
+  uccodeMap   = lens _uccodeMap   (\s v -> s { _uccodeMap = v })
+  mathcodeMap = lens _mathcodeMap (\s v -> s { _mathcodeMap = v })
+  delcodeMap  = lens _delcodeMap  (\s v -> s { _delcodeMap = v })
+  mathStyle   = lens _mathStyle   (\s v -> s { _mathStyle = v })
 
-definitionAt :: CommandName -> Lens' (LocalState a) (Either (Expandable a) (Value a))
+instance IsLocalState localstate => IsState (CommonState localstate) where
+  type LocalState (CommonState localstate) = localstate
+  ttInput            = lens _ttInput (\s v -> s { _ttInput = v })
+  ttSpacingState     = lens _ttSpacingState (\s v -> s { _ttSpacingState = v })
+  esMaxDepth         = lens _esMaxDepth (\s v -> s { _esMaxDepth = v })
+  esMaxPendingToken  = lens _esMaxPendingToken (\s v -> s { _esMaxPendingToken = v })
+  esPendingTokenList = lens _esPendingTokenList (\s v -> s { _esPendingTokenList = v })
+  localStates        = lens _localStates (\s v -> s { _localStates = v })
+  mode               = lens _mode (\s v -> s { _mode = v })
+  conditionals       = lens _conditionals (\s v -> s { _conditionals = v })
+
+definitionAt :: IsLocalState localstate => CommandName -> Lens' localstate (Either (ExpandableT localstate) (ValueT localstate))
 definitionAt cn@(NControlSeq name) = tsDefinitions . lens getter setter
-  where getter = Map.findWithDefault (Right (Undefined cn)) name
+  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) name
         setter s v = Map.insert name v s
 definitionAt cn@(NActiveChar c) = tsActiveDefinitions . lens getter setter
-  where getter = Map.findWithDefault (Right (Undefined cn)) c
+  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) c
         setter s v = Map.insert c v s
 
-localState :: Lens' (TeXState a) (LocalState a)
+localState :: IsState s => Lens' s (LocalState s)
 localState = localStates . lens head setter
   where setter (_:xs) x = x:xs

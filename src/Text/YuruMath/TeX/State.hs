@@ -13,8 +13,8 @@ import qualified Data.Map as Map
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign,modifying)
 
-initialState :: String -> TeXState a
-initialState input = TeXState
+initialState :: String -> CommonState (CommonLocalState e v)
+initialState input = CommonState
                      { _ttInput = input
                      , _ttSpacingState = SSNewLine
                      , _esMaxDepth = 100
@@ -24,7 +24,7 @@ initialState input = TeXState
                      , _mode = VerticalMode
                      , _conditionals = []
                      }
-  where initialLocalState = LocalState
+  where initialLocalState = CommonLocalState
                             { _tsDefinitions = Map.empty
                             , _tsActiveDefinitions = Map.empty
                             , _catcodeMap = Map.empty

@@ -26,6 +26,8 @@ dependencies:
 - transformers
 - containers
 - lens
+- open-union
+- type-fun
 
 default-extensions:
 - BangPatterns

@@ -36,6 +36,7 @@ unreadChar c = modifying ttInput (c :)
 
 readControlWord :: MonadTeXState a m => m String
 readControlWord = do
+  -- TODO: Handle ^^ notation
   c <- maybeNextChar
   case c of
     Nothing -> return ""
@@ -84,6 +85,7 @@ nextToken = do
                   return $ Just $ TTControlSeq " " -- control space
                 CCEndLine -> do
                   setNewLineMode
+                  -- TODO: read \endlinechar and emit it
                   return $ Just $ TTControlSeq " " -- control space
                 _ -> do
                   setMiddleOfLineMode

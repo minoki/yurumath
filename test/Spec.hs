@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
 import Test.HUnit
 import Data.Semigroup
 import Text.YuruMath.TeX.Types
@@ -11,13 +13,14 @@ import Control.Monad.Except
 import Control.Lens.Cons (_head)
 import Control.Lens.Setter (modifying)
 import qualified Data.Map.Strict as Map
+import Data.OpenUnion
 
-defineBuiltins :: (MonadState (TeXState a) m, MonadError String m) => m ()
+defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) => m ()
 defineBuiltins = do
-  modifying (localStates . _head . tsDefinitions)
-    $ mappend (fmap Left expandableDefinitions <> Map.singleton "endcsname" (Right Endcsname))
+  modifying (localState . tsDefinitions)
+    $ mappend (fmap Left expandableDefinitions <> Map.singleton "endcsname" (Right (injectCommonValue Endcsname)))
 
-tokenizeAll :: (MonadState (TeXState a) m, MonadError String m) => m [TeXToken]
+tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) => m [TeXToken]
 tokenizeAll = do
   t <- nextToken
   case t of
@@ -27,14 +30,14 @@ tokenizeAll = do
 tokenizeAllString :: String -> Either String [TeXToken]
 tokenizeAllString input = runExcept (evalStateT tokenizeAll (initialState input))
 
-expandAll :: (MonadState (TeXState a) m, MonadError String m) => m [Value a]
+expandAll :: (MonadTeXState s m, MonadError String m) => m [Value s]
 expandAll = do
   t <- evalToValue
   case t of
     Nothing -> return []
     Just v -> (v:) <$> expandAll
 
-expandAllString :: String -> Either String [Value ()]
+expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) CommonValue))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
 ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")

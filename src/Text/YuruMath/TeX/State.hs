@@ -69,25 +69,33 @@ setCategoryCodeOf :: MonadTeXState a m => Char -> CatCode -> m ()
 setCategoryCodeOf c cc = do
   modifying (localState . catcodeMap) (Map.insert c cc)
 
+defaultLCCodeOf :: Char -> Char
+defaultLCCodeOf c | isAlpha c = toLower c
+                  | otherwise = '\0'
+
 lcCodeOf :: MonadTeXState a m => Char -> m Char
 lcCodeOf c = do
   m <- use (localState . lccodeMap)
-  pure (Map.findWithDefault (if isAlpha c then toLower c else '\0') c m)
+  pure (Map.findWithDefault (defaultLCCodeOf c) c m)
 
 lcCodeFn :: MonadTeXState a m => m (Char -> Char)
 lcCodeFn = do
   m <- use (localState . lccodeMap)
-  pure (\c -> Map.findWithDefault (if isAlpha c then toLower c else '\0') c m)
+  pure (\c -> Map.findWithDefault (defaultLCCodeOf c) c m)
+
+defaultUCCodeOf :: Char -> Char
+defaultUCCodeOf c | isAlpha c = toUpper c
+                  | otherwise = '\0'
 
 ucCodeOf :: MonadTeXState a m => Char -> m Char
 ucCodeOf c = do
   m <- use (localState . uccodeMap)
-  pure (Map.findWithDefault (if isAlpha c then toUpper c else '\0') c m)
+  pure (Map.findWithDefault (defaultUCCodeOf c) c m)
 
 ucCodeFn :: MonadTeXState a m => m (Char -> Char)
 ucCodeFn = do
   m <- use (localState . uccodeMap)
-  pure (\c -> Map.findWithDefault (if isAlpha c then toUpper c else '\0') c m)
+  pure (\c -> Map.findWithDefault (defaultUCCodeOf c) c m)
 
 mkMathCode :: MathClass -> Word8 -> Char -> MathCode
 mkMathCode cls fam code = MathCode

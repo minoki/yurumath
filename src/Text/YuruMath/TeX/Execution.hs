@@ -1,5 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Text.YuruMath.TeX.Execution where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
@@ -110,6 +113,11 @@ umathcharnumdefCommand = do
 
 -- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
 
+catcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
+catcodeGet = do
+  slot <- readUnicodeScalarValue
+  (fromIntegral . fromEnum . Map.findWithDefault (defaultCategoryCodeOf slot) slot) <$> use (localState . catcodeMap)
+
 -- \catcode<21-bit number><equals><4-bit number>
 catcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 catcodeSet = do
@@ -121,6 +129,11 @@ catcodeSet = do
   let w = toEnum (fromInteger v)
   assign (localState . catcodeMap . at slot) (Just w)
 
+lccodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
+lccodeGet = do
+  slot <- readUnicodeScalarValue
+  (fromIntegral . fromEnum . Map.findWithDefault (defaultLCCodeOf slot) slot) <$> use (localState . lccodeMap)
+
 -- \lccode<21-bit number><equals><21-bit number>
 lccodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 lccodeSet = do
@@ -129,6 +142,11 @@ lccodeSet = do
   v <- readUnicodeScalarValue
   assign (localState . lccodeMap . at slot) (Just v)
 
+uccodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
+uccodeGet = do
+  slot <- readUnicodeScalarValue
+  (fromIntegral . fromEnum . Map.findWithDefault (defaultUCCodeOf slot) slot) <$> use (localState . uccodeMap)
+
 -- \uccode<21-bit number><equals><21-bit number>
 uccodeSet :: (MonadTeXState a m, MonadError String m) => m ()
 uccodeSet = do
@@ -136,6 +154,14 @@ uccodeSet = do
   readEquals
   v <- readUnicodeScalarValue
   assign (localState . uccodeMap . at slot) (Just v)
+
+mathcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
+mathcodeGet = do
+  slot <- readUnicodeScalarValue
+  (mathcodeToInt . Map.findWithDefault (defaultMathCodeOf slot) slot) <$> use (localState . mathcodeMap)
+  where
+    mathcodeToInt (MathCode x) = fromIntegral x
+    mathcodeToInt (UMathCode x) = fromIntegral x
 
 -- \mathcode<21-bit number><equals><15-bit number>
 mathcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
@@ -149,6 +175,15 @@ mathcodeSet = do
   assign (localState . mathcodeMap . at slot) (Just w)
 
 -- \UmathcodenumSet
+
+delcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
+delcodeGet = do
+  slot <- readUnicodeScalarValue
+  (delcodeToInt . Map.findWithDefault (defaultDelimiterCodeOf slot) slot) <$> use (localState . delcodeMap)
+  where
+    delcodeToInt (DelimiterCode x) = fromIntegral x
+    delcodeToInt (UDelimiterCode x) = fromIntegral x
+
 
 -- \delcode<21-bit number><equals><24-bit number>
 delcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
@@ -195,3 +230,41 @@ defCommand :: (MonadTeXState s m, MonadError String m) => m ()
 defCommand = do
   cs <- required nextEToken
   throwError "\\def: not implemented yet"
+data CommonExecutable = Elet
+                      | Efuturelet
+                      | Euppercase
+                      | Elowercase
+                      | Echardef
+                      | Emathchardef
+                      | EUmathchardef
+                      | EUmathcharnumdef
+                      | Edef
+                      | Ecatcode
+                      | Elccode
+                      | Euccode
+                      | Emathcode
+                      | Edelcode
+                      deriving (Eq,Show)
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonExecutable m where
+  doExecute Elet = letCommand
+  doExecute Efuturelet = futureletCommand
+  doExecute Euppercase = uppercaseCommand
+  doExecute Elowercase = lowercaseCommand
+  doExecute Echardef = chardefCommand
+  doExecute Emathchardef = mathchardefCommand
+  doExecute EUmathchardef = umathchardefCommand
+  doExecute EUmathcharnumdef = umathcharnumdefCommand
+  doExecute Edef = defCommand
+  doExecute Ecatcode = catcodeSet
+  doExecute Elccode = lccodeSet
+  doExecute Euccode = uccodeSet
+  doExecute Emathcode = mathcodeSet
+  doExecute Edelcode = delcodeSet
+  getIntegerValue Ecatcode = Just catcodeGet
+  getIntegerValue Elccode = Just lccodeGet
+  getIntegerValue Euccode = Just uccodeGet
+  getIntegerValue Emathcode = Just mathcodeGet
+  getIntegerValue Edelcode = Just delcodeGet
+  getIntegerValue _ = Nothing
+

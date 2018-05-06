@@ -151,11 +151,6 @@ data CommonValue = Character !Char !CatCode -- character with category code
                  | Unexpanded !CommandName -- prefixed with \noexpand
                  | Undefined !CommandName
                  | Endcsname -- \endcsname
-                 | VCatCode   -- \catcode
-                 | VLCCode    -- \lccode
-                 | VUCCode    -- \uccode
-                 | VMathCode  -- \mathcode
-                 | VDelCode   -- \delcode
                  deriving (Show)
 
 instance Eq CommonValue where
@@ -269,6 +264,20 @@ instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpan
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
 --instance ... => DoExpand ConditionalMarker m
+
+class (Eq c, Monad m) => DoExecute c m where
+  doExecute :: c -> m ()
+  getIntegerValue :: c -> Maybe (m Integer)
+
+instance (Monad m) => DoExecute (Union '[]) m where
+  doExecute = typesExhausted
+  getIntegerValue = typesExhausted
+
+instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExecute (Union (c : cs)) m where
+  doExecute = (doExecute :: c -> m ())
+              @> (doExecute :: Union (Delete c cs) -> m ())
+  getIntegerValue = (getIntegerValue :: c -> Maybe (m Integer))
+                    @> (getIntegerValue :: Union (Delete c cs) -> Maybe (m Integer))
 
 type Expandable s = ExpandableT (LocalState s)
 type Value s = ValueT (LocalState s)

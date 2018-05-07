@@ -10,8 +10,8 @@ import Data.Map (Map)
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map as Map
-import Control.Lens.Getter (use)
-import Control.Lens.Setter (assign,modifying)
+import Control.Lens.Getter (view,use)
+import Control.Lens.Setter (set,assign,modifying)
 
 initialState :: String -> CommonState (CommonLocalState e v)
 initialState input = CommonState
@@ -25,7 +25,8 @@ initialState input = CommonState
                      , _conditionals = []
                      }
   where initialLocalState = CommonLocalState
-                            { _tsDefinitions = Map.empty
+                            { _scopeType = GlobalScope
+                            , _tsDefinitions = Map.empty
                             , _tsActiveDefinitions = Map.empty
                             , _catcodeMap = Map.empty
                             , _lccodeMap = Map.empty
@@ -193,13 +194,20 @@ delimiterCodeOf c = do
   m <- use (localState . delcodeMap)
   pure (Map.findWithDefault (defaultDelimiterCodeOf c) c m)
 
-enterGroup :: MonadTeXState a m => m ()
-enterGroup = do
-  modifying localStates (\ss -> head ss : ss)
+enterGroup :: MonadTeXState a m => ScopeType -> m ()
+enterGroup !st = do
+  modifying localStates (\ss -> set scopeType st (head ss) : ss)
 
-leaveGroup :: (MonadTeXState a m, MonadError String m) => m ()
-leaveGroup = do
+leaveGroup :: (MonadTeXState a m, MonadError String m) => ScopeType -> m ()
+leaveGroup !st = do
   ss <- use localStates
   case ss of
-    [] -> throwError "Cannot leave global scope"
-    _:ss -> assign localStates ss
+    [] -> error "local state stack is empty"
+    s:ss | view scopeType s == st -> assign localStates ss
+         | otherwise -> throwError $ "Mismatched braces: begun by " ++ beginning (view scopeType s) ++ ", ended by " ++ ending st
+  where beginning ScopeByBrace = "left brace `{'"
+        beginning ScopeByBeginGroup = "\\begingroup"
+        beginning GlobalScope = "<beginning of input>"
+        ending ScopeByBrace = "right brace `}'"
+        ending ScopeByBeginGroup = "\\endgroup"
+        ending GlobalScope = "<end of input>"

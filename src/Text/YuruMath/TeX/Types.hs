@@ -186,9 +186,16 @@ isVMode m     = m == VerticalMode   || m == InternalVerticalMode
 isMMode m     = m == MathMode       || m == DisplayMathMode
 isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m == MathMode
 
+data ScopeType = ScopeByBrace      -- { .. }
+               | ScopeByBeginGroup -- \begingroup .. \endgroup
+               | GlobalScope
+               -- ScopeByEnvironment !Text -- \begin{xxx} .. \end{xxx}
+               deriving (Eq,Show)
+
 data CommonLocalState ecommand value
   = CommonLocalState
-    { _tsDefinitions       :: Map.Map Text (Either ecommand value) -- definitions of control sequences
+    { _scopeType           :: !ScopeType
+    , _tsDefinitions       :: Map.Map Text (Either ecommand value) -- definitions of control sequences
     , _tsActiveDefinitions :: Map.Map Char (Either ecommand value) -- definitions of active characters
     , _catcodeMap          :: Map.Map Char CatCode
     , _lccodeMap           :: Map.Map Char Char
@@ -220,6 +227,7 @@ data CommonState localstate
 class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => IsLocalState localstate where
   type ExpandableT localstate
   type ValueT localstate
+  scopeType           :: Lens' localstate ScopeType
   tsDefinitions       :: Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
   tsActiveDefinitions :: Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
   catcodeMap          :: Lens' localstate (Map.Map Char CatCode)
@@ -290,6 +298,7 @@ instance Show ConditionalMarker where
 instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalState ecommand value) where
   type ExpandableT (CommonLocalState ecommand value) = ecommand
   type ValueT (CommonLocalState ecommand value) = value
+  scopeType           = lens _scopeType           (\s v -> s { _scopeType = v})
   tsDefinitions       = lens _tsDefinitions       (\s v -> s { _tsDefinitions = v })
   tsActiveDefinitions = lens _tsActiveDefinitions (\s v -> s { _tsActiveDefinitions = v })
   catcodeMap          = lens _catcodeMap          (\s v -> s { _catcodeMap = v })

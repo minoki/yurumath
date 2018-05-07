@@ -311,6 +311,8 @@ executableDefinitions = Map.fromList
   ,("@m",             liftUnion (IntegerConstant 1000))
   ,("@MM",            liftUnion (IntegerConstant 20000))
   ,("active",         liftUnion (IntegerConstant 13))
+  ,("bgroup",         liftUnion (Character '{' CCBeginGroup))
+  ,("egroup",         liftUnion (Character '}' CCEndGroup))
 
    -- LaTeX
   ,("@xxxii",         liftUnion (IntegerConstant 32))

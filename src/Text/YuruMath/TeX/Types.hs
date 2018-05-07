@@ -98,8 +98,6 @@ data DocumentCommandParamSpec = StandardMandatory
                               | OptionalGroup -- g
                               | OptionalGroupWithDefault [TeXToken] -- G
 
-type MathFamily = Word8
-
 data MathCode = MathCode !Word16 -- "xyzz (15-bit number) or "8000 (math active)
               | UMathCode !Int32 -- 8 bits for the math family, 3 bits for the math class, 21 bits for the character code
               deriving (Eq,Show)
@@ -121,46 +119,46 @@ data ConditionalMarker = Eelse -- \else
 -- data Macro = Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
 
 class (Eq e) => IsExpandable e where
-  isConditional :: e -> Bool
-  isIfCase :: e -> Bool
+  isConditional       :: e -> Bool
+  isIfCase            :: e -> Bool
   isConditionalMarker :: e -> Maybe ConditionalMarker
 
 instance IsExpandable ConditionalMarker where
-  isConditional _ = False
-  isIfCase _ = False
+  isConditional _     = False
+  isIfCase _          = False
   isConditionalMarker = Just
 
 instance IsExpandable (Union '[]) where
-  isConditional = typesExhausted
-  isIfCase = typesExhausted
+  isConditional       = typesExhausted
+  isIfCase            = typesExhausted
   isConditionalMarker = typesExhausted
 
 instance (IsExpandable e, IsExpandable (Union (Delete e es)), Typeable e) => IsExpandable (Union (e : es)) where
-  isConditional = (isConditional :: e -> Bool)
-                  @> (isConditional :: Union (Delete e es) -> Bool)
-  isIfCase = (isIfCase :: e -> Bool)
-             @> (isIfCase :: Union (Delete e es) -> Bool)
+  isConditional       = (isConditional :: e -> Bool)
+                        @> (isConditional :: Union (Delete e es) -> Bool)
+  isIfCase            = (isIfCase :: e -> Bool)
+                        @> (isIfCase :: Union (Delete e es) -> Bool)
   isConditionalMarker = (isConditionalMarker :: e -> Maybe ConditionalMarker)
                         @> (isConditionalMarker :: Union (Delete e es) -> Maybe ConditionalMarker)
 
-data CommonValue = Character !Char !CatCode -- character with category code
-                 | DefinedCharacter !Char -- defined with \chardef
+data CommonValue = Character !Char !CatCode       -- character with category code
+                 | DefinedCharacter !Char         -- defined with \chardef
                  | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
                  | IntegerConstant !Int
-                 | Relax -- \relax
-                 | Unexpanded !CommandName -- prefixed with \noexpand
+                 | Relax                          -- \relax
+                 | Unexpanded !CommandName        -- prefixed with \noexpand
                  | Undefined !CommandName
-                 | Endcsname -- \endcsname
+                 | Endcsname                      -- \endcsname
                  deriving (Show)
 
 instance Eq CommonValue where
-  Character c cc == Character c' cc' = c == c' && cc == cc'
-  DefinedCharacter c == DefinedCharacter c' = c == c'
+  Character c cc         == Character c' cc'        = c == c' && cc == cc'
+  DefinedCharacter c     == DefinedCharacter c'     = c == c'
   DefinedMathCharacter c == DefinedMathCharacter c' = c == c'
-  IntegerConstant x == IntegerConstant x' = x == x'
-  Relax == Relax = True
-  Unexpanded _ == Unexpanded _ = True
-  Undefined _ == Undefined _ = True
+  IntegerConstant x      == IntegerConstant x'      = x == x'
+  Relax                  == Relax                   = True
+  Unexpanded _           == Unexpanded _            = True
+  Undefined _            == Undefined _             = True
 
 class Eq value => IsValue value where
   injectCommonValue :: CommonValue -> value
@@ -183,22 +181,22 @@ data Mode = HorizontalMode
           deriving (Eq,Show)
 
 isHMode, isVMode, isMMode, isInnerMode :: Mode -> Bool
-isHMode m = m == HorizontalMode || m == RestrictedHorizontalMode
-isVMode m = m == VerticalMode || m == InternalVerticalMode
-isMMode m = m == MathMode || m == DisplayMathMode
+isHMode m     = m == HorizontalMode || m == RestrictedHorizontalMode
+isVMode m     = m == VerticalMode   || m == InternalVerticalMode
+isMMode m     = m == MathMode       || m == DisplayMathMode
 isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m == MathMode
 
 data CommonLocalState ecommand value
   = CommonLocalState
-    { _tsDefinitions :: Map.Map Text (Either ecommand value) -- definitions of control sequences
+    { _tsDefinitions       :: Map.Map Text (Either ecommand value) -- definitions of control sequences
     , _tsActiveDefinitions :: Map.Map Char (Either ecommand value) -- definitions of active characters
-    , _catcodeMap  :: Map.Map Char CatCode
-    , _lccodeMap   :: Map.Map Char Char
-    , _uccodeMap   :: Map.Map Char Char
-    , _mathcodeMap :: Map.Map Char MathCode
-    , _delcodeMap  :: Map.Map Char DelimiterCode
-    -- sfcodeMap   :: Map.Map Char Int
-    , _mathStyle :: !MathStyle
+    , _catcodeMap          :: Map.Map Char CatCode
+    , _lccodeMap           :: Map.Map Char Char
+    , _uccodeMap           :: Map.Map Char Char
+    , _mathcodeMap         :: Map.Map Char MathCode
+    , _delcodeMap          :: Map.Map Char DelimiterCode
+    -- sfcodeMap           :: Map.Map Char Int
+    , _mathStyle           :: !MathStyle
     }
 
 data ConditionalKind = CondTruthy
@@ -208,15 +206,15 @@ data ConditionalKind = CondTruthy
 
 data CommonState localstate
   = CommonState
-    { _ttInput :: String
+    { _ttInput            :: String
     -- currentfile, currentline, currentcolumn
-    , _ttSpacingState :: !SpacingState
-    , _esMaxDepth :: !Int
-    , _esMaxPendingToken :: !Int
+    , _ttSpacingState     :: !SpacingState
+    , _esMaxDepth         :: !Int
+    , _esMaxPendingToken  :: !Int
     , _esPendingTokenList :: [(Int,ExpansionToken)]
-    , _localStates :: [localstate] -- must be non-empty
-    , _mode :: !Mode
-    , _conditionals :: [ConditionalKind]
+    , _localStates        :: [localstate] -- must be non-empty
+    , _mode               :: !Mode
+    , _conditionals       :: [ConditionalKind]
     }
 
 class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => IsLocalState localstate where
@@ -224,42 +222,42 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   type ValueT localstate
   tsDefinitions       :: Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
   tsActiveDefinitions :: Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
-  catcodeMap  :: Lens' localstate (Map.Map Char CatCode)
-  lccodeMap   :: Lens' localstate (Map.Map Char Char)
-  uccodeMap   :: Lens' localstate (Map.Map Char Char)
-  mathcodeMap :: Lens' localstate (Map.Map Char MathCode)
-  delcodeMap  :: Lens' localstate (Map.Map Char DelimiterCode)
-  mathStyle   :: Lens' localstate MathStyle
+  catcodeMap          :: Lens' localstate (Map.Map Char CatCode)
+  lccodeMap           :: Lens' localstate (Map.Map Char Char)
+  uccodeMap           :: Lens' localstate (Map.Map Char Char)
+  mathcodeMap         :: Lens' localstate (Map.Map Char MathCode)
+  delcodeMap          :: Lens' localstate (Map.Map Char DelimiterCode)
+  mathStyle           :: Lens' localstate MathStyle
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where
   type LocalState state
 
   -- tokenizer
-  ttInput :: Lens' state String
-  ttSpacingState :: Lens' state SpacingState
+  ttInput            :: Lens' state String
+  ttSpacingState     :: Lens' state SpacingState
 
   -- expansion processor
-  esMaxDepth :: Lens' state Int -- read-only?
-  esMaxPendingToken :: Lens' state Int -- read-only?
+  esMaxDepth         :: Lens' state Int -- read-only?
+  esMaxPendingToken  :: Lens' state Int -- read-only?
   esPendingTokenList :: Lens' state [(Int,ExpansionToken)]
 
   -- others
-  localStates :: Lens' state [LocalState state]
-  mode :: Lens' state Mode
-  conditionals :: Lens' state [ConditionalKind]
+  localStates        :: Lens' state [LocalState state]
+  mode               :: Lens' state Mode
+  conditionals       :: Lens' state [ConditionalKind]
 
 class (IsExpandable e, Monad m) => DoExpand e m where
-  doExpand :: e -> m [ExpansionToken]
+  doExpand               :: e -> m [ExpansionToken]
   evalBooleanConditional :: e -> Maybe (m Bool)
 
 instance (Monad m) => DoExpand (Union '[]) m where
-  doExpand = typesExhausted
+  doExpand               = typesExhausted
   evalBooleanConditional = typesExhausted
 
 instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpand (Union (e : es)) m where
-  doExpand = (doExpand :: e -> m [ExpansionToken])
-             @> (doExpand :: Union (Delete e es) -> m [ExpansionToken])
+  doExpand               = (doExpand :: e -> m [ExpansionToken])
+                           @> (doExpand :: Union (Delete e es) -> m [ExpansionToken])
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
@@ -274,15 +272,15 @@ instance (Monad m) => DoExecute (Union '[]) m where
   getIntegerValue = typesExhausted
 
 instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExecute (Union (c : cs)) m where
-  doExecute = (doExecute :: c -> m ())
-              @> (doExecute :: Union (Delete c cs) -> m ())
+  doExecute       = (doExecute :: c -> m ())
+                    @> (doExecute :: Union (Delete c cs) -> m ())
   getIntegerValue = (getIntegerValue :: c -> Maybe (m Integer))
                     @> (getIntegerValue :: Union (Delete c cs) -> Maybe (m Integer))
 
 type Expandable s = ExpandableT (LocalState s)
 type Value s = ValueT (LocalState s)
 
-type MonadTeXState s m = (IsState s, MonadState s m, DoExpand (Expandable s) m)
+type MonadTeXState s m = (IsState s, MonadState s m, DoExpand (Expandable s) m, DoExecute (Value s) m)
 
 instance Show ConditionalMarker where
   show Eelse = "\\else"
@@ -292,25 +290,25 @@ instance Show ConditionalMarker where
 instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalState ecommand value) where
   type ExpandableT (CommonLocalState ecommand value) = ecommand
   type ValueT (CommonLocalState ecommand value) = value
-  tsDefinitions = lens _tsDefinitions (\s v -> s { _tsDefinitions = v })
+  tsDefinitions       = lens _tsDefinitions       (\s v -> s { _tsDefinitions = v })
   tsActiveDefinitions = lens _tsActiveDefinitions (\s v -> s { _tsActiveDefinitions = v })
-  catcodeMap  = lens _catcodeMap  (\s v -> s { _catcodeMap = v })
-  lccodeMap   = lens _lccodeMap   (\s v -> s { _lccodeMap = v })
-  uccodeMap   = lens _uccodeMap   (\s v -> s { _uccodeMap = v })
-  mathcodeMap = lens _mathcodeMap (\s v -> s { _mathcodeMap = v })
-  delcodeMap  = lens _delcodeMap  (\s v -> s { _delcodeMap = v })
-  mathStyle   = lens _mathStyle   (\s v -> s { _mathStyle = v })
+  catcodeMap          = lens _catcodeMap          (\s v -> s { _catcodeMap = v })
+  lccodeMap           = lens _lccodeMap           (\s v -> s { _lccodeMap = v })
+  uccodeMap           = lens _uccodeMap           (\s v -> s { _uccodeMap = v })
+  mathcodeMap         = lens _mathcodeMap         (\s v -> s { _mathcodeMap = v })
+  delcodeMap          = lens _delcodeMap          (\s v -> s { _delcodeMap = v })
+  mathStyle           = lens _mathStyle           (\s v -> s { _mathStyle = v })
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate
-  ttInput            = lens _ttInput (\s v -> s { _ttInput = v })
-  ttSpacingState     = lens _ttSpacingState (\s v -> s { _ttSpacingState = v })
-  esMaxDepth         = lens _esMaxDepth (\s v -> s { _esMaxDepth = v })
-  esMaxPendingToken  = lens _esMaxPendingToken (\s v -> s { _esMaxPendingToken = v })
+  ttInput            = lens _ttInput            (\s v -> s { _ttInput = v })
+  ttSpacingState     = lens _ttSpacingState     (\s v -> s { _ttSpacingState = v })
+  esMaxDepth         = lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
+  esMaxPendingToken  = lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
   esPendingTokenList = lens _esPendingTokenList (\s v -> s { _esPendingTokenList = v })
-  localStates        = lens _localStates (\s v -> s { _localStates = v })
-  mode               = lens _mode (\s v -> s { _mode = v })
-  conditionals       = lens _conditionals (\s v -> s { _conditionals = v })
+  localStates        = lens _localStates        (\s v -> s { _localStates = v })
+  mode               = lens _mode               (\s v -> s { _mode = v })
+  conditionals       = lens _conditionals       (\s v -> s { _conditionals = v })
 
 definitionAt :: IsLocalState localstate => CommandName -> Lens' localstate (Either (ExpandableT localstate) (ValueT localstate))
 definitionAt cn@(NControlSeq name) = tsDefinitions . lens getter setter

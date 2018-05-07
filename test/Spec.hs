@@ -8,6 +8,7 @@ import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
+import Text.YuruMath.TeX.Execution
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Cons (_head)

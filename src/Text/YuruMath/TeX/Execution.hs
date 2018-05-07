@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
 module Text.YuruMath.TeX.Execution where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
@@ -20,6 +21,8 @@ import qualified Data.Map.Strict as Map
 import Control.Lens.At (at)
 import Control.Lens.Getter (view,use,uses)
 import Control.Lens.Setter (assign,modifying)
+import Data.OpenUnion
+import TypeFun.Data.List (SubList)
 
 letCommand :: (MonadTeXState s m, MonadError String m) => m ()
 letCommand = do
@@ -184,7 +187,6 @@ delcodeGet = do
     delcodeToInt (DelimiterCode x) = fromIntegral x
     delcodeToInt (UDelimiterCode x) = fromIntegral x
 
-
 -- \delcode<21-bit number><equals><24-bit number>
 delcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 delcodeSet = do
@@ -230,6 +232,18 @@ defCommand :: (MonadTeXState s m, MonadError String m) => m ()
 defCommand = do
   cs <- required nextEToken
   throwError "\\def: not implemented yet"
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonValue m where
+  doExecute (Character _ _)          = return () -- not implemented yet
+  doExecute (DefinedCharacter _)     = return () -- not implemented yet
+  doExecute (DefinedMathCharacter _) = return () -- not implemented yet
+  doExecute (IntegerConstant _)      = throwError $ "Unexpected integer constant."
+  doExecute Relax                    = return () -- do nothing
+  doExecute (Unexpanded _)           = return () -- do nothing
+  doExecute (Undefined _)            = throwError $ "Undefined control sequence."
+  doExecute Endcsname                = throwError "Extra \\endcsname"
+  getIntegerValue _ = Nothing
+
 data CommonExecutable = Elet
                       | Efuturelet
                       | Euppercase
@@ -246,6 +260,7 @@ data CommonExecutable = Elet
                       | Edelcode
                       deriving (Eq,Show)
 
+-- orphaned instance...
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonExecutable m where
   doExecute Elet             = letCommand
   doExecute Efuturelet       = futureletCommand
@@ -268,3 +283,39 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonEx
   getIntegerValue Edelcode  = Just delcodeGet
   getIntegerValue _         = Nothing
 
+executableDefinitions :: (SubList '[CommonValue,CommonExecutable] set) => Map.Map Text (Union set)
+executableDefinitions = Map.fromList
+  [("relax",          liftUnion Relax)
+  ,("endcsname",      liftUnion Endcsname)
+  ,("let",            liftUnion Elet)
+  ,("futurelet",      liftUnion Efuturelet)
+  ,("uppercase",      liftUnion Euppercase)
+  ,("lowercase",      liftUnion Elowercase)
+  ,("chardef",        liftUnion Echardef)
+  ,("mathchardef",    liftUnion Emathchardef)
+  ,("Umathchardef",   liftUnion EUmathchardef)
+  ,("Umathcharnumdef",liftUnion EUmathcharnumdef)
+  ,("def",            liftUnion Edef)
+  ,("catcode",        liftUnion Ecatcode)
+  ,("lccode",         liftUnion Elccode)
+  ,("uccode",         liftUnion Euccode)
+  ,("mathcode",       liftUnion Emathcode)
+  ,("delcode",        liftUnion Edelcode)
+
+   -- plain TeX / LaTeX
+  ,("z@",             liftUnion (IntegerConstant 0))
+  ,("@ne",            liftUnion (IntegerConstant 1))
+  ,("m@ne",           liftUnion (IntegerConstant (-1)))
+  ,("tw@",            liftUnion (IntegerConstant 2))
+  ,("sixt@@n",        liftUnion (IntegerConstant 16))
+  ,("@m",             liftUnion (IntegerConstant 1000))
+  ,("@MM",            liftUnion (IntegerConstant 20000))
+  ,("active",         liftUnion (IntegerConstant 13))
+
+   -- LaTeX
+  ,("@xxxii",         liftUnion (IntegerConstant 32))
+  ,("@Mi",            liftUnion (IntegerConstant 10001))
+  ,("@Mii",           liftUnion (IntegerConstant 10002))
+  ,("@Miii",          liftUnion (IntegerConstant 10003))
+  ,("@Miv",           liftUnion (IntegerConstant 10004))
+  ]

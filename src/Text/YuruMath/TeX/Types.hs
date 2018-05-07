@@ -123,6 +123,10 @@ class (Eq e) => IsExpandable e where
   isIfCase            :: e -> Bool
   isConditionalMarker :: e -> Maybe ConditionalMarker
 
+  -- default definitions:
+  isIfCase _            = False
+  isConditionalMarker _ = Nothing
+
 instance IsExpandable ConditionalMarker where
   isConditional _     = False
   isIfCase _          = False
@@ -269,7 +273,8 @@ instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpan
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
---instance ... => DoExpand ConditionalMarker m
+-- defined in Expansion.hs:
+-- instance (...) => DoExpand ConditionalMarker m
 
 class (Eq c, Monad m) => DoExecute c m where
   doExecute :: c -> m ()

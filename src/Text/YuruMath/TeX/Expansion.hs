@@ -680,16 +680,6 @@ ucharCommand = do
   x <- readUnicodeScalarValue
   return [ETCharacter x CCOther] -- TODO: category code?
 
--- LuaTeX extension: \mathstyle
-mathstyleCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-mathstyleCommand = do
-  ismm <- uses mode isMMode
-  if ismm
-    then do
-    style <- use (localState . mathStyle)
-    stringToEToken $ show $ fromEnum style
-    else stringToEToken "-1"
-
 data CommonExpandable = Eexpandafter
                       | Enoexpand
                       | Ecsname

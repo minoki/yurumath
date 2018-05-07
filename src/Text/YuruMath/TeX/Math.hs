@@ -1,5 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
 module Text.YuruMath.TeX.Math where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
@@ -10,6 +14,9 @@ import Data.Text (Text)
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad.Identity
+import Control.Lens.Getter (use,uses)
+import Data.OpenUnion
+import TypeFun.Data.List (Elem,SubList)
 
 -- sqrt, overline
 makeCramped :: MathStyle -> MathStyle
@@ -110,6 +117,149 @@ type MathList = [MathItem]
 <math field> ::= <math symbol> | <filler>{<math mode material>}
 <delim> ::= <filler>\delimiter<27-bit number> | <filler><letter> | <filler><otherchar>
 -}
+
+--
+-- Setting math style
+--
+
+newtype MathStyleSet = MathStyleSet MathStyle
+                     deriving (Eq,Show)
+
+instance (Monad m, MonadError String m) => DoExecute MathStyleSet m where
+  doExecute (MathStyleSet s) = throwError "not implemented yet"
+  getIntegerValue (MathStyleSet v) = Just $ return $ fromIntegral $ fromEnum v -- LuaTeX extension
+
+--
+-- Expandable math commands
+--
+
+data MathExpandable = Mmathstyle -- LuaTeX extension
+                    deriving (Eq,Show)
+
+-- LuaTeX extension: \mathstyle
+mathstyleCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+mathstyleCommand = do
+  ismm <- uses mode isMMode
+  if ismm
+    then do
+    style <- use (localState . mathStyle)
+    stringToEToken $ show $ fromEnum style
+    else stringToEToken "-1"
+
+instance IsExpandable MathExpandable where
+  isConditional _ = False
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand MathExpandable m where
+  doExpand Mmathstyle = mathstyleCommand
+  evalBooleanConditional _ = Nothing
+
+--
+-- Other math commands
+--
+
+data MathCommands = Mchar -- ?
+                  | Mmathchar
+                  | Mmathaccent
+                  | Mdelimiter
+                  | Mradical
+                  | Mmathord
+                  | Mmathop
+                  | Mmathbin
+                  | Mmathrel
+                  | Mmathopen
+                  | Mmathclose
+                  | Mmathpunct
+                  | Mmathinner
+                  | Munderline
+                  | Moverline
+                  | Mdisplaylimits
+                  | Mlimits
+                  | Mnolimits
+                  | Mdiscretionaly
+                  | Mmathchoice
+                  | Mleft
+                  | Mright
+                  | Mover
+                  | Matop
+
+                    -- e-TeX extension:
+                  | Mmiddle
+
+                    -- LuaTeX extensions:
+                  | MUmathchar
+                  | MUmathaccent
+                  | MUdelimiter
+                  | MUradical
+                  | MUmathcharnum
+                  | MUroot
+                  | MUoverdelimiter
+                  | MUunderdelimiter
+                  | MUdelimiterover
+                  | MUdelimiterunder
+                  | MUhextensible
+                  | MUstack
+                  -- \Usuperscript, \Usubscript, \Ustartmath, \Ustopmath, \Ustartdisplaymath, \Ustopdisplaymath
+                  -- \Unosuperscript, \Unosubscript
+
+                  deriving (Eq,Show)
+
+instance (Monad m, MonadError String m) => DoExecute MathCommands m where
+  doExecute _ = throwError "not implemented yet"
+  getIntegerValue _ = Nothing
+
+--
+-- List of commands
+--
+
+mathDefinitionsE :: (Elem MathExpandable set) => Map.Map Text (Union set)
+mathDefinitionsE = Map.fromList
+  [("mathstyle", liftUnion Mmathstyle) -- LuaTeX extension
+  ]
+
+mathDefinitions :: (SubList '[MathCommands,MathStyleSet] set) => Map.Map Text (Union set)
+mathDefinitions = Map.fromList
+  [("char",         liftUnion Mchar)
+  ,("mathchar",     liftUnion Mmathchar)
+  ,("delimiter",    liftUnion Mdelimiter)
+  ,("mathord",      liftUnion Mmathord)
+  ,("mathop",       liftUnion Mmathop)
+  ,("mathbin",      liftUnion Mmathbin)
+  ,("mathrel",      liftUnion Mmathrel)
+  ,("mathopen",     liftUnion Mmathopen)
+  ,("mathclose",    liftUnion Mmathclose)
+  ,("mathpunct",    liftUnion Mmathpunct)
+  ,("mathinner",    liftUnion Mmathinner)
+  ,("underline",    liftUnion Munderline)
+  ,("overline",     liftUnion Moverline)
+  ,("mathaccent",   liftUnion Mmathaccent)
+  ,("radical",      liftUnion Mradical)
+  ,("displaylimits",liftUnion Mdisplaylimits)
+  ,("limits",       liftUnion Mlimits)
+  ,("nolimits",     liftUnion Mnolimits)
+  ,("discretionaly",liftUnion Mdiscretionaly)
+  ,("mathchoice",   liftUnion Mmathchoice)
+  ,("left",         liftUnion Mleft)
+  ,("right",        liftUnion Mright)
+  ,("over",         liftUnion Mover)
+  ,("atop",         liftUnion Matop)
+
+  -- e-TeX extension:
+  ,("middle",       liftUnion Mmiddle)
+
+  -- LuaTeX extension:
+  ,("Ustack",       liftUnion MUstack)
+
+  ,("displaystyle",            liftUnion (MathStyleSet DisplayStyle))
+  ,("textstyle",               liftUnion (MathStyleSet TextStyle))
+  ,("scriptstyle",             liftUnion (MathStyleSet ScriptStyle))
+  ,("scriptscriptstyle",       liftUnion (MathStyleSet ScriptScriptStyle))
+
+  -- LuaTeX extensions:
+  ,("crampeddisplaystyle",     liftUnion (MathStyleSet CrampedDisplayStyle))
+  ,("crampedtextstyle",        liftUnion (MathStyleSet CrampedTextStyle))
+  ,("crampedscriptstyle",      liftUnion (MathStyleSet CrampedScriptStyle))
+  ,("crampedscriptscriptstyle",liftUnion (MathStyleSet CrampedScriptScriptStyle))
+  ]
 
 execMath :: (MonadTeXState a m, MonadError String m) => m ()
 execMath = return ()

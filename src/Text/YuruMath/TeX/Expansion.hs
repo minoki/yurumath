@@ -8,6 +8,7 @@ module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
+import Data.Int
 import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -382,6 +383,20 @@ readNumber = do
       UMathCode x -> fromIntegral x
     _ | Just i <- getIntegerValue v -> i
       | otherwise -> throwError $ "unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
+
+readInt32 :: (MonadTeXState s m, MonadError String m) => m Int32
+readInt32 = do
+  x <- readNumber
+  if x < -2^31 || 2^31 <= x
+    then throwError "Number too big"
+    else return (fromInteger x)
+
+readIntBetween :: (MonadTeXState s m, MonadError String m) => Int -> Int -> m Int
+readIntBetween lo hi = do
+  x <- readNumber
+  if fromIntegral lo <= x && x <= fromIntegral hi
+    then return (fromIntegral x)
+    else throwError "Out of range"
 
 numberCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 numberCommand = do

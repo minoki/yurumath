@@ -193,6 +193,7 @@ isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m 
 data ScopeType = ScopeByBrace      -- { .. }
                | ScopeByBeginGroup -- \begingroup .. \endgroup
                | GlobalScope
+               | ScopeByLeftRight  -- \left .. \right
                -- ScopeByEnvironment !Text -- \begin{xxx} .. \end{xxx}
                deriving (Eq,Show)
 

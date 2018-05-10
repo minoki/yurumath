@@ -238,7 +238,9 @@ leaveGroup !st = do
          | otherwise -> throwError $ "Mismatched braces: begun by " ++ beginning (view scopeType s) ++ ", ended by " ++ ending st
   where beginning ScopeByBrace = "left brace `{'"
         beginning ScopeByBeginGroup = "\\begingroup"
+        beginning ScopeByLeftRight = "\\left" -- or \middle
         beginning GlobalScope = "<beginning of input>"
         ending ScopeByBrace = "right brace `}'"
         ending ScopeByBeginGroup = "\\endgroup"
+        ending ScopeByLeftRight = "\\right" -- or \middle
         ending GlobalScope = "<end of input>"

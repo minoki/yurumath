@@ -207,7 +207,6 @@ data CommonLocalState ecommand value
     , _mathcodeMap         :: Map.Map Char MathCode
     , _delcodeMap          :: Map.Map Char DelimiterCode
     -- sfcodeMap           :: Map.Map Char Int
-    , _mathStyle           :: !MathStyle
     }
 
 data ConditionalKind = CondTruthy
@@ -239,7 +238,6 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   uccodeMap           :: Lens' localstate (Map.Map Char Char)
   mathcodeMap         :: Lens' localstate (Map.Map Char MathCode)
   delcodeMap          :: Lens' localstate (Map.Map Char DelimiterCode)
-  mathStyle           :: Lens' localstate MathStyle
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where
@@ -311,7 +309,6 @@ instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalStat
   uccodeMap           = lens _uccodeMap           (\s v -> s { _uccodeMap = v })
   mathcodeMap         = lens _mathcodeMap         (\s v -> s { _mathcodeMap = v })
   delcodeMap          = lens _delcodeMap          (\s v -> s { _delcodeMap = v })
-  mathStyle           = lens _mathStyle           (\s v -> s { _mathStyle = v })
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate

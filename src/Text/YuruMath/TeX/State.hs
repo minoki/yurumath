@@ -33,7 +33,6 @@ initialState input = CommonState
                             , _uccodeMap = Map.empty
                             , _mathcodeMap = Map.empty
                             , _delcodeMap = Map.empty
-                            , _mathStyle = DisplayStyle -- nonsense in non-math mode
                             }
 
 defaultCategoryCodeOf :: Char -> CatCode

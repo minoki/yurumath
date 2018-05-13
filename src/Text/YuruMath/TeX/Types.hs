@@ -74,7 +74,7 @@ data MathClass = MathOrd   -- \mathord,   ordinary object    (0)
                | MathOpen  -- \mathopen,  opening symbol     (4)
                | MathClose -- \mathclose, closing symbol     (5)
                | MathPunct -- \mathpunct, punctuation symbol (6)
-               -- variable family? (7)
+               | MathVar   --             variable family    (7)
                | MathInner -- \mathinner, inner formula
                deriving (Eq,Show,Enum,Bounded)
 

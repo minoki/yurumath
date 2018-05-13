@@ -9,6 +9,7 @@ import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
+import Text.YuruMath.TeX.Math
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Cons (_head)
@@ -40,6 +41,22 @@ expandAll = do
 
 expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) CommonValue))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
+
+type MathExpandableT = Union '[ConditionalMarker, CommonExpandable, CommonBoolean]
+type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable]
+type MathLocalState = CommonLocalState MathExpandableT MathValue
+runMathList :: Bool -> String -> Either String MathList
+runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialState input)
+  where
+    action :: StateT (MathState MathLocalState) (Except String) MathList
+    action = do
+      modifying (localState . tsDefinitions)
+        $ \m -> mconcat [fmap Left expandableDefinitions
+                        ,fmap Right executableDefinitions
+                        ,fmap Right mathDefinitions
+                        ,m
+                        ]
+      runMMDGlobal <$> readMathMaterial defaultMathMaterialContext
 
 ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
   where
@@ -86,12 +103,29 @@ etest5 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue\\nu
                      ,Character '6' CCOther
                      ]
 
+mtest1 = TestCase $ assertEqual "Math" expected (runMathList True "1+1")
+  where
+{-
+$$1+1\showlist$$ ->
+\mathord
+.\fam0 1
+\mathbin
+.\fam0 +
+\mathord
+.\fam0 1
+-}
+    expected = Right [IAtom (Atom AOrd (MFSymbol 0 '1') MFEmpty MFEmpty)
+                     ,IAtom (Atom ABin (MFSymbol 0 '+') MFEmpty MFEmpty)
+                     ,IAtom (Atom AOrd (MFSymbol 0 '1') MFEmpty MFEmpty)
+                     ]
+
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1
                  ,TestLabel "Expansion 2" etest2
                  ,TestLabel "Expansion 3" etest3
                  ,TestLabel "Expansion 4" etest4
                  ,TestLabel "Expansion 5" etest5
+                 ,TestLabel "Math 1" mtest1
                  ]
 
 main = runTestTT tests

@@ -28,6 +28,7 @@ dependencies:
 - lens
 - open-union
 - type-fun
+- blaze-markup
 
 default-extensions:
 - BangPatterns

@@ -65,10 +65,6 @@ categoryCodeFn = do
   m <- use (localState . catcodeMap)
   pure (\c -> Map.findWithDefault (defaultCategoryCodeOf c) c m)
 
-setCategoryCodeOf :: MonadTeXState a m => Char -> CatCode -> m ()
-setCategoryCodeOf c cc = do
-  modifying (localState . catcodeMap) (Map.insert c cc)
-
 defaultLCCodeOf :: Char -> Char
 defaultLCCodeOf c | isAlpha c = toLower c
                   | otherwise = '\0'

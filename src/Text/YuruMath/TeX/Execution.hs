@@ -76,10 +76,8 @@ mathchardefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 mathchardefCommand = do
   name <- readCommandName
   readEquals
-  v <- readNumber
-  unless (0 <= v && v <= 0x8000)
-    $ throwError $ "\\mathchardef: Bad math code (" ++ show v ++ ")"
-  let w = injectCommonValue $ DefinedMathCharacter (MathCode (fromInteger v))
+  v <- readIntBetween 0 0x8000 -- "Bad math code (" ++ show v ++ ")"
+  let w = injectCommonValue $ DefinedMathCharacter (MathCode (fromIntegral v))
   assign (localState . definitionAt name) (Right w)
 
 -- \Umathchardef<control sequence><equals><3-bit number><8-bit number><21-bit number>
@@ -87,14 +85,10 @@ umathchardefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 umathchardefCommand = do
   name <- readCommandName
   readEquals
-  mathclass <- readNumber
-  unless (0 <= mathclass && mathclass <= 7)
-    $ throwError "\\Umathchardef: Invalid math code"
-  fam <- readNumber
-  unless (0 <= fam && fam <= 0xFF)
-    $ throwError "\\Umathchardef: Invalid math code"
+  mathclass <- readIntBetween 0 7 -- "Invalid math code"
+  fam <- readIntBetween 0 0xFF -- "Invalid math code"
   c <- readUnicodeScalarValue
-  let w = injectCommonValue $ DefinedMathCharacter $ mkUMathCode (toEnum $ fromIntegral mathclass) (fromIntegral fam) c
+  let w = injectCommonValue $ DefinedMathCharacter $ mkUMathCode (toEnum mathclass) (fromIntegral fam) c
   assign (localState . definitionAt name) (Right w)
 
 -- \Umathcharnumdef<control sequence><equals><32-bit number>
@@ -102,16 +96,14 @@ umathcharnumdefCommand :: (MonadTeXState s m, MonadError String m) => m ()
 umathcharnumdefCommand = do
   name <- readCommandName
   readEquals
-  value <- readNumber
-  unless (-2^(31::Int) <= value && value < 2^(31::Int))
-    $ throwError "\\Umathcharnumdef: Number too big"
+  value <- readInt32
   let valueu = fromIntegral value :: Word32
       -- mathclass = 0x7 .&. (valueu `shiftR` 21)
       -- fam = 0xFF .&. (valueu `shiftR` 24)
       code = 0x1FFFFF .&. valueu
   unless (isUnicodeScalarValue code)
     $ throwError "\\Umathcharnumdef: Invalid math code"
-  let w = injectCommonValue $ DefinedMathCharacter $ UMathCode (fromIntegral valueu)
+  let w = injectCommonValue $ DefinedMathCharacter $ UMathCode value
   assign (localState . definitionAt name) (Right w)
 
 -- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
@@ -119,23 +111,21 @@ umathcharnumdefCommand = do
 catcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 catcodeGet = do
   slot <- readUnicodeScalarValue
-  (fromIntegral . fromEnum . Map.findWithDefault (defaultCategoryCodeOf slot) slot) <$> use (localState . catcodeMap)
+  (fromIntegral . fromEnum) <$> categoryCodeOf slot
 
 -- \catcode<21-bit number><equals><4-bit number>
 catcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 catcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  v <- readNumber
-  unless (0 <= v && v <= 15)
-    $ throwError $ "\\catcode: Invalid code (" ++ show v ++ "), should be in the range 0..15."
-  let w = toEnum (fromInteger v)
+  v <- readIntBetween 0 15 -- "Invalid code (" ++ show v ++ "), should be in the range 0..15."
+  let w = toEnum v
   assign (localState . catcodeMap . at slot) (Just w)
 
 lccodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 lccodeGet = do
   slot <- readUnicodeScalarValue
-  (fromIntegral . fromEnum . Map.findWithDefault (defaultLCCodeOf slot) slot) <$> use (localState . lccodeMap)
+  (fromIntegral . fromEnum) <$> lcCodeOf slot
 
 -- \lccode<21-bit number><equals><21-bit number>
 lccodeSet :: (MonadTeXState s m, MonadError String m) => m ()
@@ -148,7 +138,7 @@ lccodeSet = do
 uccodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 uccodeGet = do
   slot <- readUnicodeScalarValue
-  (fromIntegral . fromEnum . Map.findWithDefault (defaultUCCodeOf slot) slot) <$> use (localState . uccodeMap)
+  (fromIntegral . fromEnum) <$> ucCodeOf slot
 
 -- \uccode<21-bit number><equals><21-bit number>
 uccodeSet :: (MonadTeXState a m, MonadError String m) => m ()
@@ -161,7 +151,7 @@ uccodeSet = do
 mathcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 mathcodeGet = do
   slot <- readUnicodeScalarValue
-  (mathcodeToInt . Map.findWithDefault (defaultMathCodeOf slot) slot) <$> use (localState . mathcodeMap)
+  mathcodeToInt <$> mathCodeOf slot
   where
     mathcodeToInt (MathCode x) = fromIntegral x
     mathcodeToInt (UMathCode x) = fromIntegral x
@@ -171,10 +161,8 @@ mathcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 mathcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  v <- readNumber
-  unless (0 <= v && v <= 0x8000)
-    $ throwError $ "\\mathcode: Bad math code (" ++ show v ++ ")"
-  let w = MathCode (fromInteger v)
+  v <- readIntBetween 0 0x8000 -- "Bad math code (" ++ show v ++ ")"
+  let w = MathCode (fromIntegral v)
   assign (localState . mathcodeMap . at slot) (Just w)
 
 -- \UmathcodenumSet
@@ -182,7 +170,7 @@ mathcodeSet = do
 delcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 delcodeGet = do
   slot <- readUnicodeScalarValue
-  (delcodeToInt . Map.findWithDefault (defaultDelimiterCodeOf slot) slot) <$> use (localState . delcodeMap)
+  delcodeToInt <$> delimiterCodeOf slot
   where
     delcodeToInt (DelimiterCode x) = fromIntegral x
     delcodeToInt (UDelimiterCode x) = fromIntegral x
@@ -192,9 +180,7 @@ delcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 delcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  v <- readNumber
-  unless (-1 <= v && v <= 0xFFFFFF)
-    $ throwError $ "\\delcode: Invalid delimiter code."
+  v <- readIntBetween (-1) 0xFFFFFF -- "Invalid delimiter code."
   let w = DelimiterCode (fromIntegral v)
   assign (localState . delcodeMap . at slot) (Just w)
 
@@ -203,11 +189,9 @@ udelcodeSet :: (MonadTeXState s m, MonadError String m) => m ()
 udelcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  fam <- readNumber
-  unless (0 <= fam && fam <= 0xFF)
-    $ throwError "\\Udelcode: Invalid delimiter code."
+  fam <- readIntBetween 0 0xFF -- "Invalid delimiter code."
   c <- readUnicodeScalarValue
-  let w = mkUDelCode (fromInteger fam) c
+  let w = mkUDelCode (fromIntegral fam) c
   assign (localState . delcodeMap . at slot) (Just w)
 
 -- \Udelcodenum<21-bit number><equals><32-bit number>
@@ -215,9 +199,7 @@ udelcodenumSet :: (MonadTeXState s m, MonadError String m) => m ()
 udelcodenumSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  value <- readNumber
-  unless (-2^(31::Int) <= value && value < 2^(31::Int))
-    $ throwError "\\Udelcodenum: Number too big"
+  value <- readInt32
   unless (0 <= value && value < 2^(29::Int))
     $ throwError "\\Udelcodenum: Invalid delimiter code"
   let valueu = fromIntegral value :: Word32
@@ -225,7 +207,7 @@ udelcodenumSet = do
       code = 0x1FFFFF .&. valueu
   unless (isUnicodeScalarValue code)
     $ throwError "\\Udelcodenum: Invalid delimiter code"
-  let w = UDelimiterCode (fromIntegral valueu)
+  let w = UDelimiterCode value
   assign (localState . delcodeMap . at slot) (Just w)
 
 defCommand :: (MonadTeXState s m, MonadError String m) => m ()

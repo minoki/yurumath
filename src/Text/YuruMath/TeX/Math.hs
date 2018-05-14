@@ -282,7 +282,7 @@ data MathState localstate
 
 initialMathState :: Bool -> CommonState localstate -> MathState localstate
 initialMathState !isDisplay !commonState
-  = MathState { _commonState = commonState
+  = MathState { _commonState = commonState { _mode = if isDisplay then DisplayMathMode else MathMode }
               , _currentMathStyle = if isDisplay then DisplayStyle else TextStyle
               }
 

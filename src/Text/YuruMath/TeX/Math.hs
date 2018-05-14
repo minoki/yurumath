@@ -113,6 +113,7 @@ data Atom = OrdAtom   { atomNucleus     :: !MathField
           | BinAtom   { atomNucleus     :: !MathField
                       , atomSuperscript :: !MathField
                       , atomSubscript   :: !MathField
+                      -- add a field for position (prefix/infix/postfix)?
                       }
           | RelAtom   { atomNucleus     :: !MathField
                       , atomSuperscript :: !MathField
@@ -323,25 +324,16 @@ instance (IsLocalState localstate) => IsState (MathState localstate) where
   mode               = commonState . mode
   conditionals       = commonState . conditionals
 
-{-
-<character> ::= <letter> | <otherchar> | \char<8-bit number> | <chardef token>
-<math character> ::= \mathchar<15-bit number> | <mathchardef token> | \delimiter<27-bit number>
-<math symbol> ::= <character> | <math character>
-<math field> ::= <math symbol> | <filler>{<math mode material>}
-<delim> ::= <filler>\delimiter<27-bit number> | <filler><letter> | <filler><otherchar>
--}
-
 type MathValueList = '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands]
 
 type MonadMathState localstate set m
-  = (MonadTeXState (MathState localstate) m
-    ,ValueT localstate ~ Union (MathValueList :++: set)
-    ,Show (Union set)
-    ,DoExecute (Union set) m
-    ,Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))) ~ set -- ugly hack
+  = ( MonadTeXState (MathState localstate) m
+    , ValueT localstate ~ Union (MathValueList :++: set)
+    , Show (Union set)
+    , DoExecute (Union set) m
+    , Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))) ~ set -- ugly hack
     )
 
--- constraint on set: SubList MathValue
 readMathToken :: forall m localstate set. (MonadMathState localstate set m, MonadError String m) => m (Maybe (MathToken m))
 readMathToken = do
   v <- evalToValue
@@ -351,10 +343,10 @@ readMathToken = do
   where
     doMathToken :: Union (MathValueList :++: set) -> m (Maybe (MathToken m))
     doMathToken = doCommonValue
-                  @> ((Just <$>) . doMathStyleSet :: MathStyleSet -> m (Maybe (MathToken m)))
-                  @> ((Just <$>) . doMathAtom :: MathAtomCommand -> m (Maybe (MathToken m)))
-                  @> ((Just <$>) . doOtherMathCommand :: MathCommands -> m (Maybe (MathToken m)))
-                  @> ((\v -> return $ Just $ MTOther v) :: Union set -> m (Maybe (MathToken m)) ) -- other assignments, etc
+                  @> (\(v :: MathStyleSet)    -> Just <$> doMathStyleSet v)
+                  @> (\(v :: MathAtomCommand) -> Just <$> doMathAtom v)
+                  @> (\(v :: MathCommands)    -> Just <$> doOtherMathCommand v)
+                  @> (\(v :: Union set)       -> return $ Just $ MTOther v) -- other assignments, etc
     doCommonValue :: CommonValue -> m (Maybe (MathToken m))
     doCommonValue v = case v of
       Character c CCBeginGroup   -> return $ Just MTLBrace
@@ -915,42 +907,3 @@ mathDefinitions = Map.fromList
   ,("crampedscriptstyle",      liftUnion (MathStyleSet CrampedScriptStyle))
   ,("crampedscriptscriptstyle",liftUnion (MathStyleSet CrampedScriptScriptStyle))
   ]
-
-{-
-'{' ... '}'
-   '{' -> new math list
-   '}' -> new Ord atom or single Acc atom
-<math symbol>
-  -> new atom
-<math atom><math field>
-  (<math atom> = \mathord | \mathop | \mathbin | \mathrel | \mathopen
-                   | \mathclose | \mathpunct | \mathinner | \underline | \overline)
-  -> new atom
-\mathaccent<15-bit number><math field>
-  -> new Acc atom
-\radical<27-bit number><math field>
-  -> new Rad atom
-<superscript><math field>
-  -> new Ord with empty field if the current list does not end with an atom
-     the superscript field of this atom is filled by <math field>
-<subscript><math field>
-  -> like <superscript> but with subscript field
-\displaylimits, \limits, \nolimits
-  -> the current list must end with an Op atom
-     modify a special field in that Op atom
-\/
-  -> ...
-\discretionaly<general text><general text><general text>
-  -> ...
-\- = \discretionary{ - }{}{}
-\mathchoice<general text><general text><general text><general text>
-  -> ....
-\displaystyle, \textstyle, \scriptstyle, \scriptscriptstyle
-[LuaTeX: \crampeddisplaystyle, \crampedtextstyle, \crampedscriptstyle, \crampedscriptscriptstyle]
-  -> style-change item
-\left<delim><math mode material>\right<delim>
-  -> ...
-<generalized fraction command>
-[LuaTeX: \Ustack {... <generalized fraction command> ...}]
-  -> ...
--}

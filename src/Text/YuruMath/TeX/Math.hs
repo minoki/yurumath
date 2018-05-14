@@ -305,10 +305,10 @@ data MathToken m where
   MTLeft       :: !DelimiterCode -> MathToken m
   MTMiddle     :: !DelimiterCode -> MathToken m
   MTRight      :: !DelimiterCode -> MathToken m
-  MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
   MTGenFrac    :: !GenFrac -> MathToken m -- \over, \atop, \above<dimen>, ..withdelims<delim><delim>
   MTUstack     :: MathToken m -- \Ustack
-    -- etc...
+  MTChoice     :: MathToken m -- \mathchoice
+  MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
 
@@ -464,6 +464,9 @@ readMathToken = do
       Mlimits        -> return $ MTLimitsSpec Limits
       Mnolimits      -> return $ MTLimitsSpec NoLimits
       Mdisplaylimits -> return $ MTLimitsSpec DisplayLimits
+
+      -- \mathchoice<general text><general text><general text><general text>
+      Mmathchoice -> return MTChoice
 
       _ -> throwError $ show v ++ ": not implemented yet"
 
@@ -676,20 +679,37 @@ readMathMaterial !ctx = loop []
 
           -- \Ustack { <math mode material> <generalized fraction command> <math mode material> }
           MTUstack -> do
-            t <- readMathToken
-            case t of
-              Just MTLBrace -> do
-                enterGroup ScopeByBrace
-                content <- runMMDBrace <$> withMathStyle smallerStyle (readMathMaterial (ctx { mmcFractionPosition = FractionNumerator }))
-                case content of
-                  [item@(IGenFrac _ _ _)] -> loop (item : revList)
-                  _ -> throwError "No fraction after \\Ustack"
-              _ -> throwError "Expected `{' after \\Ustack"
+            readLBrace
+            content <- runMMDBrace <$> withMathStyle smallerStyle (readMathMaterial (ctx { mmcFractionPosition = FractionNumerator }))
+            case content of
+              [item@(IGenFrac _ _ _)] -> loop (item : revList)
+              _ -> throwError "No fraction after \\Ustack"
+
+          -- \mathchoice<general text><general text><general text><general text>
+          MTChoice -> do
+            -- TODO: Set \mathstyle to 'cramped'?
+            readLBrace
+            d  <- runMMDBrace <$> withMathStyle (const DisplayStyle) (readMathMaterial defaultMathMaterialContext)
+            readLBrace
+            t  <- runMMDBrace <$> withMathStyle (const TextStyle) (readMathMaterial defaultMathMaterialContext)
+            readLBrace
+            s  <- runMMDBrace <$> withMathStyle (const ScriptStyle) (readMathMaterial defaultMathMaterialContext)
+            readLBrace
+            ss <- runMMDBrace <$> withMathStyle (const ScriptScriptStyle) (readMathMaterial defaultMathMaterialContext)
+            loop (IChoice d t s ss : revList)
 
           -- assignments, etc
           MTOther v -> do
             doExecute v
             loop revList
+
+readLBrace :: (MonadMathState localstate set m, MonadError String m) => m ()
+readLBrace = do
+  t <- readMathToken
+  case t of
+    Just MTLBrace -> do
+      enterGroup ScopeByBrace
+    _ -> throwError "Expected `{'"
 
 -- <math symbol> ::= <character> | <math character>
 -- <math field> ::= <math symbol> | {<math mode material>}

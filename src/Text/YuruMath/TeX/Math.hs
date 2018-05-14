@@ -399,7 +399,7 @@ readMathToken = do
 
       -- \delimiter<27-bit integer>
       Mdelimiter -> do
-        x <- readIntBetween 0 (2^27-1)
+        x <- readIntBetween 0 (2^(27::Int)-1)
         let mathclass = toEnum (x `shiftR` 24) :: MathClass
             value = fromIntegral (0xFFFFFF .&. x)
         return $ MTDelimiter mathclass (DelimiterCode value)
@@ -413,7 +413,7 @@ readMathToken = do
 
       -- \radical<24-bit integer><math field>
       Mradical -> do
-        x <- readIntBetween 0 (2^24-1)
+        x <- readIntBetween 0 (2^(24::Int)-1)
         -- x = <12-bit: small variant><12-bit: large variant>
         return $ MTRadical $ DelimiterCode $ fromIntegral x
 
@@ -523,6 +523,7 @@ data FractionPosition = NotInFraction
 newtype MathMaterialContext = MathMaterialContext { mmcFractionPosition :: FractionPosition
                                                   }
 
+defaultMathMaterialContext :: MathMaterialContext
 defaultMathMaterialContext = MathMaterialContext { mmcFractionPosition = NotInFraction
                                                  }
 

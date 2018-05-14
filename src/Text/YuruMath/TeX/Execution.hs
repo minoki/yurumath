@@ -103,7 +103,7 @@ umathcharnumdefCommand = do
   name <- readCommandName
   readEquals
   value <- readNumber
-  unless (-2^31 <= value && value < 2^31)
+  unless (-2^(31::Int) <= value && value < 2^(31::Int))
     $ throwError "\\Umathcharnumdef: Number too big"
   let valueu = fromIntegral value :: Word32
       -- mathclass = 0x7 .&. (valueu `shiftR` 21)
@@ -216,9 +216,9 @@ udelcodenumSet = do
   slot <- readUnicodeScalarValue
   readEquals
   value <- readNumber
-  unless (-2^31 <= value && value < 2^31)
+  unless (-2^(31::Int) <= value && value < 2^(31::Int))
     $ throwError "\\Udelcodenum: Number too big"
-  unless (0 <= value && value < 2^29)
+  unless (0 <= value && value < 2^(29::Int))
     $ throwError "\\Udelcodenum: Invalid delimiter code"
   let valueu = fromIntegral value :: Word32
       -- fam = 0xFF .&. (valueu `shiftR` 21)

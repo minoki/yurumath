@@ -387,7 +387,7 @@ readNumber = do
 readInt32 :: (MonadTeXState s m, MonadError String m) => m Int32
 readInt32 = do
   x <- readNumber
-  if x < -2^31 || 2^31 <= x
+  if x < -2^(31::Int) || 2^(31::Int) <= x
     then throwError "Number too big"
     else return (fromInteger x)
 
@@ -452,10 +452,11 @@ skipUntilElse !level = do
   x <- shallowEval
   case x of
     Just c | Just m <- isConditionalMarker c -> case m of
+               Eor | level == 0 -> throwError "Extra \\or"
                Eelse | level == 0 -> return True
                Efi | level == 0 -> return False
                    | otherwise -> skipUntilElse (level - 1)
-               Eor | level == 0 -> throwError "Extra \\or"
+               _ -> skipUntilElse level -- Inner \else, \or
            | isConditional c -> skipUntilElse (level + 1)
     _ -> skipUntilElse level
 
@@ -483,6 +484,7 @@ skipUntilOr !level = do
                Eelse | level == 0 -> return FoundElse
                Efi | level == 0 -> return FoundFi
                    | otherwise -> skipUntilOr (level - 1)
+               _ -> skipUntilOr level -- Inner \else, \or
     Just c | isConditional c -> skipUntilOr (level + 1)
     _ -> skipUntilOr level
 

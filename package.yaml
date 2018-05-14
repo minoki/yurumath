@@ -33,6 +33,13 @@ dependencies:
 default-extensions:
 - BangPatterns
 
+ghc-options:
+- -Wall
+- -Wno-unused-imports
+- -Wno-name-shadowing
+- -Wno-unused-matches # temporary
+- -Wno-orphans
+
 library:
   source-dirs: src
 
@@ -55,6 +62,7 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -Wno-missing-signatures
     dependencies:
     - yurumath
     - HUnit

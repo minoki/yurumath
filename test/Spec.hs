@@ -17,12 +17,12 @@ import Control.Lens.Setter (modifying)
 import qualified Data.Map.Strict as Map
 import Data.OpenUnion
 
-defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) => m ()
+defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) => m ()
 defineBuiltins = do
   modifying (localState . tsDefinitions)
     $ mappend (fmap Left expandableDefinitions <> Map.singleton "endcsname" (Right (injectCommonValue Endcsname)))
 
-tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) => m [TeXToken]
+tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) => m [TeXToken]
 tokenizeAll = do
   t <- nextToken
   case t of
@@ -39,10 +39,10 @@ expandAll = do
     Nothing -> return []
     Just v -> (v:) <$> expandAll
 
-expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) CommonValue))]
+expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) CommonValue))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
-type MathExpandableT = Union '[ConditionalMarker, CommonExpandable, CommonBoolean]
+type MathExpandableT = Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]
 type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable]
 type MathLocalState = CommonLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String MathList

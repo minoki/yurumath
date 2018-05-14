@@ -127,11 +127,6 @@ class (Eq e) => IsExpandable e where
   isIfCase _            = False
   isConditionalMarker _ = Nothing
 
-instance IsExpandable ConditionalMarker where
-  isConditional _     = False
-  isIfCase _          = False
-  isConditionalMarker = Just
-
 instance IsExpandable (Union '[]) where
   isConditional       = typesExhausted
   isIfCase            = typesExhausted
@@ -274,9 +269,6 @@ instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpan
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
--- defined in Expansion.hs:
--- instance (...) => DoExpand ConditionalMarker m
-
 class (Eq c, Monad m) => DoExecute c m where
   doExecute :: c -> m ()
   getIntegerValue :: c -> Maybe (m Integer)
@@ -290,6 +282,17 @@ instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExe
                     @> (doExecute :: Union (Delete c cs) -> m ())
   getIntegerValue = (getIntegerValue :: c -> Maybe (m Integer))
                     @> (getIntegerValue :: Union (Delete c cs) -> Maybe (m Integer))
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonValue m where
+  doExecute (Character _ _)          = return () -- dummy
+  doExecute (DefinedCharacter _)     = return () -- dummy
+  doExecute (DefinedMathCharacter _) = return () -- dummy
+  doExecute (IntegerConstant _)      = throwError $ "Unexpected integer constant."
+  doExecute Relax                    = return () -- do nothing
+  doExecute (Unexpanded _)           = return () -- do nothing
+  doExecute (Undefined _)            = throwError $ "Undefined control sequence."
+  doExecute Endcsname                = throwError "Extra \\endcsname"
+  getIntegerValue _ = Nothing -- dummy
 
 type Expandable s = ExpandableT (LocalState s)
 type Value s = ValueT (LocalState s)

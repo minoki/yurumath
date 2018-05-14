@@ -11,7 +11,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Except
 import Data.OpenUnion
 
-tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarker, CommonExpandable, CommonBoolean]) => m [TeXToken]
+tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) => m [TeXToken]
 tokenizeAll = do
   t <- nextToken
   case t of

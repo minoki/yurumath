@@ -539,11 +539,18 @@ orCommand = do
     CondTest:_ -> throwError "internal error: \\or expansion in conditional"
     _ -> throwError "Extra \\or"
 
--- orphaned instance...
-instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand ConditionalMarker m where
-  doExpand Eelse = elseCommand
-  doExpand Efi = fiCommand
-  doExpand Eor = orCommand
+newtype ConditionalMarkerCommand = ConditionalMarkerCommand ConditionalMarker
+  deriving (Eq,Show)
+
+instance IsExpandable ConditionalMarkerCommand where
+  isConditional _     = False
+  isIfCase _          = False
+  isConditionalMarker (ConditionalMarkerCommand x) = Just x
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand ConditionalMarkerCommand m where
+  doExpand (ConditionalMarkerCommand Eelse) = elseCommand
+  doExpand (ConditionalMarkerCommand Efi)   = fiCommand
+  doExpand (ConditionalMarkerCommand Eor)   = orCommand
   evalBooleanConditional _ = Nothing
 
 doIfCase :: (MonadTeXState s m, MonadError String m) => Integer -> m ()
@@ -782,7 +789,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand CommonBoo
   doExpand e = expandBooleanConditional (evalCommonBoolean e)
   evalBooleanConditional e = Just (evalCommonBoolean e)
 
-expandableDefinitions :: SubList '[ConditionalMarker, CommonExpandable, CommonBoolean] set => Map.Map Text (Union set)
+expandableDefinitions :: SubList '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean] set => Map.Map Text (Union set)
 expandableDefinitions = Map.fromList
   [("expandafter", liftUnion Eexpandafter)
   ,("noexpand",    liftUnion Enoexpand)
@@ -795,9 +802,9 @@ expandableDefinitions = Map.fromList
   ,("ifcase",      liftUnion Eifcase)
 
   -- conditional markers
-  ,("else",        liftUnion Eelse)
-  ,("fi",          liftUnion Efi)
-  ,("or",          liftUnion Eor)
+  ,("else",        liftUnion (ConditionalMarkerCommand Eelse))
+  ,("fi",          liftUnion (ConditionalMarkerCommand Efi))
+  ,("or",          liftUnion (ConditionalMarkerCommand Eor))
 
   -- boolean conditional commands
   ,("iftrue",      liftUnion Eiftrue)

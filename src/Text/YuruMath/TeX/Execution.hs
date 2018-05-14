@@ -215,16 +215,6 @@ defCommand = do
   cs <- required nextEToken
   throwError "\\def: not implemented yet"
 
-instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonValue m where
-  doExecute (Character _ _)          = return () -- not implemented yet
-  doExecute (DefinedCharacter _)     = return () -- not implemented yet
-  doExecute (DefinedMathCharacter _) = return () -- not implemented yet
-  doExecute (IntegerConstant _)      = throwError $ "Unexpected integer constant."
-  doExecute Relax                    = return () -- do nothing
-  doExecute (Unexpanded _)           = return () -- do nothing
-  doExecute (Undefined _)            = throwError $ "Undefined control sequence."
-  doExecute Endcsname                = throwError "Extra \\endcsname"
-  getIntegerValue _ = Nothing
 
 data CommonExecutable = Elet
                       | Efuturelet

@@ -397,10 +397,6 @@ newtype MathMaterialContext = MathMaterialContext { mmcFractionPosition :: Fract
 defaultMathMaterialContext = MathMaterialContext { mmcFractionPosition = NotInFraction
                                                  }
 
-isStyleChange :: MathItem -> Bool
-isStyleChange (IStyleChange _) = True
-isStyleChange _ = False
-
 readMathMaterial :: (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => MathMaterialContext -> m (f MathList)
 readMathMaterial !ctx = loop []
   where
@@ -477,8 +473,11 @@ readMathMaterial !ctx = loop []
                 Atom { atomType = AOp } -> return (atom { atomLimits = spec })
                 _ -> throwError "Limit controls must follow a math operator."
           MTSetStyle newStyle -> do
-            assign currentMathStyle newStyle
-            loop (IStyleChange newStyle : revList)
+            -- Remove this check to allow \mathchoice and \mathstyle to be different
+            if mmcFractionPosition ctx == FractionNumerator
+              then throwError "Numerator of a fraction must be surrounded by { and }"
+              else do assign currentMathStyle newStyle
+                      loop (IStyleChange newStyle : revList)
           MTLeft leftDelim -> do
             let readUntilRight revContentList = do
                   enterGroup ScopeByLeftRight
@@ -503,10 +502,6 @@ readMathMaterial !ctx = loop []
             -- Remove this check to allow classic \over-like commands
             | mmcFractionPosition ctx == NotInFraction ->
                 throwError "Fraction must be preceded by \\Ustack"
-
-            -- Remove this check to allow \mathchoice and \mathstyle to be different
-            | any isStyleChange revList ->
-                throwError "Numerator of a fraction must be surronded by `{' .. `}'"
 
             | otherwise -> do
                 let numerator = reverse revList

@@ -118,6 +118,9 @@ data Atom = Atom { atomType        :: !AtomType
 emptyAtom :: Atom
 emptyAtom = Atom AOrd MFEmpty MFEmpty MFEmpty
 
+mkAtom :: AtomType -> MathField -> Atom
+mkAtom !atomType !nucleus = Atom atomType nucleus MFEmpty MFEmpty
+
 -- generalized fraction
 data GenFrac = GFOver
              | GFAtop
@@ -409,23 +412,23 @@ readMathMaterial !ctx = loop []
             let atomType = mathclassToAtomType $ mathcharClass mc
                 fam = fromIntegral $ mathcharFamily mc
                 slot = mathcharSlot mc
-            doAtom (Atom atomType (MFSymbol fam slot) MFEmpty MFEmpty)
+            doAtom (mkAtom atomType (MFSymbol fam slot))
           MTMathChar mc -> do -- \mathchar or \mathchardef-ed
             let atomType = mathclassToAtomType $ mathcharClass mc
                 fam = fromIntegral $ mathcharFamily mc
                 slot = mathcharSlot mc
-            doAtom (Atom atomType (MFSymbol fam slot) MFEmpty MFEmpty)
+            doAtom (mkAtom atomType (MFSymbol fam slot))
           MTDelimiter mathclass del -> do -- \delimiter
             let atomType = mathclassToAtomType mathclass
                 fam = fromIntegral $ delimiterFamilySmall del
                 slot = delimiterSlotSmall del
-            doAtom (Atom atomType (MFSymbol fam slot) MFEmpty MFEmpty)
+            doAtom (mkAtom atomType (MFSymbol fam slot))
           MTLBrace -> do
             oldStyle <- use currentMathStyle
             enterGroup ScopeByBrace
             content <- runMMDBrace <$> readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDBrace
             assign currentMathStyle oldStyle
-            doAtom (Atom AOrd (MFSubList content) MFEmpty MFEmpty)
+            doAtom (mkAtom AOrd (MFSubList content))
           MTRBrace -> onRightBrace $ do
             leaveGroup ScopeByBrace
             return (reverse revList)
@@ -433,7 +436,7 @@ readMathMaterial !ctx = loop []
             x <- if atomType == AOver
                  then withMathStyle makeCramped readMathField
                  else readMathField
-            doAtom (Atom atomType (MFSubList x) MFEmpty MFEmpty)
+            doAtom (mkAtom atomType (MFSubList x))
           MTSup -> do
             x <- withMathStyle superscriptStyle readMathField
             modifyLastAtom $ \atom ->
@@ -463,7 +466,7 @@ readMathMaterial !ctx = loop []
                       readUntilRight ([IBoundary BoundaryMiddle delim] : content : revContentList)
                     MMDRight delim content -> do
                       let content' = concat $ reverse $ [IBoundary BoundaryRight delim] : content : revContentList
-                      loop (IAtom (Atom AInner (MFSubList content') MFEmpty MFEmpty) : revList)
+                      loop (IAtom (mkAtom AInner (MFSubList content')) : revList)
             readUntilRight [[IBoundary BoundaryLeft leftDelim]]
           MTMiddle delim -> onMiddleDelim delim $ do
             leaveGroup ScopeByLeftRight
@@ -513,17 +516,17 @@ readMathField = do
         let atomType = mathclassToAtomType $ mathcharClass mc
             fam = fromIntegral $ mathcharFamily mc
             slot = mathcharSlot mc
-        return [IAtom (Atom atomType (MFSymbol fam slot) MFEmpty MFEmpty)]
+        return [IAtom (mkAtom atomType (MFSymbol fam slot))]
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed
         let atomType = mathclassToAtomType $ mathcharClass mc
             fam = fromIntegral $ mathcharFamily mc
             slot = mathcharSlot mc
-        return [IAtom (Atom atomType (MFSymbol fam slot) MFEmpty MFEmpty)]
+        return [IAtom (mkAtom atomType (MFSymbol fam slot))]
       MTDelimiter mathclass del -> do -- \delimiter
         let atomType = mathclassToAtomType mathclass
             fam = fromIntegral $ delimiterFamilySmall del
             slot = delimiterSlotSmall del
-        return [IAtom (Atom atomType (MFSymbol fam slot) MFEmpty MFEmpty)]
+        return [IAtom (mkAtom atomType (MFSymbol fam slot))]
       MTLBrace -> do
         enterGroup ScopeByBrace
         runMMDBrace <$> readMathMaterial defaultMathMaterialContext

@@ -69,13 +69,6 @@ denominatorStyle :: MathStyle -> MathStyle
 denominatorStyle = makeCramped . smallerStyle
 -}
 
--- Radicals
-
--- Math accents
--- "xyzz
--- y: the family
--- zz: the character
-
 data AtomType = AOrd   -- ordinary
               | AOp    -- large operator
               | ABin   -- binary operation
@@ -113,6 +106,9 @@ data Atom = Atom { atomType        :: !AtomType
                  , atomSuperscript :: !MathField
                  , atomSubscript   :: !MathField
                  , atomIsDelimiter :: !Bool
+                 , atomLimits      :: !LimitsSpec
+                 , atomAccentCharacter :: !MathCode -- valid if atomType == AAcc (accent)
+                 , atomDelimiter   :: !DelimiterCode -- valid if atomType == ARad (radical)
                  }
             deriving (Eq,Show)
 
@@ -122,6 +118,9 @@ emptyAtom = Atom { atomType        = AOrd
                  , atomSuperscript = MFEmpty
                  , atomSubscript   = MFEmpty
                  , atomIsDelimiter = False
+                 , atomLimits      = DisplayLimits
+                 , atomAccentCharacter = MathCode 0
+                 , atomDelimiter   = DelimiterCode (-1)
                  }
 
 mkAtom :: AtomType -> MathField -> Atom
@@ -130,6 +129,9 @@ mkAtom !atomType !nucleus = Atom { atomType        = atomType
                                  , atomSuperscript = MFEmpty
                                  , atomSubscript   = MFEmpty
                                  , atomIsDelimiter = False
+                                 , atomLimits      = DisplayLimits
+                                 , atomAccentCharacter = MathCode 0
+                                 , atomDelimiter   = DelimiterCode (-1)
                                  }
 
 -- generalized fraction
@@ -182,7 +184,8 @@ data MathToken m where
   MTAtomSpec   :: !AtomType -> MathToken m -- \mathord, ..., \overline
   MTSup        :: MathToken m
   MTSub        :: MathToken m
-  MTRadical    :: MathToken m
+  MTRadical    :: !DelimiterCode -> MathToken m
+  MTAccent     :: !MathCode -> MathToken m
   MTLimitsSpec :: !LimitsSpec -> MathToken m
   MTSetStyle   :: !MathStyle -> MathToken m -- \displaystyle, \textstyle, etc
   MTLeft       :: !DelimiterCode -> MathToken m
@@ -298,25 +301,26 @@ readMathToken = do
       Mradical -> do
         x <- readIntBetween 0 (2^24-1)
         -- x = <12-bit: small variant><12-bit: large variant>
-        throwError "\\radical: not implemented yet"
+        return $ MTRadical $ DelimiterCode $ fromIntegral x
 
       -- \Uradical<0-"FF><0-"10FFFF><math field>
       MUradical -> do
-        x <- readIntBetween 0 0xFF
-        y <- readUnicodeScalarValue
-        throwError "\\Uradical: not implemented yet"
+        fam <- readIntBetween 0 0xFF
+        slot <- readUnicodeScalarValue
+        return $ MTRadical $ mkUDelCode (fromIntegral fam) slot
 
       -- \mathaccent<15-bit integer><math field>
       Mmathaccent -> do
         x <- readIntBetween 0 0x7FFF
-        throwError "\\mathaccent: not implemented yet"
+        let value = fromIntegral $ x .&. 0x0FFF
+        return $ MTAccent $ MathCode value
 
       -- \Umathaccent<0-7><0-"FF"><0-"10FFFF><math field>
       MUmathaccent -> do
-        x <- readIntBetween 0 7
-        y <- readIntBetween 0 0xFF
-        z <- readUnicodeScalarValue
-        throwError "\\Umathaccent: not implemented yet"
+        mathclass <- readIntBetween 0 7
+        fam <- readIntBetween 0 0xFF
+        slot <- readUnicodeScalarValue
+        return $ MTAccent $ mkUMathCode (toEnum mathclass) (fromIntegral fam) slot
 
       MUsuperscript -> return MTSup
       MUsubscript -> return MTSub
@@ -457,9 +461,12 @@ readMathMaterial !ctx = loop []
               case atom of
                 Atom { atomSubscript = MFEmpty } -> return (atom { atomSubscript = x })
                 _ -> throwError "Double subscript"
-          MTRadical -> do
-            -- withMathStyle makeCramped
-            throwError "radical: not supported yet"
+          MTAccent code -> do
+            content <- withMathStyle makeCramped readMathField
+            doAtom (mkAtom AAcc content)
+          MTRadical code -> do
+            content <- withMathStyle makeCramped readMathField
+            doAtom (mkAtom ARad content)
           MTLimitsSpec _ -> do
             throwError "limits: not supported yet"
           MTSetStyle newStyle -> do

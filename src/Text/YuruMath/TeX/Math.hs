@@ -334,7 +334,7 @@ readDelimiter :: (MonadMathState localstate set m, MonadError String m) => m Del
 readDelimiter = do
   t <- readMathToken
   case t of
-    Nothing -> throwError "Unexpected end of input: expected delimiter"
+    Nothing -> throwError "Missing delimiter: got end of input"
     Just (MTChar c) -> do
       delimiterCodeOf c
     Just (MTDelimiter _ code) -> do
@@ -366,15 +366,15 @@ newtype MMDBrace a = MMDBrace { runMMDBrace :: a } deriving (Functor)
 instance MathMaterialEnding MMDBrace where
   onEndOfInput _ = throwError "Unexpected end of input: expected `}'"
   onRightBrace m = MMDBrace <$> m
-  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected end of input"
-  onRightDelim _ _ = throwError "Unexpected \\right: expected end of input"
+  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `}'"
+  onRightDelim _ _ = throwError "Unexpected \\right: expected `}'"
 
 data MMDLeftRight a = MMDRight !DelimiterCode a
                     | MMDMiddle !DelimiterCode a
                     deriving (Functor)
 instance MathMaterialEnding MMDLeftRight where
-  onEndOfInput _ = throwError "Unexpected end of input: expected `}'"
-  onRightBrace _ = throwError "Unexpected `}': expected end of input"
+  onEndOfInput _ = throwError "Unexpected end of input: expected \\right"
+  onRightBrace _ = throwError "Unexpected `}': expected \\right"
   onMiddleDelim delim m = MMDMiddle delim <$> m
   onRightDelim delim m = MMDRight delim <$> m
 

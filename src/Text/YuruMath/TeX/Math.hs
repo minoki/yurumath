@@ -152,21 +152,12 @@ data MathItem = IAtom !Atom
               | IGlue -- \hskip or \mskip or \nonscript
               | IKern -- \kern or \mkern
               | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
-              | IGenFrac !GenFrac MathList MathList -- \above, \over, etc -- \over | \atop | above
+              | IGenFrac !GenFrac MathList MathList -- \above, \over, etc
               | IBoundary !BoundaryType !DelimiterCode -- \left, \middle, or \right
               | IChoice MathList MathList MathList MathList -- \mathchoice
               deriving (Eq,Show)
 
 type MathList = [MathItem] -- Use Data.Sequence?
-
-data MathFieldType
-  = MFPlain
-  | MFAtom !AtomType -- \mathord, \mathop, \mathbin, \mathrel, \mathopen, \mathclose, \mathpunct, \mathinner, \underline, \overline
-  | MFAccent
-  | MFRadical
-  | MFSuperscript
-  | MFSubscript
-  deriving (Eq)
 
 data MathState localstate
   = MathState
@@ -183,23 +174,23 @@ initialMathState !isDisplay !commonState
 makeLenses ''MathState
 
 data MathToken m where
-  MTChar :: !Char -> MathToken m -- letter, other, \char or \chardef-ed
-  MTMathChar :: !MathCode -> MathToken m -- \mathchar or \mathchardef-ed
-  MTDelimiter :: !MathClass -> !DelimiterCode -> MathToken m -- \delimiter
-  MTLBrace :: MathToken m
-  MTRBrace :: MathToken m
-  MTAtomSpec :: !AtomType -> MathToken m -- \mathord, ..., \overline
-  MTSup :: MathToken m
-  MTSub :: MathToken m
-  MTRadical :: MathToken m
+  MTChar       :: !Char -> MathToken m -- letter, other, \char or \chardef-ed
+  MTMathChar   :: !MathCode -> MathToken m -- \mathchar or \mathchardef-ed
+  MTDelimiter  :: !MathClass -> !DelimiterCode -> MathToken m -- \delimiter
+  MTLBrace     :: MathToken m
+  MTRBrace     :: MathToken m
+  MTAtomSpec   :: !AtomType -> MathToken m -- \mathord, ..., \overline
+  MTSup        :: MathToken m
+  MTSub        :: MathToken m
+  MTRadical    :: MathToken m
   MTLimitsSpec :: !LimitsSpec -> MathToken m
-  MTSetStyle :: !MathStyle -> MathToken m -- \displaystyle, \textstyle, etc
-  MTLeft :: !DelimiterCode -> MathToken m
-  MTMiddle :: !DelimiterCode -> MathToken m
-  MTRight :: !DelimiterCode -> MathToken m
-  MTOther :: (DoExecute v m, Show v) => v -> MathToken m
-  MTGenFrac :: !GenFrac -> MathToken m -- \over, \atop, \above<dimen>, ..withdelims<delim><delim>
-  MTUstack :: MathToken m -- \Ustack
+  MTSetStyle   :: !MathStyle -> MathToken m -- \displaystyle, \textstyle, etc
+  MTLeft       :: !DelimiterCode -> MathToken m
+  MTMiddle     :: !DelimiterCode -> MathToken m
+  MTRight      :: !DelimiterCode -> MathToken m
+  MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
+  MTGenFrac    :: !GenFrac -> MathToken m -- \over, \atop, \above<dimen>, ..withdelims<delim><delim>
+  MTUstack     :: MathToken m -- \Ustack
     -- etc...
 
 deriving instance Show (MathToken m)

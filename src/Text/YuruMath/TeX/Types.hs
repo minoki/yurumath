@@ -163,6 +163,8 @@ instance Eq CommonValue where
   Relax                  == Relax                   = True
   Unexpanded _           == Unexpanded _            = True
   Undefined _            == Undefined _             = True
+  Endcsname              == Endcsname               = True
+  _                      == _                       = False
 
 class Eq value => IsValue value where
   injectCommonValue :: CommonValue -> value
@@ -332,4 +334,5 @@ definitionAt cn@(NActiveChar c) = tsActiveDefinitions . lens getter setter
 
 localState :: IsState s => Lens' s (LocalState s)
 localState = localStates . lens head setter
-  where setter (_:xs) x = x:xs
+  where setter [] x = error "Invalid local state"
+        setter (_:xs) x = x:xs

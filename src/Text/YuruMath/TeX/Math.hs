@@ -112,14 +112,25 @@ data Atom = Atom { atomType        :: !AtomType
                  , atomNucleus     :: !MathField
                  , atomSuperscript :: !MathField
                  , atomSubscript   :: !MathField
+                 , atomIsDelimiter :: !Bool
                  }
             deriving (Eq,Show)
 
 emptyAtom :: Atom
-emptyAtom = Atom AOrd MFEmpty MFEmpty MFEmpty
+emptyAtom = Atom { atomType        = AOrd
+                 , atomNucleus     = MFEmpty
+                 , atomSuperscript = MFEmpty
+                 , atomSubscript   = MFEmpty
+                 , atomIsDelimiter = False
+                 }
 
 mkAtom :: AtomType -> MathField -> Atom
-mkAtom !atomType !nucleus = Atom atomType nucleus MFEmpty MFEmpty
+mkAtom !atomType !nucleus = Atom { atomType        = atomType
+                                 , atomNucleus     = nucleus
+                                 , atomSuperscript = MFEmpty
+                                 , atomSubscript   = MFEmpty
+                                 , atomIsDelimiter = False
+                                 }
 
 -- generalized fraction
 data GenFrac = GFOver
@@ -412,7 +423,11 @@ readMathMaterial !ctx = loop []
             let atomType = mathclassToAtomType $ mathcharClass mc
                 fam = fromIntegral $ mathcharFamily mc
                 slot = mathcharSlot mc
-            doAtom (mkAtom atomType (MFSymbol fam slot))
+                atom = mkAtom atomType (MFSymbol fam slot)
+            delcode <- delimiterCodeOf c
+            doAtom $ if delcode == DelimiterCode (-1)
+                     then atom
+                     else atom { atomIsDelimiter = True }
           MTMathChar mc -> do -- \mathchar or \mathchardef-ed
             let atomType = mathclassToAtomType $ mathcharClass mc
                 fam = fromIntegral $ mathcharFamily mc
@@ -422,7 +437,7 @@ readMathMaterial !ctx = loop []
             let atomType = mathclassToAtomType mathclass
                 fam = fromIntegral $ delimiterFamilySmall del
                 slot = delimiterSlotSmall del
-            doAtom (mkAtom atomType (MFSymbol fam slot))
+            doAtom ((mkAtom atomType (MFSymbol fam slot)) { atomIsDelimiter = True })
           MTLBrace -> do
             oldStyle <- use currentMathStyle
             enterGroup ScopeByBrace

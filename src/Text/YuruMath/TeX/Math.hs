@@ -434,7 +434,9 @@ readMathMaterial !ctx = loop []
             enterGroup ScopeByBrace
             content <- runMMDBrace <$> readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDBrace
             assign currentMathStyle oldStyle
-            doAtom (mkAtom AOrd (MFSubList content))
+            case content of
+              [item@(IAtom (Atom { atomType = AAcc }))] -> loop (item : revList) -- single Acc atom
+              _ -> doAtom (mkAtom AOrd (MFSubList content))
           MTRBrace -> onRightBrace $ do
             leaveGroup ScopeByBrace
             return (reverse revList)

@@ -101,38 +101,144 @@ data MathField = MFEmpty
                | MFSubList MathList
                deriving (Eq,Show)
 
-data Atom = Atom { atomType        :: !AtomType
-                 , atomNucleus     :: !MathField
-                 , atomSuperscript :: !MathField
-                 , atomSubscript   :: !MathField
-                 , atomIsDelimiter :: !Bool
-                 , atomLimits      :: !LimitsSpec
-                 , atomAccentCharacter :: !MathCode -- valid if atomType == AAcc (accent)
-                 , atomDelimiter   :: !DelimiterCode -- valid if atomType == ARad (radical)
-                 }
+data Atom = OrdAtom   { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | OpAtom    { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      , atomLimits      :: !LimitsSpec -- specific to Op atom
+                      }
+          | BinAtom   { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | RelAtom   { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | OpenAtom  { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
+                      }
+          | CloseAtom { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
+                      }
+          | PunctAtom { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | InnerAtom { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | OverAtom  { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | UnderAtom { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
+          | AccAtom   { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      , atomAccentCharacter :: !MathCode -- specific to Acc atom
+                      }
+          | RadAtom   { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      , atomDelimiter   :: !DelimiterCode -- specific to Rad atom
+                      }
+          | VcentAtom { atomNucleus     :: !MathField
+                      , atomSuperscript :: !MathField
+                      , atomSubscript   :: !MathField
+                      }
             deriving (Eq,Show)
 
+atomType :: Atom -> AtomType
+atomType (OrdAtom   {}) = AOrd
+atomType (OpAtom    {}) = AOp
+atomType (BinAtom   {}) = ABin
+atomType (RelAtom   {}) = ARel
+atomType (OpenAtom  {}) = AOpen
+atomType (CloseAtom {}) = AClose
+atomType (PunctAtom {}) = APunct
+atomType (InnerAtom {}) = AInner
+atomType (OverAtom  {}) = AOver
+atomType (UnderAtom {}) = AUnder
+atomType (AccAtom   {}) = AAcc
+atomType (RadAtom   {}) = ARad
+atomType (VcentAtom {}) = AVcent
+
 emptyAtom :: Atom
-emptyAtom = Atom { atomType        = AOrd
-                 , atomNucleus     = MFEmpty
-                 , atomSuperscript = MFEmpty
-                 , atomSubscript   = MFEmpty
-                 , atomIsDelimiter = False
-                 , atomLimits      = DisplayLimits
-                 , atomAccentCharacter = MathCode 0
-                 , atomDelimiter   = DelimiterCode (-1)
-                 }
+emptyAtom = OrdAtom { atomNucleus     = MFEmpty
+                    , atomSuperscript = MFEmpty
+                    , atomSubscript   = MFEmpty
+                    }
 
 mkAtom :: AtomType -> MathField -> Atom
-mkAtom !atomType !nucleus = Atom { atomType        = atomType
-                                 , atomNucleus     = nucleus
-                                 , atomSuperscript = MFEmpty
-                                 , atomSubscript   = MFEmpty
-                                 , atomIsDelimiter = False
-                                 , atomLimits      = DisplayLimits
-                                 , atomAccentCharacter = MathCode 0
-                                 , atomDelimiter   = DelimiterCode (-1)
-                                 }
+mkAtom AOrd   !nucleus = OrdAtom   { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom AOp    !nucleus = OpAtom    { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   , atomLimits      = DisplayLimits -- specific to Op taom
+                                   }
+mkAtom ABin   !nucleus = BinAtom   { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom ARel   !nucleus = RelAtom   { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom AOpen  !nucleus = OpenAtom  { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   , atomIsDelimiter = False   -- specific to Open and Close atom
+                                   }
+mkAtom AClose !nucleus = CloseAtom { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   , atomIsDelimiter = False   -- specific to Open and Close atom
+                                   }
+mkAtom APunct !nucleus = PunctAtom { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom AInner !nucleus = InnerAtom { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom AOver  !nucleus = OverAtom  { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom AUnder !nucleus = UnderAtom { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
+mkAtom AAcc   !nucleus = AccAtom   { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   , atomAccentCharacter = MathCode 0 -- specific to Acc atom
+                                   }
+mkAtom ARad   !nucleus = RadAtom   { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom
+                                   }
+mkAtom AVcent !nucleus = VcentAtom { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   }
 
 -- generalized fraction
 data GenFrac = GFOver
@@ -455,7 +561,7 @@ readMathMaterial !ctx = loop []
             content <- runMMDBrace <$> readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDBrace
             assign currentMathStyle oldStyle
             case content of
-              [item@(IAtom (Atom { atomType = AAcc }))] -> loop (item : revList) -- single Acc atom
+              [item@(IAtom (AccAtom {}))] -> loop (item : revList) -- single Acc atom
               _ -> doAtom (mkAtom AOrd (MFSubList content))
           MTRBrace -> onRightBrace $ do
             leaveGroup ScopeByBrace
@@ -468,15 +574,15 @@ readMathMaterial !ctx = loop []
           MTSup -> do
             x <- withMathStyle superscriptStyle readMathField
             modifyLastAtom $ \atom ->
-              case atom of
-                Atom { atomSuperscript = MFEmpty } -> return (atom { atomSuperscript = x })
-                _ -> throwError "Double superscript"
+              if atomSuperscript atom == MFEmpty
+              then return (atom { atomSuperscript = x })
+              else throwError "Double superscript"
           MTSub -> do
             x <- withMathStyle subscriptStyle readMathField
             modifyLastAtom $ \atom ->
-              case atom of
-                Atom { atomSubscript = MFEmpty } -> return (atom { atomSubscript = x })
-                _ -> throwError "Double subscript"
+              if atomSubscript atom == MFEmpty
+              then return (atom { atomSubscript = x })
+              else throwError "Double subscript"
           MTAccent code -> do
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom AAcc content)
@@ -489,7 +595,7 @@ readMathMaterial !ctx = loop []
             doAtom (mkAtom ARad content)
           MTLimitsSpec spec -> do
             case revList of
-              IAtom (atom@(Atom { atomType = AOp })) : xs -> loop (IAtom (atom { atomLimits = spec }) : xs)
+              IAtom (atom@(OpAtom {})) : xs -> loop (IAtom (atom { atomLimits = spec }) : xs)
               _ -> throwError "Limit controls must follow a math operator."
           MTSetStyle newStyle -> do
             -- Remove this check to allow \mathchoice and \mathstyle to be different
@@ -564,7 +670,7 @@ readMathField = do
         enterGroup ScopeByBrace
         content <- runMMDBrace <$> readMathMaterial defaultMathMaterialContext
         return $ case content of
-          [IAtom (Atom { atomType = AOrd, atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
+          [IAtom (OrdAtom { atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
           _ -> MFSubList content
       _ -> throwError $ "Unexpeced " ++ show t ++ "; expected a symbol or `{'"
 

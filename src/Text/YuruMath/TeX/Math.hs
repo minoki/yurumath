@@ -488,10 +488,9 @@ readMathMaterial !ctx = loop []
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom ARad content)
           MTLimitsSpec spec -> do
-            modifyLastAtom $ \atom ->
-              case atom of
-                Atom { atomType = AOp } -> return (atom { atomLimits = spec })
-                _ -> throwError "Limit controls must follow a math operator."
+            case revList of
+              IAtom (atom@(Atom { atomType = AOp })) : xs -> loop (IAtom (atom { atomLimits = spec }) : xs)
+              _ -> throwError "Limit controls must follow a math operator."
           MTSetStyle newStyle -> do
             -- Remove this check to allow \mathchoice and \mathstyle to be different
             if mmcFractionPosition ctx == FractionNumerator

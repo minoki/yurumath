@@ -240,6 +240,11 @@ mkAtom AVcent !nucleus = VcentAtom { atomNucleus     = nucleus
                                    , atomSubscript   = MFEmpty
                                    }
 
+markAtomAsDelimiter :: Atom -> Atom
+markAtomAsDelimiter atom@(OpenAtom {}) = atom { atomIsDelimiter = True }
+markAtomAsDelimiter atom@(CloseAtom {}) = atom { atomIsDelimiter = True }
+markAtomAsDelimiter atom = atom
+
 -- generalized fraction
 data GenFrac = GFOver
              | GFAtop
@@ -441,10 +446,12 @@ readMathToken = do
       MUsuperscript -> return MTSup
       MUsubscript -> return MTSub
 
+      -- \left<delim>, \right<delim>, \middle<delim>
       Mleft   -> MTLeft   <$> readDelimiter
       Mright  -> MTRight  <$> readDelimiter
       Mmiddle -> MTMiddle <$> readDelimiter
 
+      -- \over, \atop, \above<dimen>, \Uskewed<delim>, \overwithdelims<delim><delim>, \atopwithdelims<delim><delim>, \abovewithdelims<delim><delim><dimen>, \Uskewedwithdelims<delim><delim><delim>
       Mover    -> return $ MTGenFrac GFOver
       Matop    -> return $ MTGenFrac GFAtop
       Mabove   -> throwError "\\above: not implemented yet"
@@ -535,6 +542,7 @@ readMathMaterial !ctx = loop []
       case t of
         Nothing -> onEndOfInput (return (reverse revList))
         Just t -> case t of
+          -- <character>
           MTChar c -> do
             mc <- mathCodeOf c
             let atomType = mathclassToAtomType $ mathcharClass mc
@@ -542,19 +550,25 @@ readMathMaterial !ctx = loop []
                 slot = mathcharSlot mc
                 atom = mkAtom atomType (MFSymbol fam slot)
             delcode <- delimiterCodeOf c
-            doAtom $ if delcode == DelimiterCode (-1)
-                     then atom
-                     else atom { atomIsDelimiter = True }
+            doAtom $ if delcode /= DelimiterCode (-1)
+                     then markAtomAsDelimiter atom
+                     else atom
+
+          -- <math symbol>
           MTMathChar mc -> do -- \mathchar or \mathchardef-ed
             let atomType = mathclassToAtomType $ mathcharClass mc
                 fam = fromIntegral $ mathcharFamily mc
                 slot = mathcharSlot mc
             doAtom (mkAtom atomType (MFSymbol fam slot))
+
+          -- <math symbol>
           MTDelimiter mathclass del -> do -- \delimiter
             let atomType = mathclassToAtomType mathclass
                 fam = fromIntegral $ delimiterFamilySmall del
                 slot = delimiterSlotSmall del
-            doAtom ((mkAtom atomType (MFSymbol fam slot)) { atomIsDelimiter = True })
+            doAtom (markAtomAsDelimiter (mkAtom atomType (MFSymbol fam slot)))
+
+          -- { <math mode material> }
           MTLBrace -> do
             oldStyle <- use currentMathStyle
             enterGroup ScopeByBrace
@@ -563,46 +577,66 @@ readMathMaterial !ctx = loop []
             case content of
               [item@(IAtom (AccAtom {}))] -> loop (item : revList) -- single Acc atom
               _ -> doAtom (mkAtom AOrd (MFSubList content))
+
+          -- `}'
           MTRBrace -> onRightBrace $ do
             leaveGroup ScopeByBrace
             return (reverse revList)
+
+          -- <math atom><math field>
           MTAtomSpec atomType -> do
             x <- if atomType == AOver
                  then withMathStyle makeCramped readMathField
                  else readMathField
             doAtom (mkAtom atomType x)
+
+          -- <superscript><math field>
           MTSup -> do
             x <- withMathStyle superscriptStyle readMathField
             modifyLastAtom $ \atom ->
               if atomSuperscript atom == MFEmpty
               then return (atom { atomSuperscript = x })
               else throwError "Double superscript"
+
+          -- <subscript><math field>
           MTSub -> do
             x <- withMathStyle subscriptStyle readMathField
             modifyLastAtom $ \atom ->
               if atomSubscript atom == MFEmpty
               then return (atom { atomSubscript = x })
               else throwError "Double subscript"
+
+          -- \mathaccent<15-bit number><math field> or \Umathaccent<...><math field>
           MTAccent code -> do
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom AAcc content)
+
+          -- \radical<27-bit number><math field> or \Uradical<...><math field>
           MTRadical code -> do
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom ARad content)
+
+          -- \Uroot<...><math field><math field>
           MTRoot code -> do
             degree <- withMathStyle (const ScriptScriptStyle) readMathField
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom ARad content)
+
+          -- \limits, \nolimits, \displaylimits
           MTLimitsSpec spec -> do
             case revList of
               IAtom (atom@(OpAtom {})) : xs -> loop (IAtom (atom { atomLimits = spec }) : xs)
               _ -> throwError "Limit controls must follow a math operator."
+
+          -- \displaystyle, \textstyle, etc
           MTSetStyle newStyle -> do
             -- Remove this check to allow \mathchoice and \mathstyle to be different
             if mmcFractionPosition ctx == FractionNumerator
               then throwError "Numerator of a fraction must be surrounded by { and }"
               else do assign currentMathStyle newStyle
                       loop (IStyleChange newStyle : revList)
+
+          -- \left<delim> <math mode material> (\middle<delim><math mode material>)* \right<delim>
           MTLeft leftDelim -> do
             let readUntilRight revContentList = do
                   enterGroup ScopeByLeftRight
@@ -614,12 +648,18 @@ readMathMaterial !ctx = loop []
                       let content' = concat $ reverse $ [IBoundary BoundaryRight delim] : content : revContentList
                       loop (IAtom (mkAtom AInner (MFSubList content')) : revList)
             readUntilRight [[IBoundary BoundaryLeft leftDelim]]
+
+          -- \middle<delim>
           MTMiddle delim -> onMiddleDelim delim $ do
             leaveGroup ScopeByLeftRight
             return (reverse revList)
+
+          -- \right<delim>
           MTRight delim -> onRightDelim delim $ do
             leaveGroup ScopeByLeftRight
             return (reverse revList)
+
+          -- <generalized fraction command>
           MTGenFrac gf
             | mmcFractionPosition ctx == FractionDenominator ->
                 throwError "Ambiguous: you need another { and }"
@@ -633,6 +673,7 @@ readMathMaterial !ctx = loop []
                 result <- withMathStyle makeCramped $ readMathMaterial (ctx { mmcFractionPosition = FractionDenominator })
                 return ((\denominator -> [IGenFrac gf numerator denominator]) <$> result)
 
+          -- \Ustack { <math mode material> <generalized fraction command> <math mode material> }
           MTUstack -> do
             t <- readMathToken
             case t of
@@ -643,10 +684,14 @@ readMathMaterial !ctx = loop []
                   [item@(IGenFrac _ _ _)] -> loop (item : revList)
                   _ -> throwError "No fraction after \\Ustack"
               _ -> throwError "Expected `{' after \\Ustack"
+
+          -- assignments, etc
           MTOther v -> do
-            doExecute v -- assignments, etc
+            doExecute v
             loop revList
 
+-- <math symbol> ::= <character> | <math character>
+-- <math field> ::= <math symbol> | {<math mode material>}
 readMathField :: (MonadMathState localstate set m, MonadError String m) => m MathField
 readMathField = do
   t <- readMathToken

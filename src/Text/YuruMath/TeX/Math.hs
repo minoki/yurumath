@@ -138,9 +138,11 @@ mkAtom !atomType !nucleus = Atom { atomType        = atomType
 data GenFrac = GFOver
              | GFAtop
              | GFAbove {-dimen-}
-             | GFOverWithDelims {-delim-} {-delim-}
-             | GFAtopWithDelims {-delim-} {-delim-}
-             | GFAboveWithDelims {-delim-} {-delim-} {-dimen-}
+             | GFSkewed !DelimiterCode {- options: noaxis, exact -}
+             | GFOverWithDelims !DelimiterCode !DelimiterCode
+             | GFAtopWithDelims !DelimiterCode !DelimiterCode
+             | GFAboveWithDelims !DelimiterCode !DelimiterCode {-dimen-} {- option: exact -}
+             | GFSkewedWithDelims !DelimiterCode !DelimiterCode !DelimiterCode {- options: noaxis, exact -}
              deriving (Eq,Show)
 
 data BoundaryType = BoundaryLeft
@@ -185,6 +187,7 @@ data MathToken m where
   MTSup        :: MathToken m
   MTSub        :: MathToken m
   MTRadical    :: !DelimiterCode -> MathToken m
+  MTRoot       :: !DelimiterCode -> MathToken m
   MTAccent     :: !MathCode -> MathToken m
   MTLimitsSpec :: !LimitsSpec -> MathToken m
   MTSetStyle   :: !MathStyle -> MathToken m -- \displaystyle, \textstyle, etc
@@ -309,6 +312,12 @@ readMathToken = do
         slot <- readUnicodeScalarValue
         return $ MTRadical $ mkUDelCode (fromIntegral fam) slot
 
+      -- \Uroot<0-"FF><0-"10FFFF><math field><math field>
+      MUroot -> do
+        fam <- readIntBetween 0 0xFF
+        slot <- readUnicodeScalarValue
+        return $ MTRoot $ mkUDelCode (fromIntegral fam) slot
+
       -- \mathaccent<15-bit integer><math field>
       Mmathaccent -> do
         x <- readIntBetween 0 0x7FFF
@@ -317,6 +326,7 @@ readMathToken = do
 
       -- \Umathaccent<0-7><0-"FF"><0-"10FFFF><math field>
       MUmathaccent -> do
+        -- TODO: handle optional keywords
         mathclass <- readIntBetween 0 7
         fam <- readIntBetween 0 0xFF
         slot <- readUnicodeScalarValue
@@ -329,8 +339,14 @@ readMathToken = do
       Mright  -> MTRight  <$> readDelimiter
       Mmiddle -> MTMiddle <$> readDelimiter
 
-      Mover -> return $ MTGenFrac GFOver
-      Matop -> return $ MTGenFrac GFAtop
+      Mover    -> return $ MTGenFrac GFOver
+      Matop    -> return $ MTGenFrac GFAtop
+      Mabove   -> throwError "\\above: not implemented yet"
+      MUskewed -> (MTGenFrac . GFSkewed) <$> readDelimiter -- TODO: Handle keywords
+      Moverwithdelims    -> MTGenFrac <$> (GFOverWithDelims <$> readDelimiter <*> readDelimiter)
+      Matopwithdelims    -> MTGenFrac <$> (GFAtopWithDelims <$> readDelimiter <*> readDelimiter)
+      Mabovewithdelims   -> throwError "\\abovewithdelims: not implemented yet"
+      MUskewedwithdelims -> MTGenFrac <$> (GFSkewedWithDelims <$> readDelimiter <*> readDelimiter <*> readDelimiter) -- TODO: Handle keywords
 
       Mlimits        -> return $ MTLimitsSpec Limits
       Mnolimits      -> return $ MTLimitsSpec NoLimits
@@ -465,6 +481,10 @@ readMathMaterial !ctx = loop []
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom AAcc content)
           MTRadical code -> do
+            content <- withMathStyle makeCramped readMathField
+            doAtom (mkAtom ARad content)
+          MTRoot code -> do
+            degree <- withMathStyle (const ScriptScriptStyle) readMathField
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom ARad content)
           MTLimitsSpec spec -> do
@@ -609,6 +629,10 @@ data MathCommands
   | Mright
   | Mover
   | Matop
+  | Mabove
+  | Moverwithdelims
+  | Matopwithdelims
+  | Mabovewithdelims
 
     -- e-TeX extension:
   | Mmiddle
@@ -625,11 +649,16 @@ data MathCommands
   | MUdelimiterover
   | MUdelimiterunder
   | MUhextensible
+  | MUskewed
+  | MUskewedwithdelims
   | MUstack
   | MUsuperscript
   | MUsubscript
   | MUnosuperscript
   | MUnosubscript
+  | MUleft
+  | MUmiddle
+  | MUright
   -- \Ustartmath, \Ustopmath, \Ustartdisplaymath, \Ustopdisplaymath
 
   deriving (Eq,Show)
@@ -673,6 +702,10 @@ mathDefinitions = Map.fromList
   ,("right",        liftUnion Mright)
   ,("over",         liftUnion Mover)
   ,("atop",         liftUnion Matop)
+  ,("above",        liftUnion Matop)
+  ,("overwithdelims",liftUnion Mover)
+  ,("atopwithdelims",liftUnion Matop)
+  ,("abovewithdelims",liftUnion Matop)
 
   -- e-TeX extension:
   ,("middle",       liftUnion Mmiddle)
@@ -689,11 +722,16 @@ mathDefinitions = Map.fromList
   ,("Udelimiterover", liftUnion MUdelimiterover)
   ,("Udelimiterunder",liftUnion MUdelimiterunder)
   ,("Uhextensible",   liftUnion MUhextensible)
+  ,("Uskewed",        liftUnion MUskewed)
+  ,("Uskewedwithdelims",liftUnion MUskewedwithdelims)
   ,("Ustack",         liftUnion MUstack)
   ,("Usuperscript",   liftUnion MUsuperscript)
   ,("Usubscript",     liftUnion MUsubscript)
   ,("Unosuperscript", liftUnion MUnosuperscript)
   ,("Unosubscript",   liftUnion MUnosubscript)
+  ,("Uleft",          liftUnion MUleft)
+  ,("Umiddle",        liftUnion MUmiddle)
+  ,("Uright",         liftUnion MUright)
 
   ,("displaystyle",            liftUnion (MathStyleSet DisplayStyle))
   ,("textstyle",               liftUnion (MathStyleSet TextStyle))

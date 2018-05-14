@@ -451,18 +451,18 @@ readMathMaterial !ctx = loop []
             x <- if atomType == AOver
                  then withMathStyle makeCramped readMathField
                  else readMathField
-            doAtom (mkAtom atomType (MFSubList x))
+            doAtom (mkAtom atomType x)
           MTSup -> do
             x <- withMathStyle superscriptStyle readMathField
             modifyLastAtom $ \atom ->
               case atom of
-                Atom { atomSuperscript = MFEmpty } -> return (atom { atomSuperscript = MFSubList x })
+                Atom { atomSuperscript = MFEmpty } -> return (atom { atomSuperscript = x })
                 _ -> throwError "Double superscript"
           MTSub -> do
             x <- withMathStyle subscriptStyle readMathField
             modifyLastAtom $ \atom ->
               case atom of
-                Atom { atomSubscript = MFEmpty } -> return (atom { atomSubscript = MFSubList x })
+                Atom { atomSubscript = MFEmpty } -> return (atom { atomSubscript = x })
                 _ -> throwError "Double subscript"
           MTRadical -> do
             -- withMathStyle makeCramped
@@ -520,7 +520,7 @@ readMathMaterial !ctx = loop []
             doExecute v -- assignments, etc
             loop revList
 
-readMathField :: (MonadMathState localstate set m, MonadError String m) => m MathList
+readMathField :: (MonadMathState localstate set m, MonadError String m) => m MathField
 readMathField = do
   t <- readMathToken
   case t of
@@ -528,23 +528,23 @@ readMathField = do
     Just t -> case t of
       MTChar c -> do
         mc <- mathCodeOf c
-        let atomType = mathclassToAtomType $ mathcharClass mc
-            fam = fromIntegral $ mathcharFamily mc
+        let fam = fromIntegral $ mathcharFamily mc
             slot = mathcharSlot mc
-        return [IAtom (mkAtom atomType (MFSymbol fam slot))]
+        return (MFSymbol fam slot)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed
-        let atomType = mathclassToAtomType $ mathcharClass mc
-            fam = fromIntegral $ mathcharFamily mc
+        let fam = fromIntegral $ mathcharFamily mc
             slot = mathcharSlot mc
-        return [IAtom (mkAtom atomType (MFSymbol fam slot))]
+        return (MFSymbol fam slot)
       MTDelimiter mathclass del -> do -- \delimiter
-        let atomType = mathclassToAtomType mathclass
-            fam = fromIntegral $ delimiterFamilySmall del
+        let fam = fromIntegral $ delimiterFamilySmall del
             slot = delimiterSlotSmall del
-        return [IAtom (mkAtom atomType (MFSymbol fam slot))]
+        return (MFSymbol fam slot)
       MTLBrace -> do
         enterGroup ScopeByBrace
-        runMMDBrace <$> readMathMaterial defaultMathMaterialContext
+        content <- runMMDBrace <$> readMathMaterial defaultMathMaterialContext
+        return $ case content of
+          [IAtom (Atom { atomType = AOrd, atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
+          _ -> MFSubList content
       _ -> throwError $ "Unexpeced " ++ show t ++ "; expected a symbol or `{'"
 
 --

@@ -114,9 +114,31 @@ $$1+1\showlist$$ ->
 \mathord
 .\fam0 1
 -}
-    expected = Right [IAtom (Atom AOrd (MFSymbol 0 '1') MFEmpty MFEmpty)
-                     ,IAtom (Atom ABin (MFSymbol 0 '+') MFEmpty MFEmpty)
-                     ,IAtom (Atom AOrd (MFSymbol 0 '1') MFEmpty MFEmpty)
+    expected = Right [IAtom (mkAtom AOrd (MFSymbol 0 '1'))
+                     ,IAtom (mkAtom ABin (MFSymbol 0 '+'))
+                     ,IAtom (mkAtom AOrd (MFSymbol 0 '1'))
+                     ]
+
+mtest2 = TestCase $ assertEqual "Math" expected (runMathList True "(-1)^n")
+  where
+{-
+$$(-1)^n\showlist$$ ->
+\mathopen
+.\fam0 (
+\mathbin
+.\fam2 ^@
+\mathord
+.\fam0 1
+\mathclose
+.\fam0 )
+^\fam1 n
+-}
+    expected = Right [IAtom (mkAtom AOpen (MFSymbol 0 '(')) { atomIsDelimiter = True }
+                     ,IAtom (mkAtom ABin (MFSymbol 0 '\x2212')) -- U+2212: MINUS SIGN
+                     ,IAtom (mkAtom AOrd (MFSymbol 0 '1'))
+                     ,IAtom (mkAtom AClose (MFSymbol 0 ')')) { atomIsDelimiter = True
+                                                             , atomSuperscript = MFSymbol 1 'n'
+                                                             }
                      ]
 
 tests = TestList [TestLabel "Tokenization 1" ttest1
@@ -126,6 +148,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 4" etest4
                  ,TestLabel "Expansion 5" etest5
                  ,TestLabel "Math 1" mtest1
+                 ,TestLabel "Math 2" mtest2
                  ]
 
 main = runTestTT tests

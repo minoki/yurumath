@@ -32,7 +32,7 @@ writeMMLVariant mmlVariant = do
     , ""
     , "{-# LANGUAGE OverloadedStrings #-}"
     , "module " ++ moduleName
-    , generateExports ("module Text.Blaze" : map (sanitize . fst) sortedTags) ++ " where"
+    , generateExports ("module Text.Blaze" : "MathML" : "toMathML" : map (sanitize . fst) sortedTags) ++ " where"
     , "import Text.Blaze"
     , "import Text.Blaze.Internal"
     , "import Data.Semigroup ((<>))"

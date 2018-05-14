@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Text.YuruMath.Builder.MathML3
   (module Text.Blaze
+  ,MathML
+  ,toMathML
   ,annotation
   ,annotationXml
   ,maction

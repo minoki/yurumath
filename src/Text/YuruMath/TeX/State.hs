@@ -199,20 +199,29 @@ defaultDelimiterCodeOf :: Char -> DelimiterCode
 defaultDelimiterCodeOf c = case c of
   '.' -> DelimiterCode 0 -- IniTeX
 
+  {-
   -- plain TeX:
   '(' -> DelimiterCode 0x028300
   ')' -> DelimiterCode 0x029301
   '[' -> DelimiterCode 0x05B302
   ']' -> DelimiterCode 0x05D303
-  -- '<' -> DelimiterCode 0x26830A
-  -- '>' -> DelimiterCode 0x26930B
+  '<' -> DelimiterCode 0x26830A
+  '>' -> DelimiterCode 0x26930B
   '/' -> DelimiterCode 0x02F30E
   '|' -> DelimiterCode 0x26A30C
   '\\' -> DelimiterCode 0x26E30F
+  -}
 
   -- unicode-math:
-  '<' -> mkUDelCode 0 '\x27E8'
-  '>' -> mkUDelCode 0 '\x27E9'
+  '('  -> mkUDelCode 0 '('      -- \mathopen
+  ')'  -> mkUDelCode 0 ')'      -- \mathclose
+  '['  -> mkUDelCode 0 '['      -- \mathopen
+  ']'  -> mkUDelCode 0 ']'      -- \mathclose
+  '<'  -> mkUDelCode 0 '\x27E8' -- set in \@@_setup_delcodes
+  '>'  -> mkUDelCode 0 '\x27E9' -- set in \@@_setup_delcodes
+  '/'  -> mkUDelCode 0 '/'      -- set in \@@_setup_delcodes, subject to slash-delimiter option
+  '|'  -> mkUDelCode 0 '|'      -- \mathfence
+  '\\' -> mkUDelCode 0 '\\'     -- set in \@@_setup_delcodes
 
   _ -> DelimiterCode (-1) -- IniTeX
 

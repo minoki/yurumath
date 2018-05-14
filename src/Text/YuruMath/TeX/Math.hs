@@ -332,6 +332,10 @@ readMathToken = do
       Mover -> return $ MTGenFrac GFOver
       Matop -> return $ MTGenFrac GFAtop
 
+      Mlimits        -> return $ MTLimitsSpec Limits
+      Mnolimits      -> return $ MTLimitsSpec NoLimits
+      Mdisplaylimits -> return $ MTLimitsSpec DisplayLimits
+
       _ -> throwError $ show v ++ ": not implemented yet"
 
 readDelimiter :: (MonadMathState localstate set m, MonadError String m) => m DelimiterCode
@@ -467,8 +471,11 @@ readMathMaterial !ctx = loop []
           MTRadical code -> do
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom ARad content)
-          MTLimitsSpec _ -> do
-            throwError "limits: not supported yet"
+          MTLimitsSpec spec -> do
+            modifyLastAtom $ \atom ->
+              case atom of
+                Atom { atomType = AOp } -> return (atom { atomLimits = spec })
+                _ -> throwError "Limit controls must follow a math operator."
           MTSetStyle newStyle -> do
             assign currentMathStyle newStyle
             loop (IStyleChange newStyle : revList)

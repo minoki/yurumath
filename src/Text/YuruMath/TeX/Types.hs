@@ -40,13 +40,13 @@ data CatCode = CCEscape       -- 0
              | CCInvalid      -- 15
              deriving (Eq,Show,Enum,Bounded)
 
-data TeXToken = TTControlSeq !Text
-              | TTCharacter !Char !CatCode
-              deriving (Eq,Show)
-
 data CommandName = NControlSeq !Text
                  | NActiveChar !Char
                  deriving (Eq,Show)
+
+data TeXToken = TTCommandName !CommandName
+              | TTCharacter !Char !CatCode -- not CCEscape, CCEndLine, CCIgnored, CCActive, CCComment, CCInvalid
+              deriving (Eq,Show)
 
 data ExpansionToken = ETCommandName {-noexpand-} !Bool !CommandName
                     | ETCharacter !Char !CatCode -- non-active character

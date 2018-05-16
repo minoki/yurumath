@@ -82,19 +82,19 @@ nextToken = do
               case catCodeOf d of
                 CCSpace -> do
                   setSkipSpacesMode
-                  return $ Just $ TTControlSeq " " -- control space
+                  return $ Just $ TTCommandName (NControlSeq " ") -- control space
                 CCEndLine -> do
                   setNewLineMode
                   -- TODO: read \endlinechar and emit it
-                  return $ Just $ TTControlSeq " " -- control space
+                  return $ Just $ TTCommandName (NControlSeq " ") -- control space
                 _ -> do
                   setMiddleOfLineMode
-                  return $ Just $ TTControlSeq (T.singleton d)
+                  return $ Just $ TTCommandName (NControlSeq (T.singleton d))
             else do -- control word
               setSkipSpacesMode
-              return $ Just $ TTControlSeq (T.pack w)
+              return $ Just $ TTCommandName (NControlSeq (T.pack w))
         CCEndLine -> case ss of
-                       SSNewLine -> return $ Just $ TTControlSeq "par"
+                       SSNewLine -> return $ Just $ TTCommandName (NControlSeq "par")
                        SSSkipSpaces -> do setNewLineMode
                                           nextToken
                        SSMiddleOfLine -> do setNewLineMode
@@ -124,9 +124,10 @@ nextToken = do
                                  setMiddleOfLineMode
                                  return $ Just $ TTCharacter c CCSup
                       Nothing -> return $ Just $ TTCharacter c CCSup
+        CCActive -> return $ Just $ TTCommandName (NActiveChar c)
         cc -> do
           -- CCBeginGroup, CCEndGroup, CCMathShift, CCAlignmentTab
-          -- CCParam, CCSub, CCLetter, CCOther, CCActive
+          -- CCParam, CCSub, CCLetter, CCOther
           setMiddleOfLineMode
           return $ Just $ TTCharacter c cc
 

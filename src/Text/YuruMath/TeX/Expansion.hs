@@ -23,13 +23,11 @@ import Data.OpenUnion
 import TypeFun.Data.List (SubList)
 
 toEToken :: TeXToken -> ExpansionToken
-toEToken (TTControlSeq name) = ETCommandName False (NControlSeq name)
-toEToken (TTCharacter c CCActive) = ETCommandName False (NActiveChar c)
+toEToken (TTCommandName name) = ETCommandName False name
 toEToken (TTCharacter c cc) = ETCharacter c cc
 
 fromEToken :: ExpansionToken -> TeXToken
-fromEToken (ETCommandName _ (NControlSeq name)) = TTControlSeq name
-fromEToken (ETCommandName _ (NActiveChar c)) = TTCharacter c CCActive
+fromEToken (ETCommandName _ name) = TTCommandName name
 fromEToken (ETCharacter c cc) = TTCharacter c cc
 
 nextEToken :: (MonadTeXState s m, MonadError String m) => m (Maybe ExpansionToken)
@@ -146,20 +144,6 @@ readDelimitedArgument !isLong delimiter@(d0:_) = do
     ExpansionToken _ tk | tk == d0 -> return []
     ExpansionToken _ (TTCharacter _ CCBeginGroup) -> readUntilEndGroup
 -}
-
--- used by \unexpanded
-isExpandableNameF :: (MonadTeXState s m) => m (TeXToken -> Bool)
-isExpandableNameF = do
-  cd <- use (localState . tsDefinitions)
-  ad <- use (localState . tsActiveDefinitions)
-  return $ \t -> case t of
-    TTControlSeq name -> case Map.lookup name cd of
-                           Just (Left _) -> True
-                           _ -> False
-    TTCharacter c CCActive -> case Map.lookup c ad of
-                                Just (Left _) -> True
-                                _ -> False
-    _ -> False
 
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]
@@ -585,22 +569,26 @@ iffalseCommand = return False
 -- \if: test character codes
 ifCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifCommand = do
-  t1 <- (fromEToken . fst) <$> evalToken
-  t2 <- (fromEToken . fst) <$> evalToken
-  case (t1, t2) of
-    (TTCharacter c1 _, TTCharacter c2 _) -> return $ c1 == c2
-    (TTControlSeq _, TTControlSeq _) -> return True
-    (_, _) -> return False
+  t1 <- fst <$> evalToken
+  t2 <- fst <$> evalToken
+  return $ case (t1, t2) of
+    (ETCharacter c1 _,                 ETCharacter c2 _                ) -> c1 == c2
+    (ETCharacter c1 _,                 ETCommandName _ (NActiveChar c2)) -> c1 == c2
+    (ETCommandName _ (NActiveChar c1), ETCharacter c2 _                ) -> c1 == c2
+    (ETCommandName _ (NActiveChar c1), ETCommandName _ (NActiveChar c2)) -> c1 == c2
+    (ETCommandName _ (NControlSeq _),  ETCommandName _ (NControlSeq _) ) -> True
+    (_, _) -> False
 
 -- \ifcat: test category codes
 ifcatCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifcatCommand = do
-  t1 <- (fromEToken . fst) <$> evalToken
-  t2 <- (fromEToken . fst) <$> evalToken
-  case (t1, t2) of
-    (TTCharacter _ cc1, TTCharacter _ cc2) -> return $ cc1 == cc2
-    (TTControlSeq _, TTControlSeq _) -> return True
-    (_, _) -> return False
+  t1 <- fst <$> evalToken
+  t2 <- fst <$> evalToken
+  return $ case (t1, t2) of
+    (ETCharacter _ cc1,               ETCharacter _ cc2              ) -> cc1 == cc2
+    (ETCommandName _ (NActiveChar _), ETCommandName _ (NActiveChar _)) -> True
+    (ETCommandName _ (NControlSeq _), ETCommandName _ (NControlSeq _)) -> True
+    (_, _) -> False
 
 meaning :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
 meaning t = do
@@ -609,26 +597,11 @@ meaning t = do
     ETCommandName False name -> use (localState . definitionAt name)
     ETCharacter c cc -> return (Right (injectCommonValue $ Character c cc))
 
--- \ifx: test category codes
 ifxCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifxCommand = do
   t1 <- required nextEToken >>= meaning
   t2 <- required nextEToken >>= meaning
   return $ t1 == t2
-  {-
-  case (t1, t2) of
-    (Left (ConditionalMarker v1), Left (ConditionalMarker v2)) -> return $ v1 == v2
-    (Left IfCase, Left IfCase) -> return True
-    -- TODO: other expandable commands
-    (Right (Character c1 cc1), Right (Character c2 cc2)) -> return $ c1 == c2 && cc1 == cc2
-    (Right (DefinedCharacter c1), Right (DefinedCharacter c2)) -> return $ c1 == c2
-    (Right (DefinedMathCharacter c1), Right (DefinedMathCharacter c2)) -> return $ c1 == c2
-    (Right (Unexpanded c1), Right (Unexpanded c2)) -> return True
-    (Right (Undefined c1), Right (Undefined c2)) -> return True
-    (Right Relax, Right Relax) -> return True
-    -- Note: \noexpand-ed token and \relax are not equivalent in the sense of \ifx
-    (_, _) -> return False
--}
 
 ifnumCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifnumCommand = do
@@ -694,8 +667,6 @@ readGeneralText = do
 -- e-TeX extension: \unexpanded
 unexpandedCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 unexpandedCommand = do
-  ie <- isExpandableNameF
-  -- map (\t -> ExpansionToken (ie t) t) <$> readGeneralText
   throwError "\\unexpanded: not implemented yet"
 
 -- LuaTeX extension: \Uchar

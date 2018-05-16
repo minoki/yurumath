@@ -60,14 +60,14 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
 
 ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
   where
-    expected = Right [TTControlSeq "foo"
+    expected = Right [TTCommandName (NControlSeq "foo")
                      ,TTCharacter 'b' CCLetter
                      ,TTCharacter 'a' CCLetter
                      ,TTCharacter 'r' CCLetter
                      ,TTCharacter ' ' CCSpace
-                     ,TTControlSeq " "
+                     ,TTCommandName (NControlSeq " ")
                      ,TTCharacter '1' CCOther
-                     ,TTControlSeq "2"
+                     ,TTCommandName (NControlSeq "2")
                      ,TTCharacter '3' CCOther
                      ]
 

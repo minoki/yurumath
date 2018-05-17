@@ -31,6 +31,13 @@ import Control.Lens.TH
 import Data.OpenUnion
 import TypeFun.Data.List (Elem,Substract,SubList,Delete,(:++:))
 
+isCramped :: MathStyle -> Bool
+isCramped CrampedDisplayStyle      = True
+isCramped CrampedTextStyle         = True
+isCramped CrampedScriptStyle       = True
+isCramped CrampedScriptScriptStyle = True
+isCramped _ = False
+
 -- sqrt, overline
 makeCramped :: MathStyle -> MathStyle
 makeCramped DisplayStyle      = CrampedDisplayStyle
@@ -38,6 +45,10 @@ makeCramped TextStyle         = CrampedTextStyle
 makeCramped ScriptStyle       = CrampedScriptStyle
 makeCramped ScriptScriptStyle = CrampedScriptScriptStyle
 makeCramped crampedstyle = crampedstyle
+
+makeCrampedIf :: Bool -> MathStyle -> MathStyle
+makeCrampedIf True  = makeCramped
+makeCrampedIf False = id
 
 -- superscript
 superscriptStyle :: MathStyle -> MathStyle
@@ -528,7 +539,7 @@ defaultMathMaterialContext :: MathMaterialContext
 defaultMathMaterialContext = MathMaterialContext { mmcFractionPosition = NotInFraction
                                                  }
 
-readMathMaterial :: (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => MathMaterialContext -> m (f MathList)
+readMathMaterial :: forall f localstate set m. (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => MathMaterialContext -> m (f MathList)
 readMathMaterial !ctx = loop []
   where
     loop revList = do
@@ -572,10 +583,8 @@ readMathMaterial !ctx = loop []
 
           -- { <math mode material> }
           MTLBrace -> do
-            oldStyle <- use currentMathStyle
             enterGroup ScopeByBrace
-            content <- runMMDBrace <$> readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDBrace
-            assign currentMathStyle oldStyle
+            content <- runMMDBrace <$> withMathStyle id (readMathMaterial (ctx { mmcFractionPosition = NotInFraction })) -- MMDBrace
             case content of
               [item@(IAtom (AccAtom {}))] -> loop (item : revList) -- single Acc atom
               _ -> doAtom (mkAtom AOrd (MFSubList content))
@@ -589,7 +598,7 @@ readMathMaterial !ctx = loop []
           MTAtomSpec atomType -> do
             x <- if atomType == AOver
                  then withMathStyle makeCramped readMathField
-                 else readMathField
+                 else withMathStyle id readMathField
             doAtom (mkAtom atomType x)
 
           -- <superscript><math field>
@@ -642,7 +651,7 @@ readMathMaterial !ctx = loop []
           MTLeft leftDelim -> do
             let readUntilRight revContentList = do
                   enterGroup ScopeByLeftRight
-                  result <- readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDLeftRight
+                  result <- withMathStyle id $ readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDLeftRight
                   case result of
                     MMDMiddle delim content -> do
                       readUntilRight ([IBoundary BoundaryMiddle delim] : content : revContentList)
@@ -685,15 +694,21 @@ readMathMaterial !ctx = loop []
 
           -- \mathchoice<general text><general text><general text><general text>
           MTChoice -> do
-            -- TODO: Set \mathstyle to 'cramped'?
-            readLBrace
-            d  <- runMMDBrace <$> withMathStyle (const DisplayStyle) (readMathMaterial defaultMathMaterialContext)
-            readLBrace
-            t  <- runMMDBrace <$> withMathStyle (const TextStyle) (readMathMaterial defaultMathMaterialContext)
-            readLBrace
-            s  <- runMMDBrace <$> withMathStyle (const ScriptStyle) (readMathMaterial defaultMathMaterialContext)
-            readLBrace
-            ss <- runMMDBrace <$> withMathStyle (const ScriptScriptStyle) (readMathMaterial defaultMathMaterialContext)
+            currentStyle <- use currentMathStyle
+            let -- doChoiceBranch :: MathStyle -> m MathList
+                doChoiceBranch !s
+                  | makeCramped s == makeCramped currentStyle = do
+                      -- we are in the 'right' branch
+                      readLBrace
+                      runMMDBrace <$> readMathMaterial defaultMathMaterialContext
+                  | otherwise = do
+                      -- we are not in the 'right' branch
+                      readLBrace
+                      runMMDBrace <$> withMathStyle (const $ makeCrampedIf (isCramped currentStyle) s) (readMathMaterial defaultMathMaterialContext)
+            d  <- doChoiceBranch DisplayStyle
+            t  <- doChoiceBranch TextStyle
+            s  <- doChoiceBranch ScriptStyle
+            ss <- doChoiceBranch ScriptScriptStyle
             loop (IChoice d t s ss : revList)
 
           -- assignments, etc

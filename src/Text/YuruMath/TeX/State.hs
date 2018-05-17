@@ -94,10 +94,12 @@ ucCodeFn = do
   pure (\c -> Map.findWithDefault (defaultUCCodeOf c) c m)
 
 mkMathCode :: MathClass -> Word8 -> Char -> MathCode
-mkMathCode cls fam code = MathCode
-                          $ (fromIntegral (fromEnum cls) `shiftL` 12)
-                          .|. (fromIntegral fam `shiftL` 8)
-                          .|. fromIntegral (ord code)
+mkMathCode cls fam code
+  | code <= '\xFF' = MathCode
+                     $ (fromIntegral (fromEnum cls) `shiftL` 12)
+                     .|. (fromIntegral fam `shiftL` 8)
+                     .|. fromIntegral (ord code)
+  | otherwise = error "Use mkUMathCode for code points beyond U+0100 "
 
 mkUMathCode :: MathClass -> Word8 -> Char -> MathCode
 mkUMathCode cls fam code = UMathCode

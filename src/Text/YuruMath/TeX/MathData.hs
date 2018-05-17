@@ -10,41 +10,41 @@ import qualified Data.Map.Strict as Map
 mathCommands :: Map.Map Text MathCode
 mathCommands = Map.fromList
   -- Ordinary Symbols
-  [("infty",   mkMathCode MathOrd 0 '\x221E')
-  ,("forall",  mkMathCode MathOrd 0 '\x2200')
-  ,("exists",  mkMathCode MathOrd 0 '\x2203')
-  ,("emptyset",mkMathCode MathOrd 0 '\x2205')
+  [("infty",   mkUMathCode MathOrd 0 '\x221E')
+  ,("forall",  mkUMathCode MathOrd 0 '\x2200')
+  ,("exists",  mkUMathCode MathOrd 0 '\x2203')
+  ,("emptyset",mkUMathCode MathOrd 0 '\x2205')
 
   -- Large Operators
-  ,("sum",     mkMathCode MathOp 0 '\x2211')
-  ,("int",     mkMathCode MathOp 0 '\x222B') -- nolimits
-  ,("prod",    mkMathCode MathOp 0 '\x220F')
+  ,("sum",     mkUMathCode MathOp 0 '\x2211')
+  ,("int",     mkUMathCode MathOp 0 '\x222B') -- nolimits
+  ,("prod",    mkUMathCode MathOp 0 '\x220F')
 
   -- Binary Symbols
-  ,("cap",     mkMathCode MathBin 0 '\x2229')
-  ,("cup",     mkMathCode MathBin 0 '\x222A')
-  ,("pm",      mkMathCode MathBin 0 '\x00B1')
-  ,("mp",      mkMathCode MathBin 0 '\x2213')
-  ,("times",   mkMathCode MathBin 0 '\x00D7')
+  ,("cap",     mkUMathCode MathBin 0 '\x2229')
+  ,("cup",     mkUMathCode MathBin 0 '\x222A')
+  ,("pm",      mkUMathCode MathBin 0 '\x00B1')
+  ,("mp",      mkUMathCode MathBin 0 '\x2213')
+  ,("times",   mkUMathCode MathBin 0 '\x00D7')
 
   -- Relations
-  ,("mid",       mkMathCode MathRel 0 '|') -- ?
-  ,("leftarrow", mkMathCode MathRel 0 '\x2190')
-  ,("rightarrow",mkMathCode MathRel 0 '\x2192')
-  ,("in",        mkMathCode MathRel 0 '\x2208')
-  ,("ni",        mkMathCode MathRel 0 '\x220B')
-  ,("leq",       mkMathCode MathRel 0 '\x2264')
-  ,("le",        mkMathCode MathRel 0 '\x2264')
-  ,("geq",       mkMathCode MathRel 0 '\x2265')
-  ,("ge",        mkMathCode MathRel 0 '\x2265')
-  ,("subset",    mkMathCode MathRel 0 '\x2282')
-  ,("supset",    mkMathCode MathRel 0 '\x2283')
+  ,("mid",       mkUMathCode MathRel 0 '|') -- ?
+  ,("leftarrow", mkUMathCode MathRel 0 '\x2190')
+  ,("rightarrow",mkUMathCode MathRel 0 '\x2192')
+  ,("in",        mkUMathCode MathRel 0 '\x2208')
+  ,("ni",        mkUMathCode MathRel 0 '\x220B')
+  ,("leq",       mkUMathCode MathRel 0 '\x2264')
+  ,("le",        mkUMathCode MathRel 0 '\x2264')
+  ,("geq",       mkUMathCode MathRel 0 '\x2265')
+  ,("ge",        mkUMathCode MathRel 0 '\x2265')
+  ,("subset",    mkUMathCode MathRel 0 '\x2282')
+  ,("supset",    mkUMathCode MathRel 0 '\x2283')
 
   -- Punctuation symbols
-  ,("colon",mkMathCode MathPunct 0 ':')
-  ,("cdots",mkMathCode MathPunct 0 '\x22EF')
-  ,("vdots",mkMathCode MathPunct 0 '\x22EE')
-  ,("ddots",mkMathCode MathPunct 0 '\x22F1')
+  ,("colon",mkUMathCode MathPunct 0 ':')
+  ,("cdots",mkUMathCode MathPunct 0 '\x22EF')
+  ,("vdots",mkUMathCode MathPunct 0 '\x22EE')
+  ,("ddots",mkUMathCode MathPunct 0 '\x22F1')
 
   -- TODO: Accents
   -- TODO: Radicals

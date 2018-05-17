@@ -95,6 +95,7 @@ mathclassToAtomType MathInner = AInner
 
 data MathField = MFEmpty
                | MFSymbol {-family number-} !Word {-position number-} !Char
+               | MFTextSymbol {-family-} !Word !String
                | MFBox
                | MFSubList MathList
                deriving (Eq,Show)

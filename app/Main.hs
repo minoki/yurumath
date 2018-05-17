@@ -8,6 +8,7 @@ import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
 import Text.YuruMath.TeX.Math
+import Text.YuruMath.TeX.MathData
 import Text.YuruMath.TeX.PostMath
 import Text.YuruMath.Convert.TeXToMML
 import Text.YuruMath.Builder.MathML3
@@ -29,6 +30,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
         $ \m -> mconcat [fmap Left expandableDefinitions
                         ,fmap Right executableDefinitions
                         ,fmap Right mathDefinitions
+                        ,fmap (Right . liftUnion . DefinedMathCharacter) mathCommands
                         ,m
                         ]
       runMMDGlobal <$> readMathMaterial defaultMathMaterialContext

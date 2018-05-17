@@ -63,11 +63,9 @@ smallerStyle        ScriptStyle  =        ScriptScriptStyle
 smallerStyle CrampedScriptStyle  = CrampedScriptScriptStyle
 smallerStyle scriptscriptstyle = scriptscriptstyle
 
-{-
 -- denominator
 denominatorStyle :: MathStyle -> MathStyle
 denominatorStyle = makeCramped . smallerStyle
--}
 
 data AtomType = AOrd   -- ordinary
               | AOp    -- large operator
@@ -101,6 +99,11 @@ data MathField = MFEmpty
                | MFSubList MathList
                deriving (Eq,Show)
 
+data BinForm = BinInfix
+             | BinPrefix
+             | BinPostfix
+             deriving (Eq,Show)
+
 data Atom = OrdAtom   { atomNucleus     :: !MathField
                       , atomSuperscript :: !MathField
                       , atomSubscript   :: !MathField
@@ -113,7 +116,7 @@ data Atom = OrdAtom   { atomNucleus     :: !MathField
           | BinAtom   { atomNucleus     :: !MathField
                       , atomSuperscript :: !MathField
                       , atomSubscript   :: !MathField
-                      -- add a field for position (prefix/infix/postfix)?
+                      , atomBinForm     :: !BinForm   -- specific to Bin atom
                       }
           | RelAtom   { atomNucleus     :: !MathField
                       , atomSuperscript :: !MathField
@@ -195,6 +198,7 @@ mkAtom AOp    !nucleus = OpAtom    { atomNucleus     = nucleus
 mkAtom ABin   !nucleus = BinAtom   { atomNucleus     = nucleus
                                    , atomSuperscript = MFEmpty
                                    , atomSubscript   = MFEmpty
+                                   , atomBinForm     = BinInfix
                                    }
 mkAtom ARel   !nucleus = RelAtom   { atomNucleus     = nucleus
                                    , atomSuperscript = MFEmpty
@@ -262,8 +266,9 @@ data BoundaryType = BoundaryLeft
                   | BoundaryMiddle
                   deriving (Eq,Show)
 
+-- See The TeXbook, Chapter 17
 data MathItem = IAtom !Atom
-              | IHorizontalMaterial
+              | IHorizontalMaterial -- a rule or discretionary or penalty or "whatsit"
               | IVerticalMaterial -- \mark or \insert or \vadjust
               | IGlue -- \hskip or \mskip or \nonscript
               | IKern -- \kern or \mkern
@@ -674,7 +679,7 @@ readMathMaterial !ctx = loop []
             readLBrace
             content <- runMMDBrace <$> withMathStyle smallerStyle (readMathMaterial (ctx { mmcFractionPosition = FractionNumerator }))
             case content of
-              [item@(IGenFrac _ _ _)] -> loop (item : revList)
+              [IGenFrac _ _ _] -> doAtom (mkAtom AOrd (MFSubList content))
               _ -> throwError "No fraction after \\Ustack"
 
           -- \mathchoice<general text><general text><general text><general text>

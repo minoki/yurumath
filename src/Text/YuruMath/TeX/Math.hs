@@ -470,6 +470,8 @@ readMathToken = do
       Mabovewithdelims   -> throwError "\\abovewithdelims: not implemented yet"
       MUskewedwithdelims -> MTGenFrac <$> (GFSkewedWithDelims <$> readDelimiter <*> readDelimiter <*> readDelimiter) -- TODO: Handle keywords
 
+      MUstack -> return MTUstack
+
       Mlimits        -> return $ MTLimitsSpec Limits
       Mnolimits      -> return $ MTLimitsSpec NoLimits
       Mdisplaylimits -> return $ MTLimitsSpec DisplayLimits

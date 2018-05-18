@@ -59,31 +59,33 @@ unreadETokens !depth ts = do
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (map ((,) depth) ts ++ ts')
 
-readUntilEndGroup :: (MonadTeXState s m, MonadError String m) => Bool -> Int -> [TeXToken] -> m [TeXToken]
-readUntilEndGroup !isLong !depth revTokens = do
-  t <- nextEToken
-  case t of
-    Nothing -> throwError "unexpected end of input when reading an argument"
-    Just t@(ETCharacter _ CCEndGroup)
-      | depth == 0 -> return (reverse revTokens)
-      | otherwise -> readUntilEndGroup isLong (depth - 1) (fromEToken t : revTokens)
-    Just t@(ETCharacter _ CCBeginGroup)
-      -> readUntilEndGroup isLong (depth + 1) (fromEToken t : revTokens)
-    Just (ETCommandName _ (NControlSeq par))
-      | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
-    Just t
-      -> readUntilEndGroup isLong depth (fromEToken t : revTokens)
+readUntilEndGroup :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
+readUntilEndGroup !long = loop (0 :: Int) []
+  where
+    loop !depth revTokens = do
+      t <- nextEToken
+      case t of
+        Nothing -> throwError "unexpected end of input when reading an argument"
+        Just t@(ETCharacter _ CCEndGroup)
+          | depth == 0 -> return (reverse revTokens)
+          | otherwise -> loop (depth - 1) (fromEToken t : revTokens)
+        Just t@(ETCharacter _ CCBeginGroup)
+          -> loop (depth + 1) (fromEToken t : revTokens)
+        Just (ETCommandName _ (NControlSeq "par"))
+          | long == ShortParam -> throwError "Paragraph ended before argument was compelete"
+        Just t -> loop depth (fromEToken t : revTokens)
 
 -- reads undelimited macro argument
-readArgument :: (MonadTeXState s m, MonadError String m) => Bool -> m [TeXToken]
-readArgument !isLong = do
+readArgument :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
+readArgument !long = do
   t <- nextEToken
   case t of
     Nothing -> throwError "unexpected end of input when expecting an argument"
-    Just (ETCharacter _ CCSpace) -> readArgument isLong
+    Just (ETCharacter _ CCSpace) -> readArgument long
     Just (ETCharacter _ CCEndGroup) -> throwError "unexpected end of group"
-    Just (ETCharacter _ CCBeginGroup) -> readUntilEndGroup isLong 0 []
-    Just (ETCommandName _ (NControlSeq par)) | not isLong, par == "par" -> throwError "Paragraph ended before argument was compelete"
+    Just (ETCharacter _ CCBeginGroup) -> readUntilEndGroup long
+    Just (ETCommandName _ (NControlSeq "par"))
+      | long == ShortParam -> throwError "Paragraph ended before argument was compelete"
     Just t -> return [fromEToken t]
 
 -- reads a control sequence or an active character
@@ -123,27 +125,6 @@ readUnicodeScalarValue = do
   if isUnicodeScalarValue x
     then return $ chr $ fromIntegral x
     else throwError $ "Bad character code (" ++ show x ++ ")"
-
-{-
-testDelimiter :: (MonadTeXState s m, MonadError String m) => [TeXToken] -> m Bool
-testDelimiter [] = return True
-testDelimiter (d:ds) = do
-  t <- nextEToken
-  if etToken t == d
-    then do u <- testDelimiter
-            if u
-              then return True
-              else unreadETokens 0 [t] >> 
-    
-
-readDelimitedArgument :: (MonadTeXState s m, MonadError String m) => Bool -> [TeXToken] -> m [TeXToken]
-readDelimitedArgument !isLong [] = error "readDelimitedArgument: delimiter must not be empty"
-readDelimitedArgument !isLong delimiter@(d0:_) = do
-  t <- nextEToken
-  case t of
-    ExpansionToken _ tk | tk == d0 -> return []
-    ExpansionToken _ (TTCharacter _ CCBeginGroup) -> readUntilEndGroup
--}
 
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]
@@ -660,7 +641,7 @@ readGeneralText = do
   (t,v) <- evalToken
   case toCommonValue v of
     Just (Character _ CCSpace) -> readGeneralText -- optional spaces: ignored
-    Just (Character _ CCBeginGroup) -> readUntilEndGroup True 0 []
+    Just (Character _ CCBeginGroup) -> readUntilEndGroup LongParam
     Just Relax -> readGeneralText -- relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 

@@ -9,6 +9,7 @@ import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
+import Text.YuruMath.TeX.Macro
 import Text.YuruMath.TeX.Math
 import Control.Monad.State.Strict
 import Control.Monad.Except
@@ -17,10 +18,14 @@ import Control.Lens.Setter (modifying)
 import qualified Data.Map.Strict as Map
 import Data.OpenUnion
 
-defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) => m ()
+defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union '[CommonValue, CommonExecutable, MacroCommand], Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) => m ()
 defineBuiltins = do
   modifying (localState . tsDefinitions)
-    $ mappend (fmap Left expandableDefinitions <> Map.singleton "endcsname" (Right (injectCommonValue Endcsname)))
+    $ \s -> mconcat [fmap Left expandableDefinitions
+                    ,fmap Right executableDefinitions -- includes \endcsname
+                    ,fmap Right macroCommands
+                    ,s
+                    ]
 
 tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) => m [TeXToken]
 tokenizeAll = do
@@ -39,11 +44,11 @@ expandAll = do
     Nothing -> return []
     Just v -> (v:) <$> expandAll
 
-expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) CommonValue))]
+expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) (Union '[CommonValue, CommonExecutable, MacroCommand])))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
-type MathExpandableT = Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]
-type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable]
+type MathExpandableT = Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]
+type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable,MacroCommand]
 type MathLocalState = CommonLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String MathList
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialState input)
@@ -54,6 +59,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
         $ \m -> mconcat [fmap Left expandableDefinitions
                         ,fmap Right executableDefinitions
                         ,fmap Right mathDefinitions
+                        ,fmap Right macroCommands
                         ,m
                         ]
       runMMDGlobal <$> readMathMaterial defaultMathMaterialContext
@@ -73,35 +79,40 @@ ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenize
 
 etest1 = TestCase $ assertEqual "Expand" expected (expandAllString "\\ifnum\"F>14 Y\\else N\\fi")
   where
-    expected = Right [Character 'Y' CCLetter
-                     ]
+    expected = Right $ map liftUnion
+      [Character 'Y' CCLetter
+      ]
 
 etest2 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue \\csname fo\\else \\fi o\\endcsname")
   where
-    expected = Right [Relax
-                     ]
+    expected = Right $ map liftUnion
+      [Relax
+      ]
 
 etest3 = TestCase $ assertEqual "Expand" expected (expandAllString "\\romannumeral'123 ")
   where
-    expected = Right [Character 'l' CCOther
-                     ,Character 'x' CCOther
-                     ,Character 'x' CCOther
-                     ,Character 'x' CCOther
-                     ,Character 'i' CCOther
-                     ,Character 'i' CCOther
-                     ,Character 'i' CCOther
-                     ]
+    expected = Right $ map liftUnion
+      [Character 'l' CCOther
+      ,Character 'x' CCOther
+      ,Character 'x' CCOther
+      ,Character 'x' CCOther
+      ,Character 'i' CCOther
+      ,Character 'i' CCOther
+      ,Character 'i' CCOther
+      ]
 
 etest4 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue\\ifnum1<0\\else x\\fi\\fi")
   where
-    expected = Right [Character 'x' CCLetter
-                     ]
+    expected = Right $ map liftUnion
+      [Character 'x' CCLetter
+      ]
 
 etest5 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue\\number\"1\\else\\fi 0 ")
   where
-    expected = Right [Character '1' CCOther
-                     ,Character '6' CCOther
-                     ]
+    expected = Right $ map liftUnion
+      [Character '1' CCOther
+      ,Character '6' CCOther
+      ]
 
 mtest1 = TestCase $ assertEqual "Math" expected (runMathList True "1+1")
   where
@@ -157,6 +168,45 @@ $$a<b\showlists$$ ->
                      ,IAtom (mkAtom AOrd (MFSymbol 1 'b'))
                      ]
 
+mtest4 = TestCase $ assertEqual "Math" expected (runMathList True "\\newcommand\\frac[2]{\\Ustack{{#1} \\over #2}}\\frac12+\\frac{a}{b+c}")
+  where
+{-
+*$${1\over2}+{a\over b+c}\showlists$$ ->
+\mathord
+.\fraction, thickness = default
+.\\mathord
+.\.\fam0 1
+./\mathord
+./.\fam0 2
+\mathbin
+.\fam0 +
+\mathord
+.\fraction, thickness = default
+.\\mathord
+.\.\fam1 a
+./\mathord
+./.\fam1 b
+./\mathbin
+./.\fam0 +
+./\mathord
+./.\fam1 c
+-}
+    group l = IAtom (mkAtom AOrd (MFSubList l))
+    expected = Right
+      [group [IGenFrac GFOver
+               [group [IAtom (mkAtom AOrd (MFSymbol 0 '1'))]]
+               [IAtom (mkAtom AOrd (MFSymbol 0 '2'))]
+             ]
+      ,IAtom (mkAtom ABin (MFSymbol 0 '+'))
+      ,group [IGenFrac GFOver
+               [group [IAtom (mkAtom AOrd (MFSymbol 1 'a'))]]
+               [IAtom (mkAtom AOrd (MFSymbol 1 'b'))
+               ,IAtom (mkAtom ABin (MFSymbol 0 '+'))
+               ,IAtom (mkAtom AOrd (MFSymbol 1 'c'))
+               ]
+             ]
+      ]
+
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1
                  ,TestLabel "Expansion 2" etest2
@@ -166,6 +216,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2
                  ,TestLabel "Math 3" mtest3
+                 ,TestLabel "Math 4" mtest4
                  ]
 
 main = runTestTT tests

@@ -57,6 +57,11 @@ data SpacingState = SSNewLine
                   | SSMiddleOfLine
                   deriving (Eq,Show)
 
+-- Better name?
+data ParamLong = ShortParam -- \par is not allowed
+               | LongParam  -- \par is allowed
+               deriving (Eq,Show)
+
 data MathStyle = DisplayStyle             -- \displaystyle, 0
                | CrampedDisplayStyle      -- \crampeddisplaystyle, 1
                | TextStyle                -- \textstyle, 2
@@ -78,26 +83,6 @@ data MathClass = MathOrd   -- \mathord,   ordinary object    (0)
                | MathInner -- \mathinner, inner formula
                deriving (Eq,Show,Enum,Bounded)
 
-data ParamSpec = Undelimited
-               | DelimitedBy [TeXToken]
-               | DelimitedByBrace
-
--- xparse
-data DocumentCommandParamSpec = StandardMandatory
-                              | DelimitedByLBrace
-                              | DelimitedBy2 !Char !Char
-                              | DelimitedByWithDefault
-                              | Until [TeXToken]
-                              | Verbatim
-                              | StandardOptional
-                              | OptionalDelimitedBy !Char !Char
-                              | StandardOptionalWithDefault [TeXToken]
-                              | OptionalDelimitedByWithDefault !Char !Char [TeXToken]
-                              | OptionalStar -- s
-                              | OptionalChar !Char -- t
-                              | OptionalGroup -- g
-                              | OptionalGroupWithDefault [TeXToken] -- G
-
 data MathCode = MathCode !Word16 -- "xyzz (15-bit number) or "8000 (math active)
               | UMathCode !Int32 -- 8 bits for the math family, 3 bits for the math class, 21 bits for the character code
               deriving (Eq,Show)
@@ -115,8 +100,6 @@ data ConditionalMarker = Eelse -- \else
                        | Efi -- \fi
                        | Eor -- \or
                        deriving (Eq)
-
--- data Macro = Macro {-isLong-} !Bool [ParamSpec] [TeXToken]
 
 class (Eq e) => IsExpandable e where
   isConditional       :: e -> Bool

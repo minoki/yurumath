@@ -15,8 +15,12 @@ import Control.Lens.Setter (set,assign,modifying)
 
 initialState :: String -> CommonState (CommonLocalState e v)
 initialState input = CommonState
-                     { _ttInput = input
-                     , _ttSpacingState = SSNewLine
+                     { _tokenizerState = TokenizerState
+                                         { tsInput         = input
+                                         , tsSpacingState  = SSNewLine
+                                         -- , tsCurrentLine   = 0
+                                         -- , tsCurrentColumn = 0
+                                         }
                      , _esMaxDepth = 100
                      , _esMaxPendingToken = 100
                      , _esPendingTokenList = []
@@ -33,6 +37,7 @@ initialState input = CommonState
                             , _uccodeMap = Map.empty
                             , _mathcodeMap = Map.empty
                             , _delcodeMap = Map.empty
+                            , _endlinechar = '\r'
                             }
 
 defaultCategoryCodeOf :: Char -> CatCode

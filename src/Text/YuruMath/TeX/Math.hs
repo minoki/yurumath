@@ -332,8 +332,7 @@ deriving instance Show (MathToken m)
 
 instance (IsLocalState localstate) => IsState (MathState localstate) where
   type LocalState (MathState localstate) = localstate
-  ttInput            = commonState . ttInput
-  ttSpacingState     = commonState . ttSpacingState
+  tokenizerState     = commonState . tokenizerState
   esMaxDepth         = commonState . esMaxDepth
   esMaxPendingToken  = commonState . esMaxPendingToken
   esPendingTokenList = commonState . esPendingTokenList

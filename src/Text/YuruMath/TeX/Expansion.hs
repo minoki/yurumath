@@ -114,9 +114,6 @@ readEquals = do
     Just (d,t) -> unreadETokens d [t] -- not consumed
     Nothing -> return ()
 
-isUnicodeScalarValue :: (Integral a) => a -> Bool
-isUnicodeScalarValue x = 0 <= x && x <= 0x10FFFF && not (0xD800 <= x && x <= 0xDFFF)
-
 -- read a number between 0.."10FFFF excluding "D800.."DFFF, and convert it to a Char
 -- Note: Although neither LuaTeX nor XeTeX seems to forbid surrogate codes ("D800-"DFFF), we do.
 readUnicodeScalarValue :: (MonadTeXState s m, MonadError String m) => m Char

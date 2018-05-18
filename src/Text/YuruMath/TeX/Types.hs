@@ -52,11 +52,6 @@ data ExpansionToken = ETCommandName {-noexpand-} !Bool !CommandName
                     | ETCharacter !Char !CatCode -- non-active character
                       deriving (Eq,Show)
 
-data SpacingState = SSNewLine
-                  | SSSkipSpaces
-                  | SSMiddleOfLine
-                  deriving (Eq,Show)
-
 -- Better name?
 data ParamLong = ShortParam -- \par is not allowed
                | LongParam  -- \par is allowed
@@ -170,6 +165,19 @@ isVMode m     = m == VerticalMode   || m == InternalVerticalMode
 isMMode m     = m == MathMode       || m == DisplayMathMode
 isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m == MathMode
 
+data SpacingState = SSNewLine
+                  | SSSkipSpaces
+                  | SSMiddleOfLine
+                  deriving (Eq,Show)
+
+data TokenizerState = TokenizerState
+                      { tsInput :: String
+                      , tsSpacingState :: !SpacingState
+                      -- not implemented yet:
+                      -- , tsCurrentLine :: !Int
+                      -- , tsCurrentColumn :: !Int
+                      }
+
 data ScopeType = ScopeByBrace      -- { .. }
                | ScopeByBeginGroup -- \begingroup .. \endgroup
                | GlobalScope
@@ -188,6 +196,7 @@ data CommonLocalState ecommand value
     , _mathcodeMap         :: Map.Map Char MathCode
     , _delcodeMap          :: Map.Map Char DelimiterCode
     -- sfcodeMap           :: Map.Map Char Int
+    , _endlinechar         :: !Char
     }
 
 data ConditionalKind = CondTruthy
@@ -197,9 +206,7 @@ data ConditionalKind = CondTruthy
 
 data CommonState localstate
   = CommonState
-    { _ttInput            :: String
-    -- currentfile, currentline, currentcolumn
-    , _ttSpacingState     :: !SpacingState
+    { _tokenizerState     :: !TokenizerState
     , _esMaxDepth         :: !Int
     , _esMaxPendingToken  :: !Int
     , _esPendingTokenList :: [(Int,ExpansionToken)]
@@ -219,14 +226,14 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   uccodeMap           :: Lens' localstate (Map.Map Char Char)
   mathcodeMap         :: Lens' localstate (Map.Map Char MathCode)
   delcodeMap          :: Lens' localstate (Map.Map Char DelimiterCode)
+  endlinechar         :: Lens' localstate Char
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where
   type LocalState state
 
   -- tokenizer
-  ttInput            :: Lens' state String
-  ttSpacingState     :: Lens' state SpacingState
+  tokenizerState     :: Lens' state TokenizerState
 
   -- expansion processor
   esMaxDepth         :: Lens' state Int -- read-only?
@@ -298,11 +305,11 @@ instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalStat
   uccodeMap           = lens _uccodeMap           (\s v -> s { _uccodeMap = v })
   mathcodeMap         = lens _mathcodeMap         (\s v -> s { _mathcodeMap = v })
   delcodeMap          = lens _delcodeMap          (\s v -> s { _delcodeMap = v })
+  endlinechar         = lens _endlinechar         (\s v -> s { _endlinechar = v })
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate
-  ttInput            = lens _ttInput            (\s v -> s { _ttInput = v })
-  ttSpacingState     = lens _ttSpacingState     (\s v -> s { _ttSpacingState = v })
+  tokenizerState     = lens _tokenizerState     (\s v -> s { _tokenizerState = v })
   esMaxDepth         = lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
   esMaxPendingToken  = lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
   esPendingTokenList = lens _esPendingTokenList (\s v -> s { _esPendingTokenList = v })
@@ -322,3 +329,7 @@ localState :: IsState s => Lens' s (LocalState s)
 localState = localStates . lens head setter
   where setter [] x = error "Invalid local state"
         setter (_:xs) x = x:xs
+
+-- TODO: Better place?
+isUnicodeScalarValue :: (Integral a) => a -> Bool
+isUnicodeScalarValue x = 0 <= x && x <= 0x10FFFF && not (0xD800 <= x && x <= 0xDFFF)

@@ -51,11 +51,22 @@ data MacroParamSpec
   deriving (Eq,Show)
 
 data Macro = Macro { macroIsOuter :: !Bool
+                   , macroIsProtected :: !Bool
                    , macroDelimiterBeforeFirstParam :: [TeXToken]
                    , macroParamSpec :: [MacroParamSpec]
                    , macroReplacement :: [TeXToken] -- TODO: Generate 'parameter token'
                    }
            deriving (Eq,Show)
+
+-- Make a macro.
+-- TODO: parameter token?
+mkSimpleMacro :: [MacroParamSpec] -> [TeXToken] -> Macro
+mkSimpleMacro param rep = Macro { macroIsOuter = False
+                                , macroIsProtected = False
+                                , macroDelimiterBeforeFirstParam = []
+                                , macroParamSpec = param
+                                , macroReplacement = rep
+                                }
 
 -- \def, defCommand
 -- \gdef, gdefCommand
@@ -372,6 +383,7 @@ newcommandFamily f = do
     macro <- case defaultArg of
                Nothing -> return $ Macro
                           { macroIsOuter = False
+                          , macroIsProtected = False
                           , macroDelimiterBeforeFirstParam = []
                           , macroParamSpec = replicate numOfArgs $ StandardMandatory long
                           , macroReplacement = repText
@@ -380,6 +392,7 @@ newcommandFamily f = do
                  | numOfArgs == 0 -> throwError "Unexpected default argument"
                  | otherwise -> return $ Macro
                                 { macroIsOuter = False
+                                , macroIsProtected = False
                                 , macroDelimiterBeforeFirstParam = []
                                 , macroParamSpec = OptionalDelimited
                                                    { paramSpecIsLong = long

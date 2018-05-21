@@ -706,7 +706,7 @@ readMathField = do
         return $ case content of
           [IAtom (OrdAtom { atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
           _ -> MFSubList content
-      _ -> throwError $ "Unexpeced " ++ show t ++ "; expected a symbol or `{'"
+      _ -> throwError $ "Unexpected " ++ show t ++ "; expected a symbol or `{'"
 
 --
 -- Setting math style

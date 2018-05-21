@@ -22,10 +22,18 @@ data TokenizerContext = TokenizerContext { tcCatcodeMap :: !(Map.Map Char CatCod
                                          }
 
 defaultTokenizerContext :: TokenizerContext
-defaultTokenizerContext = TokenizerContext { tcCatcodeMap = Map.empty
-                                           , tcEndlineChar = '\r'
-                                           , tcCurrentFile = ""
-                                           }
+defaultTokenizerContext = TokenizerContext
+                          { tcCatcodeMap = Map.empty
+                          , tcEndlineChar = '\r'
+                          , tcCurrentFile = ""
+                          }
+
+latexInternalTokenizerContext :: TokenizerContext
+latexInternalTokenizerContext = TokenizerContext
+                                { tcCatcodeMap = Map.singleton '@' CCLetter
+                                , tcEndlineChar = '\r'
+                                , tcCurrentFile = ""
+                                }
 
 type TokenizerM a = ReaderT TokenizerContext (StateT TokenizerState (Except String)) a
 

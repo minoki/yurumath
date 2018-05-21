@@ -210,11 +210,13 @@ udelcodenumSet = do
   let w = UDelimiterCode value
   assign (localState . delcodeMap . at slot) (Just w)
 
-defCommand :: (MonadTeXState s m, MonadError String m) => m ()
-defCommand = do
-  cs <- required nextEToken
-  throwError "\\def: not implemented yet"
+begingroupCommand :: (MonadTeXState s m, MonadError String m) => m ()
+begingroupCommand = do
+  enterGroup ScopeByBeginGroup
 
+endgroupCommand :: (MonadTeXState s m, MonadError String m) => m ()
+endgroupCommand = do
+  leaveGroup ScopeByBeginGroup
 
 data CommonExecutable = Elet
                       | Efuturelet
@@ -224,12 +226,13 @@ data CommonExecutable = Elet
                       | Emathchardef
                       | EUmathchardef
                       | EUmathcharnumdef
-                      | Edef
                       | Ecatcode
                       | Elccode
                       | Euccode
                       | Emathcode
                       | Edelcode
+                      | Ebegingroup
+                      | Eendgroup
                       deriving (Eq,Show)
 
 -- orphaned instance...
@@ -242,12 +245,13 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonEx
   doExecute Emathchardef     = mathchardefCommand
   doExecute EUmathchardef    = umathchardefCommand
   doExecute EUmathcharnumdef = umathcharnumdefCommand
-  doExecute Edef             = defCommand
   doExecute Ecatcode         = catcodeSet
   doExecute Elccode          = lccodeSet
   doExecute Euccode          = uccodeSet
   doExecute Emathcode        = mathcodeSet
   doExecute Edelcode         = delcodeSet
+  doExecute Ebegingroup      = begingroupCommand
+  doExecute Eendgroup        = endgroupCommand
   getIntegerValue Ecatcode  = Just catcodeGet
   getIntegerValue Elccode   = Just lccodeGet
   getIntegerValue Euccode   = Just uccodeGet
@@ -267,29 +271,11 @@ executableDefinitions = Map.fromList
   ,("mathchardef",    liftUnion Emathchardef)
   ,("Umathchardef",   liftUnion EUmathchardef)
   ,("Umathcharnumdef",liftUnion EUmathcharnumdef)
-  ,("def",            liftUnion Edef)
   ,("catcode",        liftUnion Ecatcode)
   ,("lccode",         liftUnion Elccode)
   ,("uccode",         liftUnion Euccode)
   ,("mathcode",       liftUnion Emathcode)
   ,("delcode",        liftUnion Edelcode)
-
-   -- plain TeX / LaTeX
-  ,("z@",             liftUnion (IntegerConstant 0))
-  ,("@ne",            liftUnion (IntegerConstant 1))
-  ,("m@ne",           liftUnion (IntegerConstant (-1)))
-  ,("tw@",            liftUnion (IntegerConstant 2))
-  ,("sixt@@n",        liftUnion (IntegerConstant 16))
-  ,("@m",             liftUnion (IntegerConstant 1000))
-  ,("@MM",            liftUnion (IntegerConstant 20000))
-  ,("active",         liftUnion (IntegerConstant 13))
-  ,("bgroup",         liftUnion (Character '{' CCBeginGroup))
-  ,("egroup",         liftUnion (Character '}' CCEndGroup))
-
-   -- LaTeX
-  ,("@xxxii",         liftUnion (IntegerConstant 32))
-  ,("@Mi",            liftUnion (IntegerConstant 10001))
-  ,("@Mii",           liftUnion (IntegerConstant 10002))
-  ,("@Miii",          liftUnion (IntegerConstant 10003))
-  ,("@Miv",           liftUnion (IntegerConstant 10004))
+  ,("begingroup",     liftUnion Ebegingroup)
+  ,("endgroup",       liftUnion Eendgroup)
   ]

@@ -18,6 +18,7 @@ import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
+import Text.YuruMath.TeX.Math.Style
 import qualified Data.Map.Strict as Map
 import Data.Word
 import Data.Bits
@@ -30,53 +31,6 @@ import Control.Lens.Setter (assign,modifying)
 import Control.Lens.TH
 import Data.OpenUnion
 import TypeFun.Data.List (Elem,Substract,SubList,Delete,(:++:))
-
-isCramped :: MathStyle -> Bool
-isCramped CrampedDisplayStyle      = True
-isCramped CrampedTextStyle         = True
-isCramped CrampedScriptStyle       = True
-isCramped CrampedScriptScriptStyle = True
-isCramped _ = False
-
--- sqrt, overline
-makeCramped :: MathStyle -> MathStyle
-makeCramped DisplayStyle      = CrampedDisplayStyle
-makeCramped TextStyle         = CrampedTextStyle
-makeCramped ScriptStyle       = CrampedScriptStyle
-makeCramped ScriptScriptStyle = CrampedScriptScriptStyle
-makeCramped crampedstyle = crampedstyle
-
-makeCrampedIf :: Bool -> MathStyle -> MathStyle
-makeCrampedIf True  = makeCramped
-makeCrampedIf False = id
-
--- superscript
-superscriptStyle :: MathStyle -> MathStyle
-superscriptStyle        DisplayStyle =        ScriptStyle
-superscriptStyle CrampedDisplayStyle = CrampedScriptStyle
-superscriptStyle        TextStyle    =        ScriptStyle
-superscriptStyle CrampedTextStyle    = CrampedScriptStyle
-superscriptStyle        ScriptStyle  =        ScriptScriptStyle
-superscriptStyle CrampedScriptStyle  = CrampedScriptScriptStyle
-superscriptStyle scriptscriptstyle = scriptscriptstyle
-
--- subscript
-subscriptStyle :: MathStyle -> MathStyle
-subscriptStyle = makeCramped . superscriptStyle
-
--- numerator
-smallerStyle :: MathStyle -> MathStyle
-smallerStyle        DisplayStyle =        TextStyle
-smallerStyle CrampedDisplayStyle = CrampedTextStyle
-smallerStyle        TextStyle    =        ScriptStyle
-smallerStyle CrampedTextStyle    = CrampedScriptStyle
-smallerStyle        ScriptStyle  =        ScriptScriptStyle
-smallerStyle CrampedScriptStyle  = CrampedScriptScriptStyle
-smallerStyle scriptscriptstyle = scriptscriptstyle
-
--- denominator
-denominatorStyle :: MathStyle -> MathStyle
-denominatorStyle = makeCramped . smallerStyle
 
 data AtomType = AOrd   -- ordinary
               | AOp    -- large operator

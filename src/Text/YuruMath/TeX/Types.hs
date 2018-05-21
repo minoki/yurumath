@@ -57,16 +57,6 @@ data ParamLong = ShortParam -- \par is not allowed
                | LongParam  -- \par is allowed
                deriving (Eq,Show)
 
-data MathStyle = DisplayStyle             -- \displaystyle, 0
-               | CrampedDisplayStyle      -- \crampeddisplaystyle, 1
-               | TextStyle                -- \textstyle, 2
-               | CrampedTextStyle         -- \crampedtextstyle, 3
-               | ScriptStyle              -- \scriptstyle, 4
-               | CrampedScriptStyle       -- \crampedscriptstyle, 5
-               | ScriptScriptStyle        -- \scriptscriptstyle, 6
-               | CrampedScriptScriptStyle -- \crampedscriptscriptstyle, 7
-               deriving (Eq,Show,Enum,Bounded)
-
 data MathClass = MathOrd   -- \mathord,   ordinary object    (0)
                | MathOp    -- \mathop,    large operator     (1)
                | MathBin   -- \mathbin,   binary operation   (2)

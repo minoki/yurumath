@@ -8,6 +8,7 @@ import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
 import Text.YuruMath.TeX.Math
+import Text.YuruMath.TeX.Math.Style
 import Text.YuruMath.TeX.MathData
 import Text.YuruMath.TeX.PostMath
 import Text.YuruMath.Convert.TeXToMML

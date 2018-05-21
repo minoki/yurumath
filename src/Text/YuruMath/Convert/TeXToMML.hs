@@ -1,6 +1,7 @@
 module Text.YuruMath.Convert.TeXToMML where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Math
+import Text.YuruMath.TeX.Math.Style
 import Text.YuruMath.TeX.PostMath
 import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A

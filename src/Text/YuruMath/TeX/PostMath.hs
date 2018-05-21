@@ -1,6 +1,7 @@
 module Text.YuruMath.TeX.PostMath where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Math
+import Text.YuruMath.TeX.Math.Style
 import Data.Bifunctor
 
 doChoice :: MathStyle -> MathList -> MathList -> MathList -> MathList -> MathList

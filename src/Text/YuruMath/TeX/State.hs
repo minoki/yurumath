@@ -37,7 +37,7 @@ initialState input = CommonState
                             , _uccodeMap = Map.empty
                             , _mathcodeMap = Map.empty
                             , _delcodeMap = Map.empty
-                            , _endlinechar = '\r'
+                            , _endlinechar = ord '\r'
                             }
 
 defaultCategoryCodeOf :: Char -> CatCode

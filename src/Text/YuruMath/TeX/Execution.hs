@@ -210,6 +210,16 @@ udelcodenumSet = do
   let w = UDelimiterCode value
   assign (localState . delcodeMap . at slot) (Just w)
 
+endlinecharGet :: (MonadTeXState s m, MonadError String m) => m Integer
+endlinecharGet = do
+  uses (localState . endlinechar) fromIntegral
+
+endlinecharSet :: (MonadTeXState s m, MonadError String m) => m ()
+endlinecharSet = do
+  readEquals
+  value <- readIntBetween minBound maxBound
+  assign (localState . endlinechar) value
+
 begingroupCommand :: (MonadTeXState s m, MonadError String m) => m ()
 begingroupCommand = do
   enterGroup ScopeByBeginGroup
@@ -233,6 +243,7 @@ data CommonExecutable = Elet
                       | Edelcode
                       | Ebegingroup
                       | Eendgroup
+                      | Eendlinechar
                       deriving (Eq,Show)
 
 -- orphaned instance...
@@ -252,11 +263,13 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonEx
   doExecute Edelcode         = delcodeSet
   doExecute Ebegingroup      = begingroupCommand
   doExecute Eendgroup        = endgroupCommand
+  doExecute Eendlinechar     = endlinecharSet
   getIntegerValue Ecatcode  = Just catcodeGet
   getIntegerValue Elccode   = Just lccodeGet
   getIntegerValue Euccode   = Just uccodeGet
   getIntegerValue Emathcode = Just mathcodeGet
   getIntegerValue Edelcode  = Just delcodeGet
+  getIntegerValue Eendlinechar = Just endlinecharGet
   getIntegerValue _         = Nothing
 
 executableDefinitions :: (SubList '[CommonValue,CommonExecutable] set) => Map.Map Text (Union set)
@@ -278,4 +291,5 @@ executableDefinitions = Map.fromList
   ,("delcode",        liftUnion Edelcode)
   ,("begingroup",     liftUnion Ebegingroup)
   ,("endgroup",       liftUnion Eendgroup)
+  ,("endlinechar",    liftUnion Eendlinechar)
   ]

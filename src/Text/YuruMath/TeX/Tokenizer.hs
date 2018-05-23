@@ -17,21 +17,21 @@ import qualified Data.Map as Map
 import Numeric (readHex)
 
 data TokenizerContext = TokenizerContext { tcCatcodeMap :: !(Map.Map Char CatCode)
-                                         , tcEndlineChar :: !Char
+                                         , tcEndlineChar :: !Int
                                          , tcCurrentFile :: !Text
                                          }
 
 defaultTokenizerContext :: TokenizerContext
 defaultTokenizerContext = TokenizerContext
                           { tcCatcodeMap = Map.empty
-                          , tcEndlineChar = '\r'
+                          , tcEndlineChar = ord '\r'
                           , tcCurrentFile = ""
                           }
 
 latexInternalTokenizerContext :: TokenizerContext
 latexInternalTokenizerContext = TokenizerContext
                                 { tcCatcodeMap = Map.singleton '@' CCLetter
-                                , tcEndlineChar = '\r'
+                                , tcEndlineChar = ord '\r'
                                 , tcCurrentFile = ""
                                 }
 
@@ -94,7 +94,7 @@ doNextToken (TokenizerContext { tcCatcodeMap = !ccmap, tcEndlineChar = !elchar }
         { CCEscape -> case cs of
             [] -> throwError $ "Unexpected end of input after escape char `" ++ [c] ++ "'"
             '\n':css -> do
-              return (Just $ TTCommandName $ NControlSeq $ T.singleton elchar
+              return (Just $ TTCommandName $ NControlSeq $ if isUnicodeScalarValue elchar then T.singleton (chr elchar) else ""
                      ,TokenizerState { tsInput = css, tsSpacingState = SSNewLine }
                      )
             -- ^^ notation
@@ -148,7 +148,7 @@ doNextToken (TokenizerContext { tcCatcodeMap = !ccmap, tcEndlineChar = !elchar }
                         ,TokenizerState { tsInput = csss, tsSpacingState = SSSkipSpaces }
                         )
       ; CCEndLine ->
-          return (Just $ TTCommandName $ NControlSeq $ T.singleton elchar
+          return (Just $ TTCommandName $ NControlSeq $ if isUnicodeScalarValue elchar then T.singleton (chr elchar) else ""
                  ,TokenizerState { tsInput = dropWhile (/= '\n') css, tsSpacingState = SSNewLine }
                  )
 
@@ -193,6 +193,7 @@ parseSuperscriptNotation c2 (x1:x2:css)
 
 -- ^^X, like ^^M, ^^?
 parseSuperscriptNotation c2 (d:css)
+  -- TODO: If d == '\n', then return <endlinechar> `xor` 0x40
   | ord d < 0x80 = Just $ Right (chr (ord d `xor` 0x40), css)
 
 parseSuperscriptNotation c2 _ = Nothing

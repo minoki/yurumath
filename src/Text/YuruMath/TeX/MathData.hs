@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Text.YuruMath.TeX.MathData where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State

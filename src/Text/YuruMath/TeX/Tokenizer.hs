@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Text.YuruMath.TeX.Tokenizer where
 import Text.YuruMath.TeX.Types

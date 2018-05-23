@@ -242,8 +242,11 @@ stringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 stringCommand = do
   t <- required nextEToken
   case t of
-    ETCommandName _ (NControlSeq name) ->
-      stringToEToken ('\\' : T.unpack name)
+    ETCommandName _ (NControlSeq name) -> do
+      ech <- use (localState . escapechar)
+      if isUnicodeScalarValue ech
+      then stringToEToken (chr ech : T.unpack name)
+      else stringToEToken (T.unpack name)
     ETCommandName _ (NActiveChar c) ->
       stringToEToken [c]
     ETCharacter c _ ->

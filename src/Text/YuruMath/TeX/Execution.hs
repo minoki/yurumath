@@ -220,6 +220,16 @@ endlinecharSet = do
   value <- readIntBetween minBound maxBound
   assign (localState . endlinechar) value
 
+escapecharGet :: (MonadTeXState s m, MonadError String m) => m Integer
+escapecharGet = do
+  uses (localState . escapechar) fromIntegral
+
+escapecharSet :: (MonadTeXState s m, MonadError String m) => m ()
+escapecharSet = do
+  readEquals
+  value <- readIntBetween minBound maxBound
+  assign (localState . escapechar) value
+
 begingroupCommand :: (MonadTeXState s m, MonadError String m) => m ()
 begingroupCommand = do
   enterGroup ScopeByBeginGroup
@@ -244,6 +254,7 @@ data CommonExecutable = Elet
                       | Ebegingroup
                       | Eendgroup
                       | Eendlinechar
+                      | Eescapechar
                       deriving (Eq,Show)
 
 -- orphaned instance...
@@ -264,12 +275,14 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonEx
   doExecute Ebegingroup      = begingroupCommand
   doExecute Eendgroup        = endgroupCommand
   doExecute Eendlinechar     = endlinecharSet
+  doExecute Eescapechar      = escapecharSet
   getIntegerValue Ecatcode  = Just catcodeGet
   getIntegerValue Elccode   = Just lccodeGet
   getIntegerValue Euccode   = Just uccodeGet
   getIntegerValue Emathcode = Just mathcodeGet
   getIntegerValue Edelcode  = Just delcodeGet
   getIntegerValue Eendlinechar = Just endlinecharGet
+  getIntegerValue Eescapechar  = Just escapecharGet
   getIntegerValue _         = Nothing
 
 executableDefinitions :: (SubList '[CommonValue,CommonExecutable] set) => Map.Map Text (Union set)
@@ -292,4 +305,5 @@ executableDefinitions = Map.fromList
   ,("begingroup",     liftUnion Ebegingroup)
   ,("endgroup",       liftUnion Eendgroup)
   ,("endlinechar",    liftUnion Eendlinechar)
+  ,("escapechar",     liftUnion Eescapechar)
   ]

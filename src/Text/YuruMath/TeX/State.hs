@@ -38,6 +38,7 @@ initialState input = CommonState
                             , _mathcodeMap = Map.empty
                             , _delcodeMap = Map.empty
                             , _endlinechar = ord '\r'
+                            , _escapechar = ord '\\'
                             }
 
 defaultCategoryCodeOf :: Char -> CatCode

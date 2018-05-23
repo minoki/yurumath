@@ -11,6 +11,7 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
 import Text.YuruMath.TeX.Macro
 import Text.YuruMath.TeX.Math
+import Text.YuruMath.TeX.Expr
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Cons (_head)
@@ -18,12 +19,13 @@ import Control.Lens.Setter (modifying)
 import qualified Data.Map.Strict as Map
 import Data.OpenUnion
 
-defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union '[CommonValue, CommonExecutable, MacroCommand], Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) => m ()
+defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union '[CommonValue, CommonExecutable, MacroCommand, ExprCommand], Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) => m ()
 defineBuiltins = do
   modifying (localState . tsDefinitions)
     $ \s -> mconcat [fmap Left expandableDefinitions
                     ,fmap Right executableDefinitions -- includes \endcsname
                     ,fmap Right macroCommands
+                    ,fmap Right exprCommands
                     ,s
                     ]
 
@@ -44,11 +46,11 @@ expandAll = do
     Nothing -> return []
     Just v -> (v:) <$> expandAll
 
-expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) (Union '[CommonValue, CommonExecutable, MacroCommand])))]
+expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) (Union '[CommonValue, CommonExecutable, MacroCommand, ExprCommand])))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
 type MathExpandableT = Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]
-type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable,MacroCommand]
+type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable,MacroCommand,ExprCommand]
 type MathLocalState = CommonLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String MathList
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialState input)
@@ -60,6 +62,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
                         ,fmap Right executableDefinitions
                         ,fmap Right mathDefinitions
                         ,fmap Right macroCommands
+                        ,fmap Right exprCommands
                         ,m
                         ]
       runMMDGlobal <$> readMathMaterial defaultMathMaterialContext
@@ -112,6 +115,13 @@ etest5 = TestCase $ assertEqual "Expand" expected (expandAllString "\\iftrue\\nu
     expected = Right $ map liftUnion
       [Character '1' CCOther
       ,Character '6' CCOther
+      ]
+
+etest6 = TestCase $ assertEqual "\\numexpr" expected (expandAllString "\\number\\numexpr(10+2*3)/  ( 3+6 ) * 4+-14/\\numexpr-2-3\\relax\\relax")
+  where
+    expected = Right $ map liftUnion
+      [Character '1' CCOther
+      ,Character '1' CCOther
       ]
 
 mtest1 = TestCase $ assertEqual "Math" expected (runMathList True "1+1")
@@ -213,6 +223,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 3" etest3
                  ,TestLabel "Expansion 4" etest4
                  ,TestLabel "Expansion 5" etest5
+                 ,TestLabel "Expansion 6 (\\numexpr)" etest6
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2
                  ,TestLabel "Math 3" mtest3

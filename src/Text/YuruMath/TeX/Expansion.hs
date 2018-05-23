@@ -160,6 +160,36 @@ evalToken = do
     ETCharacter c cc ->
       return (t,injectCommonValue $ Character c cc)
 
+maybeEvalToken :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
+maybeEvalToken = do
+  et <- nextETokenWithDepth
+  case et of
+    Just (d,t) ->
+      case t of
+        ETCommandName False name -> do
+          m <- use (localState . definitionAt name)
+          case m of
+            Left e | Just v <- isConditionalMarker e -> do
+                       cs <- use conditionals
+                       case cs of
+                         CondTest:_ -> do
+                           unreadETokens d [t]
+                           return $ Just (ETCommandName False (NControlSeq "relax"), injectCommonValue $ Relax)
+                         _ -> do
+                           r <- doExpand e
+                           unreadETokens (d+1) r
+                           maybeEvalToken
+            Left e -> do
+              r <- doExpand e
+              unreadETokens (d+1) r
+              maybeEvalToken
+            Right v -> return $ Just (t,v) -- non-expandable commands are not executed
+        ETCommandName True name -> do
+          return $ Just (t,injectCommonValue $ Unexpanded name)
+        ETCharacter c cc ->
+          return $ Just (t,injectCommonValue $ Character c cc)
+    Nothing -> return Nothing
+
 evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (Value s))
 evalToValue = do
   et <- nextETokenWithDepth

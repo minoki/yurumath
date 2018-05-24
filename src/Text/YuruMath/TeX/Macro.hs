@@ -17,6 +17,20 @@ import qualified Data.Map as Map
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign)
 
+data MacroDefPrefix = MacroDefPrefix
+                      { prefixGlobal    :: !Bool
+                      , prefixLong      :: !Bool
+                      , prefixOuter     :: !Bool
+                      , prefixProtected :: !Bool
+                      }
+                    deriving (Eq)
+
+unprefixed :: MacroDefPrefix
+unprefixed = MacroDefPrefix False False False False
+
+globalPrefix :: MacroDefPrefix
+globalPrefix = MacroDefPrefix True False False False
+
 data MacroParamSpec
   = StandardMandatory { paramSpecIsLong   :: !ParamLong } -- m
   | DelimitedByLBrace { paramSpecIsLong   :: !ParamLong } -- l
@@ -419,20 +433,72 @@ providecommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXStat
 providecommandCommand = newcommandFamily $ \_name isUndefined doDefine -> do
   when isUndefined doDefine
 
-data MacroCommand = Mnewcommand
+defCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
+defCommand name !prefix = throwError $ "\\" ++ name ++ ": not implemented yet"
+
+edefCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
+edefCommand name !prefix = throwError $ "\\" ++ name ++ ": not implemented yet"
+
+doPrefix :: (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadError String m, Union vset ~ Value s, Show (Union vset)) => String -> MacroDefPrefix -> m ()
+doPrefix name !prefix = do
+  (et,v) <- evalToken
+  case toCommonValue v of
+    Just Relax -> doPrefix name prefix -- ignore \relax
+    Just (Character _ CCSpace) -> doPrefix name prefix -- ignore spaces
+    _ -> (onMacroCommand @> (\_ -> throwError $ "Invalid prefix " ++ name ++ " on " ++ show v)) v
+  where
+    onMacroCommand Mdef = defCommand "def" prefix
+    onMacroCommand Medef = edefCommand "edef" prefix
+    onMacroCommand Mgdef = defCommand "gdef" prefix { prefixGlobal = True }
+    onMacroCommand Mxdef = edefCommand "xdef" prefix { prefixGlobal = True }
+    onMacroCommand Mouter = doPrefix "outer" prefix { prefixOuter = True }
+    onMacroCommand Mlong = doPrefix "long" prefix { prefixLong = True }
+    onMacroCommand Mprotected = doPrefix "protected" prefix { prefixProtected = True }
+    onMacroCommand v = throwError $ "Invalid prefix " ++ name ++ " on " ++ show v
+
+data MacroCommand = Mdef
+                  | Medef
+                  | Mgdef
+                  | Mxdef
+                  | Mouter
+                  | Mlong
+                  | Mprotected
+                  | Mnewcommand
                   | Mrenewcommand
                   | Mprovidecommand
                   deriving (Eq,Show)
 
-instance (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m, Monad m) => DoExecute MacroCommand m where
-  doExecute Mnewcommand = newcommandCommand
-  doExecute Mrenewcommand = renewcommandCommand
+instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadError String m, Monad m, Union vset ~ Value s, Show (Union vset)) => DoExecute MacroCommand m where
+  doExecute Mdef       = defCommand "def" unprefixed
+  doExecute Medef      = edefCommand "edef" unprefixed
+  doExecute Mgdef      = defCommand "gdef" globalPrefix
+  doExecute Mxdef      = edefCommand "xdef" globalPrefix
+  doExecute Mouter     = doPrefix "outer" (unprefixed { prefixOuter = True })
+  doExecute Mlong      = doPrefix "long" (unprefixed { prefixLong = True })
+  doExecute Mprotected = doPrefix "protected" (unprefixed { prefixProtected = True })
+  doExecute Mnewcommand     = newcommandCommand
+  doExecute Mrenewcommand   = renewcommandCommand
   doExecute Mprovidecommand = providecommandCommand
+  doGlobal Mdef       = defCommand "def" globalPrefix
+  doGlobal Medef      = edefCommand "edef" globalPrefix
+  doGlobal Mgdef      = defCommand "gdef" globalPrefix
+  doGlobal Mxdef      = edefCommand "xdef" globalPrefix
+  doGlobal Mouter     = doPrefix "outer" (globalPrefix { prefixOuter = True })
+  doGlobal Mlong      = doPrefix "long" (globalPrefix { prefixLong = True })
+  doGlobal Mprotected = doPrefix "protected" (globalPrefix { prefixProtected = True })
+  doGlobal x          = can'tBeGlobal x
   getIntegerValue _ = Nothing
 
 macroCommands :: (Elem MacroCommand set) => Map.Map Text (Union set)
 macroCommands = Map.fromList
-  [("newcommand",    liftUnion Mnewcommand)
+  [("def",           liftUnion Mdef)
+  ,("edef",          liftUnion Medef)
+  ,("gdef",          liftUnion Mgdef)
+  ,("xdef",          liftUnion Mxdef)
+  ,("outer",         liftUnion Mouter)
+  ,("long",          liftUnion Mlong)
+  ,("protected",     liftUnion Mprotected)
+  ,("newcommand",    liftUnion Mnewcommand)
   ,("renewcommand",  liftUnion Mrenewcommand)
   ,("providecommand",liftUnion Mprovidecommand)
   ]

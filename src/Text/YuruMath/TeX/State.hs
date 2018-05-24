@@ -13,22 +13,8 @@ import qualified Data.Map as Map
 import Control.Lens.Getter (view,use)
 import Control.Lens.Setter (set,assign,modifying)
 
-initialState :: String -> CommonState (CommonLocalState e v)
-initialState input = CommonState
-                     { _tokenizerState = TokenizerState
-                                         { tsInput         = input
-                                         , tsSpacingState  = SSNewLine
-                                         -- , tsCurrentLine   = 0
-                                         -- , tsCurrentColumn = 0
-                                         }
-                     , _esMaxDepth = 100
-                     , _esMaxPendingToken = 100
-                     , _esPendingTokenList = []
-                     , _localStates = [initialLocalState]
-                     , _mode = VerticalMode
-                     , _conditionals = []
-                     }
-  where initialLocalState = CommonLocalState
+initialLocalState :: CommonLocalState e v
+initialLocalState = CommonLocalState
                             { _scopeType = GlobalScope
                             , _tsDefinitions = Map.empty
                             , _tsActiveDefinitions = Map.empty
@@ -40,6 +26,38 @@ initialState input = CommonState
                             , _endlinechar = ord '\r'
                             , _escapechar = ord '\\'
                             }
+
+initialState :: String -> CommonState (CommonLocalState e v)
+initialState input = CommonState
+  { _tokenizerState = TokenizerState
+                      { tsInput         = input
+                      , tsSpacingState  = SSNewLine
+                      -- , tsCurrentLine   = 0
+                      -- , tsCurrentColumn = 0
+                      }
+  , _esMaxDepth = 100
+  , _esMaxPendingToken = 100
+  , _esPendingTokenList = []
+  , _localStates = [initialLocalState]
+  , _mode = VerticalMode
+  , _conditionals = []
+  }
+
+initialStateWithLocalState :: l -> String -> CommonState l
+initialStateWithLocalState localState input = CommonState
+  { _tokenizerState = TokenizerState
+                      { tsInput         = input
+                      , tsSpacingState  = SSNewLine
+                      -- , tsCurrentLine   = 0
+                      -- , tsCurrentColumn = 0
+                      }
+  , _esMaxDepth = 100
+  , _esMaxPendingToken = 100
+  , _esPendingTokenList = []
+  , _localStates = [localState]
+  , _mode = VerticalMode
+  , _conditionals = []
+  }
 
 defaultCategoryCodeOf :: Char -> CatCode
 defaultCategoryCodeOf c = case c of

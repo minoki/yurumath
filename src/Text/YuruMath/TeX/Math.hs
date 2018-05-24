@@ -247,17 +247,21 @@ type MathList = [MathItem] -- Use Data.Sequence?
 
 data MathState localstate
   = MathState
-    { _commonState :: !(CommonState localstate)
+    { _mCommonState :: !(CommonState localstate)
     , _currentMathStyle :: !MathStyle
     }
 
 initialMathState :: Bool -> CommonState localstate -> MathState localstate
 initialMathState !isDisplay !commonState
-  = MathState { _commonState = commonState { _mode = if isDisplay then DisplayMathMode else MathMode }
+  = MathState { _mCommonState = commonState { _mode = if isDisplay then DisplayMathMode else MathMode }
               , _currentMathStyle = if isDisplay then DisplayStyle else TextStyle
               }
 
 makeLenses ''MathState
+
+instance (IsLocalState localstate) => IsState (MathState localstate) where
+  type LocalState (MathState localstate) = localstate
+  commonState = mCommonState
 
 data MathToken m where
   MTChar       :: !Char -> MathToken m -- letter, other, \char or \chardef-ed
@@ -284,16 +288,6 @@ data MathToken m where
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
-
-instance (IsLocalState localstate) => IsState (MathState localstate) where
-  type LocalState (MathState localstate) = localstate
-  tokenizerState     = commonState . tokenizerState
-  esMaxDepth         = commonState . esMaxDepth
-  esMaxPendingToken  = commonState . esMaxPendingToken
-  esPendingTokenList = commonState . esPendingTokenList
-  localStates        = commonState . localStates
-  mode               = commonState . mode
-  conditionals       = commonState . conditionals
 
 type MathValueList = '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands]
 

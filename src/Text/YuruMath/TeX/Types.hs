@@ -210,6 +210,7 @@ data CommonState localstate
 class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => IsLocalState localstate where
   type ExpandableT localstate
   type ValueT localstate
+  commonLocalState    :: Lens' localstate (CommonLocalState (ExpandableT localstate) (ValueT localstate))
   scopeType           :: Lens' localstate ScopeType
   tsDefinitions       :: Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
   tsActiveDefinitions :: Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
@@ -220,10 +221,22 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   delcodeMap          :: Lens' localstate (Map.Map Char DelimiterCode)
   endlinechar         :: Lens' localstate Int
   escapechar          :: Lens' localstate Int
+  scopeType           = commonLocalState . scopeType
+  tsDefinitions       = commonLocalState . tsDefinitions
+  tsActiveDefinitions = commonLocalState . tsActiveDefinitions
+  catcodeMap          = commonLocalState . catcodeMap
+  lccodeMap           = commonLocalState . lccodeMap
+  uccodeMap           = commonLocalState . uccodeMap
+  mathcodeMap         = commonLocalState . mathcodeMap
+  delcodeMap          = commonLocalState . delcodeMap
+  endlinechar         = commonLocalState . endlinechar
+  escapechar          = commonLocalState . escapechar
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where
   type LocalState state
+
+  commonState        :: Lens' state (CommonState (LocalState state))
 
   -- tokenizer
   tokenizerState     :: Lens' state TokenizerState
@@ -232,11 +245,19 @@ class (IsLocalState (LocalState state)) => IsState state where
   esMaxDepth         :: Lens' state Int -- read-only?
   esMaxPendingToken  :: Lens' state Int -- read-only?
   esPendingTokenList :: Lens' state [(Int,ExpansionToken)]
+  conditionals       :: Lens' state [ConditionalKind]
 
   -- others
   localStates        :: Lens' state [LocalState state]
   mode               :: Lens' state Mode
-  conditionals       :: Lens' state [ConditionalKind]
+
+  tokenizerState     = commonState . tokenizerState
+  esMaxDepth         = commonState . esMaxDepth
+  esMaxPendingToken  = commonState . esMaxPendingToken
+  esPendingTokenList = commonState . esPendingTokenList
+  conditionals       = commonState . conditionals
+  localStates        = commonState . localStates
+  mode               = commonState . mode
 
 class (IsExpandable e, Monad m) => DoExpand e m where
   doExpand               :: e -> m [ExpansionToken]
@@ -299,6 +320,7 @@ instance Show ConditionalMarker where
 instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalState ecommand value) where
   type ExpandableT (CommonLocalState ecommand value) = ecommand
   type ValueT (CommonLocalState ecommand value) = value
+  commonLocalState    = id
   scopeType           = lens _scopeType           (\s v -> s { _scopeType = v})
   tsDefinitions       = lens _tsDefinitions       (\s v -> s { _tsDefinitions = v })
   tsActiveDefinitions = lens _tsActiveDefinitions (\s v -> s { _tsActiveDefinitions = v })
@@ -312,6 +334,7 @@ instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalStat
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate
+  commonState        = id
   tokenizerState     = lens _tokenizerState     (\s v -> s { _tokenizerState = v })
   esMaxDepth         = lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
   esMaxPendingToken  = lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })

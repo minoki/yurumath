@@ -279,6 +279,8 @@ data MathToken m where
   MTGenFrac    :: !GenFrac -> MathToken m -- \over, \atop, \above<dimen>, ..withdelims<delim><delim>
   MTUstack     :: MathToken m -- \Ustack
   MTChoice     :: MathToken m -- \mathchoice
+  MTStopInline :: MathToken m -- `$' or \Ustopmath
+  MTStopDisplay :: MathToken m -- `$$' or \Ustopdisplaymath
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
@@ -320,7 +322,14 @@ readMathToken = do
     doCommonValue v = case v of
       Character c CCBeginGroup   -> return $ Just MTLBrace
       Character c CCEndGroup     -> return $ Just MTRBrace
-      Character c CCMathShift    -> throwError "math shift is not supported"
+      Character _ CCMathShift -> do
+        m <- use mode
+        if m == DisplayMathMode
+          then do et <- nextEToken
+                  case et of
+                    Just (ETCharacter _ CCMathShift) -> return $ Just MTStopDisplay
+                    _ -> throwError "Display math should end with $$."
+          else return $ Just MTStopInline
       Character c CCAlignmentTab -> throwError "alignment tab: not implemented yet"
       Character c CCSup          -> return $ Just MTSup
       Character c CCSub          -> return $ Just MTSub
@@ -431,6 +440,9 @@ readMathToken = do
       -- \mathchoice<general text><general text><general text><general text>
       Mmathchoice -> return MTChoice
 
+      MUstopmath -> return MTStopInline
+      MUstopdisplaymath -> return MTStopDisplay
+
       _ -> throwError $ show v ++ ": not implemented yet"
 
 readDelimiter :: (MonadMathState localstate set m, MonadError String m) => m DelimiterCode
@@ -457,6 +469,8 @@ class (Functor f) => MathMaterialEnding f where
   onRightBrace :: MonadError String m => m MathList -> m (f MathList)
   onMiddleDelim :: MonadError String m => DelimiterCode -> m MathList -> m (f MathList)
   onRightDelim :: MonadError String m => DelimiterCode -> m MathList -> m (f MathList)
+  onStopInlineMath :: MonadError String m => m MathList -> m (f MathList)
+  onStopDisplayMath :: MonadError String m => m MathList -> m (f MathList)
 
 newtype MMDGlobal a = MMDGlobal { runMMDGlobal :: a } deriving (Functor)
 instance MathMaterialEnding MMDGlobal where
@@ -464,6 +478,8 @@ instance MathMaterialEnding MMDGlobal where
   onRightBrace _ = throwError "Unexpected `}': expected end of input"
   onMiddleDelim _ _ = throwError "Unexpected \\middle: expected end of input"
   onRightDelim _ _ = throwError "Unexpected \\right: expected end of input"
+  onStopInlineMath _ = throwError "Unexpected `$': expected end of input"
+  onStopDisplayMath _ = throwError "Unexpected `$$': expected end of input"
 
 newtype MMDBrace a = MMDBrace { runMMDBrace :: a } deriving (Functor)
 instance MathMaterialEnding MMDBrace where
@@ -471,6 +487,8 @@ instance MathMaterialEnding MMDBrace where
   onRightBrace m = MMDBrace <$> m
   onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `}'"
   onRightDelim _ _ = throwError "Unexpected \\right: expected `}'"
+  onStopInlineMath _ = throwError "Unexpected `$': expected `}'"
+  onStopDisplayMath _ = throwError "Unexpected `$$': expected `}'"
 
 data MMDLeftRight a = MMDRight !DelimiterCode a
                     | MMDMiddle !DelimiterCode a
@@ -480,17 +498,37 @@ instance MathMaterialEnding MMDLeftRight where
   onRightBrace _ = throwError "Unexpected `}': expected \\right"
   onMiddleDelim delim m = MMDMiddle delim <$> m
   onRightDelim delim m = MMDRight delim <$> m
+  onStopInlineMath _ = throwError "Unexpected `$': expected \\right"
+  onStopDisplayMath _ = throwError "Unexpected `$$': expected \\right"
 
-data FractionPosition = NotInFraction
-                      | FractionNumerator -- after \Ustack
-                      | FractionDenominator -- after \over-like commands
-                      deriving (Eq)
+newtype MMDInline a = MMDInline { runInlineMath :: a } deriving (Functor)
+instance MathMaterialEnding MMDInline where
+  onEndOfInput _ = throwError "Unexpected end of input: expected `$'"
+  onRightBrace _ = throwError "Unexpected `}': expected `$'"
+  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `$'"
+  onRightDelim _ _ = throwError "Unexpected \\right: expected `$'"
+  onStopInlineMath m = MMDInline <$> m
+  onStopDisplayMath _ = throwError "Unexpected \\Ustopdisplaymath: expected `$'"
 
-newtype MathMaterialContext = MathMaterialContext { mmcFractionPosition :: FractionPosition
+newtype MMDDisplay a = MMDDisplay { runDisplayMath :: a } deriving (Functor)
+instance MathMaterialEnding MMDDisplay where
+  onEndOfInput _ = throwError "Unexpected end of input: expected `$$'"
+  onRightBrace _ = throwError "Unexpected `}': expected `$$'"
+  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `$$'"
+  onRightDelim _ _ = throwError "Unexpected \\right: expected `$$'"
+  onStopInlineMath _ = throwError "Unexpected \\Ustopmath: expected `$$'"
+  onStopDisplayMath m = MMDDisplay <$> m
+
+data MathPosition = NotInFraction
+                  | FractionNumerator -- after \Ustack
+                  | FractionDenominator -- after \over-like commands
+                  deriving (Eq)
+
+newtype MathMaterialContext = MathMaterialContext { mmcPosition :: MathPosition
                                                   }
 
 defaultMathMaterialContext :: MathMaterialContext
-defaultMathMaterialContext = MathMaterialContext { mmcFractionPosition = NotInFraction
+defaultMathMaterialContext = MathMaterialContext { mmcPosition = NotInFraction
                                                  }
 
 readMathMaterial :: forall f localstate set m. (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => MathMaterialContext -> m (f MathList)
@@ -538,7 +576,7 @@ readMathMaterial !ctx = loop []
           -- { <math mode material> }
           MTLBrace -> do
             enterGroup ScopeByBrace
-            content <- runMMDBrace <$> withMathStyle id (readMathMaterial (ctx { mmcFractionPosition = NotInFraction })) -- MMDBrace
+            content <- runMMDBrace <$> withMathStyle id (readMathMaterial (ctx { mmcPosition = NotInFraction })) -- MMDBrace
             case content of
               [item@(IAtom (AccAtom {}))] -> loop (item : revList) -- single Acc atom
               _ -> doAtom (mkAtom AOrd (MFSubList content))
@@ -596,7 +634,7 @@ readMathMaterial !ctx = loop []
           -- \displaystyle, \textstyle, etc
           MTSetStyle newStyle -> do
             -- Remove this check to allow \mathchoice and \mathstyle to be different
-            if mmcFractionPosition ctx == FractionNumerator
+            if mmcPosition ctx == FractionNumerator
               then throwError "Numerator of a fraction must be surrounded by { and }"
               else do assign currentMathStyle newStyle
                       loop (IStyleChange newStyle : revList)
@@ -605,7 +643,7 @@ readMathMaterial !ctx = loop []
           MTLeft leftDelim -> do
             let readUntilRight revContentList = do
                   enterGroup ScopeByLeftRight
-                  result <- withMathStyle id $ readMathMaterial (ctx { mmcFractionPosition = NotInFraction }) -- MMDLeftRight
+                  result <- withMathStyle id $ readMathMaterial (ctx { mmcPosition = NotInFraction }) -- MMDLeftRight
                   case result of
                     MMDMiddle delim content -> do
                       readUntilRight ([IBoundary BoundaryMiddle delim] : content : revContentList)
@@ -626,22 +664,22 @@ readMathMaterial !ctx = loop []
 
           -- <generalized fraction command>
           MTGenFrac gf
-            | mmcFractionPosition ctx == FractionDenominator ->
+            | mmcPosition ctx == FractionDenominator ->
                 throwError "Ambiguous: you need another { and }"
 
             -- Remove this check to allow classic \over-like commands
-            | mmcFractionPosition ctx == NotInFraction ->
+            | mmcPosition ctx /= FractionNumerator ->
                 throwError "Fraction must be preceded by \\Ustack"
 
             | otherwise -> do
                 let numerator = reverse revList
-                result <- withMathStyle makeCramped $ readMathMaterial (ctx { mmcFractionPosition = FractionDenominator })
+                result <- withMathStyle makeCramped $ readMathMaterial (ctx { mmcPosition = FractionDenominator })
                 return ((\denominator -> [IGenFrac gf numerator denominator]) <$> result)
 
           -- \Ustack { <math mode material> <generalized fraction command> <math mode material> }
           MTUstack -> do
             readLBrace
-            content <- runMMDBrace <$> withMathStyle smallerStyle (readMathMaterial (ctx { mmcFractionPosition = FractionNumerator }))
+            content <- runMMDBrace <$> withMathStyle smallerStyle (readMathMaterial (ctx { mmcPosition = FractionNumerator }))
             case content of
               [IGenFrac _ _ _] -> doAtom (mkAtom AOrd (MFSubList content))
               _ -> throwError "No fraction after \\Ustack"
@@ -664,6 +702,14 @@ readMathMaterial !ctx = loop []
             s  <- doChoiceBranch ScriptStyle
             ss <- doChoiceBranch ScriptScriptStyle
             loop (IChoice d t s ss : revList)
+
+          MTStopInline -> onStopInlineMath $ do
+            leaveGroup ScopeByMath
+            return (reverse revList)
+
+          MTStopDisplay -> onStopDisplayMath $ do
+            leaveGroup ScopeByMath
+            return (reverse revList)
 
           -- assignments, etc
           MTOther v -> do
@@ -797,7 +843,9 @@ data MathCommands
   | MUleft
   | MUmiddle
   | MUright
-  -- \Ustartmath, \Ustopmath, \Ustartdisplaymath, \Ustopdisplaymath
+  | MUstopmath
+  | MUstopdisplaymath
+  -- \Ustartmath, \Ustartdisplaymath: not really math commands...
 
   deriving (Eq,Show)
 
@@ -870,6 +918,8 @@ mathDefinitions = Map.fromList
   ,("Uleft",          liftUnion MUleft)
   ,("Umiddle",        liftUnion MUmiddle)
   ,("Uright",         liftUnion MUright)
+  ,("Ustopmath",      liftUnion MUstopmath)
+  ,("Ustopdisplaymath",liftUnion MUstopdisplaymath)
 
   ,("displaystyle",            liftUnion (MathStyleSet DisplayStyle))
   ,("textstyle",               liftUnion (MathStyleSet TextStyle))

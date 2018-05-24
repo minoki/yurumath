@@ -171,6 +171,7 @@ data ScopeType = ScopeByBrace      -- { .. }
                | ScopeByBeginGroup -- \begingroup .. \endgroup
                | GlobalScope
                | ScopeByLeftRight  -- \left .. \right
+               | ScopeByMath       -- $ .. $ or $$ .. $$
                -- ScopeByEnvironment !Text -- \begin{xxx} .. \end{xxx}
                deriving (Eq,Show)
 

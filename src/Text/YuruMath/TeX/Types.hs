@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Text.YuruMath.TeX.Types where
 import Data.Int
 import Data.Word
@@ -251,17 +252,26 @@ instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpan
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
+can'tBeGlobal :: (Show c, MonadError String m) => c -> m ()
+can'tBeGlobal x = throwError $ "You can't use a prefix with " ++ show x
+
 class (Eq c, Monad m) => DoExecute c m where
   doExecute :: c -> m ()
+  doGlobal :: c -> m ()
   getIntegerValue :: c -> Maybe (m Integer)
+  default doGlobal :: (Show c, MonadError String m) => c -> m ()
+  doGlobal = can'tBeGlobal
 
 instance (Monad m) => DoExecute (Union '[]) m where
   doExecute = typesExhausted
+  doGlobal = typesExhausted
   getIntegerValue = typesExhausted
 
 instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExecute (Union (c : cs)) m where
   doExecute       = (doExecute :: c -> m ())
                     @> (doExecute :: Union (Delete c cs) -> m ())
+  doGlobal        = (doGlobal :: c -> m ())
+                    @> (doGlobal :: Union (Delete c cs) -> m ())
   getIntegerValue = (getIntegerValue :: c -> Maybe (m Integer))
                     @> (getIntegerValue :: Union (Delete c cs) -> Maybe (m Integer))
 

@@ -125,8 +125,8 @@ testLBrace !consumeSpace = do
   et <- nextEToken
   case et of
     Nothing -> return False
-    Just (ETCharacter _ CCBeginGroup) -> return True
-    Just (ETCharacter _ CCSpace)
+    Just (ETCharacter { etCatCode = CCBeginGroup }) -> return True
+    Just (ETCharacter { etCatCode = CCSpace })
       | consumeSpace == ConsumeSpaces -> testLBrace consumeSpace
       | consumeSpace == WarnIfConsumedSpaces -> do
           -- TODO: Issue a warning
@@ -142,7 +142,7 @@ readRequiredDelimiter !consumeSpace d@(d0:ds) = do
   case et of
     Nothing -> throwError "Unexpected end of input"
     Just et | fromEToken et == d0 -> rest ds
-    Just (ETCharacter _ CCSpace)
+    Just (ETCharacter { etCatCode = CCSpace })
       | consumeSpace == ConsumeSpaces -> readRequiredDelimiter consumeSpace d -- gobble spaces
       | consumeSpace == WarnIfConsumedSpaces -> do
           -- TODO: Issue warning
@@ -178,12 +178,12 @@ readDelimitedArgument !long !delimiter = unArgToken <$> loop
         else do et <- nextEToken
                 case et of
                   Nothing -> throwError "Unexpected end of input while reading argument"
-                  Just (ETCommandName _ (NControlSeq "par"))
+                  Just (ETCommandName { etName = NControlSeq "par" })
                     | long == ShortParam -> throwError "Paragraph ended before argument was complete"
-                  Just et@(ETCharacter _ CCBeginGroup) -> do
+                  Just et@(ETCharacter { etCatCode = CCBeginGroup }) -> do
                     (t,c) <- readUntilEndGroup' long
                     (Grouped (fromEToken et) t c :) <$> loop
-                  Just (ETCharacter _ CCEndGroup) ->
+                  Just (ETCharacter { etCatCode = CCEndGroup }) ->
                     throwError "Argument of <macro> has an extra }"
                   Just et -> do
                     (Bare (fromEToken et) :) <$> loop
@@ -194,7 +194,7 @@ testOptionalToken !consume !t = do
   et <- nextEToken
   case et of
     Nothing -> return False
-    Just (ETCharacter _ CCSpace)
+    Just (ETCharacter { etCatCode = CCSpace })
       | consume == ConsumeSpaces -> testOptionalToken consume t
       | consume == WarnIfConsumedSpaces -> do
           -- TODO: Issue a warning
@@ -221,12 +221,12 @@ readUntilEndGroup' !long = loop (0 :: Int) []
       t <- nextEToken
       case t of
         Nothing -> throwError "unexpected end of input when reading an argument"
-        Just t@(ETCharacter _ CCEndGroup)
+        Just t@(ETCharacter { etCatCode = CCEndGroup })
           | depth == 0 -> return (reverse revTokens, fromEToken t)
           | otherwise -> loop (depth - 1) (fromEToken t : revTokens)
-        Just t@(ETCharacter _ CCBeginGroup)
+        Just t@(ETCharacter { etCatCode = CCBeginGroup })
           -> loop (depth + 1) (fromEToken t : revTokens)
-        Just (ETCommandName _ (NControlSeq "par"))
+        Just (ETCommandName { etName = NControlSeq "par" })
           | long == ShortParam -> throwError "Paragraph ended before argument was compelete"
         Just t -> loop depth (fromEToken t : revTokens)
 
@@ -235,11 +235,11 @@ readUntilBeginGroup !long revTokens = do
   t <- nextEToken
   case t of
     Nothing -> throwError "Unexpected end of input when reading an argument"
-    Just t@(ETCharacter _ CCBeginGroup) -> do
+    Just t@(ETCharacter { etCatCode = CCBeginGroup }) -> do
       unreadETokens 0 [t]
       return (reverse revTokens)
-    Just t@(ETCharacter _ CCEndGroup) -> throwError "Argument of <macro> has an extra }"
-    Just (ETCommandName _ (NControlSeq "par"))
+    Just t@(ETCharacter { etCatCode = CCEndGroup }) -> throwError "Argument of <macro> has an extra }"
+    Just (ETCommandName { etName = NControlSeq "par" })
       | long == ShortParam -> throwError "Paragraph ended before argument was complete"
     Just t -> readUntilBeginGroup long (fromEToken t : revTokens)
 
@@ -250,12 +250,12 @@ readBalanced !long !c1 !c2 = unArgToken <$> loop (0 :: Int)
       et <- nextEToken
       case et of
         Nothing -> throwError "Unexpected end of input"
-        Just (ETCommandName _ (NControlSeq "par"))
+        Just (ETCommandName { etName = NControlSeq "par" })
           | long == ShortParam -> throwError "Paragraph ended before argument was complete"
-        Just et@(ETCharacter _ CCBeginGroup) -> do
+        Just et@(ETCharacter { etCatCode = CCBeginGroup }) -> do
           (t,c) <- readUntilEndGroup' long
           (Grouped (fromEToken et) t c :) <$> loop depth
-        Just (ETCharacter _ CCEndGroup) ->
+        Just (ETCharacter { etCatCode = CCEndGroup }) ->
           throwError "Argument of <macro> has an extra }"
         Just et | fromEToken et == c2, depth == 0 -> return []
                 | fromEToken et == c2, depth > 0 -> (Bare (fromEToken et) :) <$> loop (depth - 1)

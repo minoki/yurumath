@@ -47,9 +47,9 @@ data TeXToken = TTCommandName !CommandName
               | TTCharacter !Char !CatCode -- not CCEscape, CCEndLine, CCIgnored, CCActive, CCComment, CCInvalid
               deriving (Eq,Show)
 
-data ExpansionToken = ETCommandName {-noexpand-} !Bool !CommandName
-                    | ETCharacter !Char !CatCode -- non-active character
-                      deriving (Eq,Show)
+data ExpansionToken = ETCommandName { etNoexpand :: !Bool, etName :: !CommandName }
+                    | ETCharacter { etChar :: !Char, etCatCode :: !CatCode } -- non-active character
+                      deriving (Show)
 
 -- Better name?
 data ParamLong = ShortParam -- \par is not allowed

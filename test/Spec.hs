@@ -1,34 +1,30 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 import Test.HUnit
 import Data.Semigroup
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
-import Text.YuruMath.TeX.Execution
-import Text.YuruMath.TeX.Macro
+import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.Math
-import Text.YuruMath.TeX.Expr
+-- import Text.YuruMath.TeX.Expr
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Cons (_head)
 import Control.Lens.Setter (modifying)
 import qualified Data.Map.Strict as Map
 import Data.OpenUnion
+import TypeFun.Data.List ((:++:))
 
-defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union '[CommonValue, CommonExecutable, MacroCommand, ExprCommand], Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) => m ()
+defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union NonExpandablePrimitiveList, Expandable s ~ Union ExpandablePrimitiveList) => m ()
 defineBuiltins = do
   modifying (localState . tsDefinitions)
-    $ \s -> mconcat [fmap Left expandableDefinitions
-                    ,fmap Right executableDefinitions -- includes \endcsname
-                    ,fmap Right macroCommands
-                    ,fmap Right exprCommands
-                    ,s
-                    ]
+    $ \s -> primitiveDefinitions <> s
 
-tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean]) => m [TeXToken]
+tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union ExpandablePrimitiveList) => m [TeXToken]
 tokenizeAll = do
   t <- nextToken
   case t of
@@ -45,11 +41,11 @@ expandAll = do
     Nothing -> return []
     Just v -> (v:) <$> expandAll
 
-expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]) (Union '[CommonValue, CommonExecutable, MacroCommand, ExprCommand])))]
+expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union ExpandablePrimitiveList) (Union NonExpandablePrimitiveList)))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
-type MathExpandableT = Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]
-type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable,MacroCommand,ExprCommand]
+type MathExpandableT = Union (ExpandablePrimitiveList :++: MathExpandableList)
+type MathValue = Union (NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList)
 type MathLocalState' = MathLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String MathList
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialStateWithLocalState initialLocalMathState input)
@@ -57,11 +53,8 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
     action :: StateT (MathState MathLocalState') (Except String) MathList
     action = do
       modifying (localState . tsDefinitions)
-        $ \m -> mconcat [fmap Left expandableDefinitions
-                        ,fmap Right executableDefinitions
-                        ,fmap Right mathDefinitions
-                        ,fmap Right macroCommands
-                        ,fmap Right exprCommands
+        $ \m -> mconcat [primitiveDefinitions
+                        ,mathDefinitions
                         ,m
                         ]
       runMMDGlobal <$> readMathMaterial defaultMathMaterialContext

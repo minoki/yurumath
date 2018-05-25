@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Word
 import Data.Bits
 import Data.Text (Text)
+import Data.Semigroup ((<>))
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad.Identity
@@ -29,7 +30,7 @@ import Control.Lens.Getter (use,uses)
 import Control.Lens.Setter (assign,modifying)
 import Control.Lens.TH
 import Data.OpenUnion
-import TypeFun.Data.List (Elem,Substract,SubList,Delete,(:++:))
+import TypeFun.Data.List (SubList,Delete,(:++:))
 
 data AtomType = AOrd   -- ordinary
               | AOp    -- large operator
@@ -309,10 +310,9 @@ type MathValueList = '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands]
 
 type MonadMathState localstate set m
   = ( MonadTeXState (MathState localstate) m
-    , ValueT localstate ~ Union (MathValueList :++: set)
-    , Show (Union set)
-    , DoExecute (Union set) m
-    , Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))) ~ set -- ugly hack
+    , ValueT localstate ~ Union set
+    , DoExecute (Union (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))) m
+    , Show (Union (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))
     , localstate ~ MathLocalState (ExpandableT localstate) (ValueT localstate)
     )
 
@@ -323,12 +323,12 @@ readMathToken = do
     Nothing -> return Nothing -- end of input
     Just v -> doMathToken v
   where
-    doMathToken :: Union (MathValueList :++: set) -> m (Maybe (MathToken m))
+    doMathToken :: Union set {-(MathValueList :++: set)-} -> m (Maybe (MathToken m))
     doMathToken = doCommonValue
                   @> (\(v :: MathStyleSet)    -> Just <$> doMathStyleSet v)
                   @> (\(v :: MathAtomCommand) -> Just <$> doMathAtom v)
                   @> (\(v :: MathCommands)    -> Just <$> doOtherMathCommand v)
-                  @> (\(v :: Union set)       -> return $ Just $ MTOther v) -- other assignments, etc
+                  @> (\v                      -> return $ Just $ MTOther v) -- other assignments, etc
     doCommonValue :: CommonValue -> m (Maybe (MathToken m))
     doCommonValue v = case v of
       Character c CCBeginGroup   -> return $ Just MTLBrace
@@ -897,13 +897,14 @@ instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoEx
 -- List of commands
 --
 
-mathDefinitionsE :: (Elem MathExpandable set) => Map.Map Text (Union set)
-mathDefinitionsE = Map.fromList
-  [("mathstyle", liftUnion Mmathstyle) -- LuaTeX extension
-  ]
+type MathExpandableList = '[MathExpandable]
+type MathNonExpandablePrimitiveList = '[MathCommands,MathAtomCommand,MathStyleSet]
 
-mathDefinitions :: (SubList '[MathCommands,MathAtomCommand,MathStyleSet] set) => Map.Map Text (Union set)
+mathDefinitions :: (SubList MathExpandableList eset, SubList MathNonExpandablePrimitiveList vset) => Map.Map Text (Either (Union eset) (Union vset))
 mathDefinitions = Map.fromList
+  [("mathstyle", Left $ liftUnion Mmathstyle) -- LuaTeX extension
+  ]
+  <> fmap Right (Map.fromList
   [("char",         liftUnion Mchar)
   ,("mathchar",     liftUnion Mmathchar)
   ,("delimiter",    liftUnion Mdelimiter)
@@ -972,4 +973,4 @@ mathDefinitions = Map.fromList
   ,("crampedtextstyle",        liftUnion (MathStyleSet CrampedTextStyle))
   ,("crampedscriptstyle",      liftUnion (MathStyleSet CrampedScriptStyle))
   ,("crampedscriptscriptstyle",liftUnion (MathStyleSet CrampedScriptScriptStyle))
-  ]
+  ])

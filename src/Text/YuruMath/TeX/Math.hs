@@ -245,11 +245,21 @@ data MathItem = IAtom !Atom
 
 type MathList = [MathItem] -- Use Data.Sequence?
 
+data MathLocalState ecommand value = MathLocalState
+                                     { _mCommonLocalState :: !(CommonLocalState ecommand value)
+                                     , _famParam :: !Int
+                                     }
+
 data MathState localstate
   = MathState
     { _mCommonState :: !(CommonState localstate)
     , _currentMathStyle :: !MathStyle
     }
+
+initialLocalMathState :: MathLocalState e v
+initialLocalMathState = MathLocalState { _mCommonLocalState = initialLocalState
+                                       , _famParam = -1
+                                       }
 
 initialMathState :: Bool -> CommonState localstate -> MathState localstate
 initialMathState !isDisplay !commonState
@@ -257,7 +267,13 @@ initialMathState !isDisplay !commonState
               , _currentMathStyle = if isDisplay then DisplayStyle else TextStyle
               }
 
+makeLenses ''MathLocalState
 makeLenses ''MathState
+
+instance (IsExpandable ecommand, IsValue value) => IsLocalState (MathLocalState ecommand value) where
+  type ExpandableT (MathLocalState ecommand value) = ecommand
+  type ValueT (MathLocalState ecommand value) = value
+  commonLocalState = mCommonLocalState
 
 instance (IsLocalState localstate) => IsState (MathState localstate) where
   type LocalState (MathState localstate) = localstate
@@ -297,6 +313,7 @@ type MonadMathState localstate set m
     , Show (Union set)
     , DoExecute (Union set) m
     , Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))) ~ set -- ugly hack
+    , localstate ~ MathLocalState (ExpandableT localstate) (ValueT localstate)
     )
 
 readMathToken :: forall m localstate set. (MonadMathState localstate set m, MonadError String m) => m (Maybe (MathToken m))
@@ -544,8 +561,11 @@ readMathMaterial !ctx = loop []
           -- <character>
           MTChar c -> do
             mc <- mathCodeOf c
-            let atomType = mathclassToAtomType $ mathcharClass mc
-                fam = fromIntegral $ mathcharFamily mc
+            famP <- use (localState . famParam)
+            let mathclass = mathcharClass mc
+                atomType = mathclassToAtomType mathclass
+                fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
+                    | otherwise = fromIntegral $ mathcharFamily mc
                 slot = mathcharSlot mc
                 atom = mkAtom atomType (MFSymbol fam slot)
             delcode <- delimiterCodeOf c
@@ -555,15 +575,20 @@ readMathMaterial !ctx = loop []
 
           -- <math symbol>
           MTMathChar mc -> do -- \mathchar or \mathchardef-ed
-            let atomType = mathclassToAtomType $ mathcharClass mc
-                fam = fromIntegral $ mathcharFamily mc
+            famP <- use (localState . famParam)
+            let mathclass = mathcharClass mc
+                atomType = mathclassToAtomType $ mathcharClass mc
+                fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
+                    | otherwise = fromIntegral $ mathcharFamily mc
                 slot = mathcharSlot mc
             doAtom (mkAtom atomType (MFSymbol fam slot))
 
           -- <math symbol>
           MTDelimiter mathclass del -> do -- \delimiter
+            famP <- use (localState . famParam)
             let atomType = mathclassToAtomType mathclass
-                fam = fromIntegral $ delimiterFamilySmall del
+                fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
+                    | otherwise = fromIntegral $ delimiterFamilySmall del
                 slot = delimiterSlotSmall del
             doAtom (markAtomAsDelimiter (mkAtom atomType (MFSymbol fam slot)))
 
@@ -728,15 +753,23 @@ readMathField = do
     Just t -> case t of
       MTChar c -> do
         mc <- mathCodeOf c
-        let fam = fromIntegral $ mathcharFamily mc
+        famP <- use (localState . famParam)
+        let mathclass = mathcharClass mc
+            fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
+                | otherwise = fromIntegral $ mathcharFamily mc
             slot = mathcharSlot mc
         return (MFSymbol fam slot)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed
-        let fam = fromIntegral $ mathcharFamily mc
+        famP <- use (localState . famParam)
+        let mathclass = mathcharClass mc
+            fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
+                | otherwise = fromIntegral $ mathcharFamily mc
             slot = mathcharSlot mc
         return (MFSymbol fam slot)
       MTDelimiter mathclass del -> do -- \delimiter
-        let fam = fromIntegral $ delimiterFamilySmall del
+        famP <- use (localState . famParam)
+        let fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
+                | otherwise = fromIntegral $ delimiterFamilySmall del
             slot = delimiterSlotSmall del
         return (MFSymbol fam slot)
       MTLBrace -> do
@@ -746,6 +779,14 @@ readMathField = do
           [IAtom (OrdAtom { atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
           _ -> MFSubList content
       _ -> throwError $ "Unexpected " ++ show t ++ "; expected a symbol or `{'"
+
+famSet :: (MonadMathState localstate set m, MonadError String m) => m (Assignment (MathState localstate))
+famSet = do
+  val <- readIntBetween 0 15
+  texAssign famParam val
+
+famGet :: (MonadMathState localstate set m, MonadError String m) => m Integer
+famGet = uses (localState . famParam) fromIntegral
 
 --
 -- Setting math style
@@ -811,6 +852,7 @@ data MathCommands
   | Moverwithdelims
   | Matopwithdelims
   | Mabovewithdelims
+  | Mfam
 
     -- e-TeX extension:
   | Mmiddle
@@ -843,8 +885,12 @@ data MathCommands
 
   deriving (Eq,Show)
 
-instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathCommands m where
+instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoExecute MathCommands m where
+  doExecute Mfam = runLocal famSet
   doExecute _ = return () -- dummy
+  doGlobal Mfam = runGlobal famSet
+  doGlobal x = can'tBeGlobal x
+  getIntegerValue Mfam = Just famGet
   getIntegerValue _ = Nothing
 
 --
@@ -886,6 +932,7 @@ mathDefinitions = Map.fromList
   ,("overwithdelims",liftUnion Mover)
   ,("atopwithdelims",liftUnion Matop)
   ,("abovewithdelims",liftUnion Matop)
+  ,("fam",          liftUnion Mfam)
 
   -- e-TeX extension:
   ,("middle",       liftUnion Mmiddle)

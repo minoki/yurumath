@@ -23,11 +23,11 @@ import Data.OpenUnion
 
 type MathExpandableT = Union '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean, Macro]
 type MathValue = Union '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands,CommonExecutable,MacroCommand]
-type MathLocalState = CommonLocalState MathExpandableT MathValue
+type MathLocalState' = MathLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String MathList
-runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialState input)
+runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialStateWithLocalState initialLocalMathState input)
   where
-    action :: StateT (MathState MathLocalState) (Except String) MathList
+    action :: StateT (MathState MathLocalState') (Except String) MathList
     action = do
       modifying (localState . tsDefinitions)
         $ \m -> mconcat [fmap Left expandableDefinitions

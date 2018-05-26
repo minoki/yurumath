@@ -323,7 +323,7 @@ readMathToken = do
     Nothing -> return Nothing -- end of input
     Just v -> doMathToken v
   where
-    doMathToken :: Union set {-(MathValueList :++: set)-} -> m (Maybe (MathToken m))
+    doMathToken :: Union set -> m (Maybe (MathToken m))
     doMathToken = doCommonValue
                   @> (\(v :: MathStyleSet)    -> Just <$> doMathStyleSet v)
                   @> (\(v :: MathAtomCommand) -> Just <$> doMathAtom v)
@@ -454,7 +454,16 @@ readMathToken = do
       MUstopmath -> return MTStopInline
       MUstopdisplaymath -> return MTStopDisplay
 
-      _ -> throwError $ show v ++ ": not implemented yet"
+      Mfam -> return $ MTOther Mfam
+
+      Mdiscretionaly   -> throwError "\\discretionaly: not implemented yet"
+      MUoverdelimiter  -> throwError "\\Uoverdelimiter: not implemented yet"
+      MUunderdelimiter -> throwError "\\Uunderdelimiter: not implemented yet"
+      MUdelimiterover  -> throwError "\\Udelimiterover: not implemented yet"
+      MUdelimiterunder -> throwError "\\Udelimiterunder: not implemented yet"
+      MUhextensible    -> throwError "\\Uhextensible: not implemented yet"
+      MUnosuperscript  -> throwError "\\Unosuperscript: not implemented yet"
+      MUnosubscript    -> throwError "\\Unosubscript: not implemented yet"
 
 readDelimiter :: (MonadMathState localstate set m, MonadError String m) => m DelimiterCode
 readDelimiter = do
@@ -782,7 +791,7 @@ readMathField = do
 
 famSet :: (MonadMathState localstate set m, MonadError String m) => m (Assignment (MathState localstate))
 famSet = do
-  val <- readIntBetween 0 15
+  val <- readIntBetween 0 255
   texAssign famParam val
 
 famGet :: (MonadMathState localstate set m, MonadError String m) => m Integer
@@ -834,7 +843,7 @@ instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) 
 --
 
 data MathCommands
-  = Mchar -- ?
+  = Mchar -- not really a math command
   | Mmathchar
   | Mmathaccent
   | Mdelimiter
@@ -842,7 +851,7 @@ data MathCommands
   | Mdisplaylimits
   | Mlimits
   | Mnolimits
-  | Mdiscretionaly
+  | Mdiscretionaly -- not really a math command
   | Mmathchoice
   | Mleft
   | Mright
@@ -887,7 +896,7 @@ data MathCommands
 
 instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoExecute MathCommands m where
   doExecute Mfam = runLocal famSet
-  doExecute _ = return () -- dummy
+  doExecute x = throwError $ "You can't use " ++ show x ++ " in non-math mode"
   doGlobal Mfam = Just $ runGlobal famSet
   doGlobal _ = Nothing
   doAdvance Mfam  = Just $ runArithmetic $ advanceInt famParam
@@ -935,10 +944,10 @@ mathDefinitions = Map.fromList
   ,("right",        liftUnion Mright)
   ,("over",         liftUnion Mover)
   ,("atop",         liftUnion Matop)
-  ,("above",        liftUnion Matop)
-  ,("overwithdelims",liftUnion Mover)
-  ,("atopwithdelims",liftUnion Matop)
-  ,("abovewithdelims",liftUnion Matop)
+  ,("above",        liftUnion Mabove)
+  ,("overwithdelims",liftUnion Moverwithdelims)
+  ,("atopwithdelims",liftUnion Matopwithdelims)
+  ,("abovewithdelims",liftUnion Mabovewithdelims)
   ,("fam",          liftUnion Mfam)
 
   -- e-TeX extension:

@@ -8,7 +8,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DefaultSignatures #-}
 module Text.YuruMath.TeX.Types where
 import Data.Int
 import Data.Word
@@ -189,6 +188,9 @@ data CommonLocalState ecommand value
     -- sfcodeMap           :: Map.Map Char Int
     , _endlinechar         :: !Int
     , _escapechar          :: !Int
+    , _countReg            :: Map.Map Int Integer
+    -- dimen, skip, muskip registers
+    -- box registers
     }
 
 data ConditionalKind = CondTruthy
@@ -221,6 +223,7 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   delcodeMap          :: Lens' localstate (Map.Map Char DelimiterCode)
   endlinechar         :: Lens' localstate Int
   escapechar          :: Lens' localstate Int
+  countReg            :: Lens' localstate (Map.Map Int Integer)
   scopeType           = commonLocalState . scopeType
   tsDefinitions       = commonLocalState . tsDefinitions
   tsActiveDefinitions = commonLocalState . tsActiveDefinitions
@@ -231,6 +234,7 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   delcodeMap          = commonLocalState . delcodeMap
   endlinechar         = commonLocalState . endlinechar
   escapechar          = commonLocalState . escapechar
+  countReg            = commonLocalState . countReg
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where
@@ -273,26 +277,37 @@ instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpan
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
-can'tBeGlobal :: (Show c, MonadError String m) => c -> m ()
-can'tBeGlobal x = throwError $ "You can't use a prefix with " ++ show x
-
 class (Eq c, Monad m) => DoExecute c m where
   doExecute :: c -> m ()
-  doGlobal :: c -> m ()
+  doGlobal :: c -> Maybe (m ())
+  doAdvance :: c -> Maybe (m (Bool -> m ()))
+  doMultiply :: c -> Maybe (m (Bool -> m ()))
+  doDivide :: c -> Maybe (m (Bool -> m ()))
+  doGlobal _ = Nothing
+  doAdvance _ = Nothing
+  doMultiply _ = Nothing
+  doDivide _ = Nothing
   getIntegerValue :: c -> Maybe (m Integer)
-  default doGlobal :: (Show c, MonadError String m) => c -> m ()
-  doGlobal = can'tBeGlobal
 
 instance (Monad m) => DoExecute (Union '[]) m where
   doExecute = typesExhausted
   doGlobal = typesExhausted
+  doAdvance = typesExhausted
+  doMultiply = typesExhausted
+  doDivide = typesExhausted
   getIntegerValue = typesExhausted
 
 instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExecute (Union (c : cs)) m where
   doExecute       = (doExecute :: c -> m ())
                     @> (doExecute :: Union (Delete c cs) -> m ())
-  doGlobal        = (doGlobal :: c -> m ())
-                    @> (doGlobal :: Union (Delete c cs) -> m ())
+  doGlobal        = (doGlobal :: c -> Maybe (m ()))
+                    @> (doGlobal :: Union (Delete c cs) -> Maybe (m ()))
+  doAdvance       = (doAdvance :: c -> Maybe (m (Bool -> m ())))
+                    @> (doAdvance :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
+  doMultiply      = (doMultiply :: c -> Maybe (m (Bool -> m ())))
+                    @> (doMultiply :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
+  doDivide        = (doDivide :: c -> Maybe (m (Bool -> m ())))
+                    @> (doDivide :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
   getIntegerValue = (getIntegerValue :: c -> Maybe (m Integer))
                     @> (getIntegerValue :: Union (Delete c cs) -> Maybe (m Integer))
 

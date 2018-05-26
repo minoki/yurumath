@@ -122,6 +122,30 @@ readUnicodeScalarValue = do
     then return $ chr $ fromIntegral x
     else throwError $ "Bad character code (" ++ show x ++ ")"
 
+readKeyword :: (MonadTeXState s m, MonadError String m) => String -> m Bool
+readKeyword xs = do
+  readOptionalSpaces
+  loop xs
+  where
+    loop [] = return True
+    loop (x:xs) = do
+      t <- nextETokenWithDepth
+      case t of
+        Just (d,t@(ETCharacter { etChar = c }))
+          | x == c || x == toLower c -> do
+              r <- loop xs
+              if r
+                then return True
+                else do unreadETokens d [t]
+                        return False
+        Just (d,t) -> do unreadETokens d [t]
+                         return False
+        Nothing -> return False
+
+readOptionalKeyword :: (MonadTeXState s m, MonadError String m) => String -> m ()
+readOptionalKeyword name = do _ <- readKeyword name
+                              return ()
+
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]
 expandOnce et@(ETCommandName { etNoexpand = False, etName = name }) = do

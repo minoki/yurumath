@@ -888,8 +888,14 @@ data MathCommands
 instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoExecute MathCommands m where
   doExecute Mfam = runLocal famSet
   doExecute _ = return () -- dummy
-  doGlobal Mfam = runGlobal famSet
-  doGlobal x = can'tBeGlobal x
+  doGlobal Mfam = Just $ runGlobal famSet
+  doGlobal _ = Nothing
+  doAdvance Mfam  = Just $ runArithmetic $ advanceInt famParam
+  doAdvance _     = Nothing
+  doMultiply Mfam = Just $ runArithmetic $ multiplyInt famParam
+  doMultiply _    = Nothing
+  doDivide Mfam   = Just $ runArithmetic $ divideInt famParam
+  doDivide _      = Nothing
   getIntegerValue Mfam = Just famGet
   getIntegerValue _ = Nothing
 

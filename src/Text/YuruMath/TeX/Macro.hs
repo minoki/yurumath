@@ -479,14 +479,14 @@ instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadEr
   doExecute Mnewcommand     = newcommandCommand
   doExecute Mrenewcommand   = renewcommandCommand
   doExecute Mprovidecommand = providecommandCommand
-  doGlobal Mdef       = defCommand "def" globalPrefix
-  doGlobal Medef      = edefCommand "edef" globalPrefix
-  doGlobal Mgdef      = defCommand "gdef" globalPrefix
-  doGlobal Mxdef      = edefCommand "xdef" globalPrefix
-  doGlobal Mouter     = doPrefix "outer" (globalPrefix { prefixOuter = True })
-  doGlobal Mlong      = doPrefix "long" (globalPrefix { prefixLong = True })
-  doGlobal Mprotected = doPrefix "protected" (globalPrefix { prefixProtected = True })
-  doGlobal x          = can'tBeGlobal x
+  doGlobal Mdef       = Just $ defCommand "def" globalPrefix
+  doGlobal Medef      = Just $ edefCommand "edef" globalPrefix
+  doGlobal Mgdef      = Just $ defCommand "gdef" globalPrefix
+  doGlobal Mxdef      = Just $ edefCommand "xdef" globalPrefix
+  doGlobal Mouter     = Just $ doPrefix "outer" (globalPrefix { prefixOuter = True })
+  doGlobal Mlong      = Just $ doPrefix "long" (globalPrefix { prefixLong = True })
+  doGlobal Mprotected = Just $ doPrefix "protected" (globalPrefix { prefixProtected = True })
+  doGlobal _          = Nothing
   getIntegerValue _ = Nothing
 
 macroCommands :: (Elem MacroCommand set) => Map.Map Text (Union set)

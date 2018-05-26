@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -18,11 +19,30 @@ import Data.Semigroup
 import Control.Monad
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
+import Control.Lens.Lens (Lens')
 import Control.Lens.At (at)
+import Control.Lens.Iso (non)
 import Control.Lens.Getter (view,use,uses)
 import Control.Lens.Setter (assign,modifying,mapped,ASetter)
 import Data.OpenUnion
-import TypeFun.Data.List (SubList)
+import TypeFun.Data.List (SubList,Elem)
+import Data.Maybe (fromMaybe)
+
+-- \countdef-ed value
+newtype CountReg = CountReg { countIndex :: Int }
+  deriving (Eq,Show)
+
+countRegAt :: (IsLocalState localstate) => Int -> Lens' localstate Integer
+countRegAt index = countReg . at index . non 0
+
+-- Used by \count, \countdef
+-- 8-bit (0-255) on the original TeX, 15-bit (0-32767) on e-TeX, and 16-bit (0-65535) on LuaTeX
+readCountRegIndex :: (MonadTeXState s m, MonadError String m) => m Int
+readCountRegIndex = do
+  x <- readIntBetween minBound maxBound
+  if x < 0 || 65536 <= x
+    then throwError $ "Bad register code (" ++ show x ++ ")"
+    else return x
 
 data Assignment s where
   WillAssign :: ASetter (LocalState s) (LocalState s) a b -> b -> Assignment s
@@ -37,6 +57,9 @@ runGlobal m = do
   WillAssign setter value <- m
   assign (localStates . mapped . setter) value
 
+runArithmetic :: (MonadTeXState s m) => m (Assignment s) -> m (Bool -> m ())
+runArithmetic m = return $ \g -> if g then runGlobal m else runLocal m
+
 texAssign :: (MonadTeXState s m) => ASetter (LocalState s) (LocalState s) a b -> b -> m (Assignment s)
 texAssign setter value = return (WillAssign setter value)
 
@@ -46,7 +69,9 @@ globalCommand = do
   case toCommonValue v of
     Just Relax -> globalCommand -- ignore \relax
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
-    _ -> doGlobal v
+    _ -> do case doGlobal v of
+              Just m -> m
+              Nothing -> throwError $ "You can't use a prefix with " ++ show et
 
 letCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 letCommand = do
@@ -262,6 +287,112 @@ endgroupCommand :: (MonadTeXState s m, MonadError String m) => m ()
 endgroupCommand = do
   leaveGroup ScopeByBeginGroup
 
+countSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+countSet = do
+  index <- readCountRegIndex
+  readEquals
+  value <- readNumber
+  texAssign (countReg . at index) (Just value)
+
+countGet :: (MonadTeXState s m, MonadError String m) => m Integer
+countGet = do
+  index <- readCountRegIndex
+  uses (localState . countReg . at index) (fromMaybe 0)
+
+countdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => m (Assignment s)
+countdefCommand = do
+  name <- readCommandName
+  readEquals
+  index <- readCountRegIndex
+  texAssign (definitionAt name) (Right $ liftUnion $ CountReg index)
+
+setCountReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
+setCountReg !index = do
+  readEquals
+  value <- readNumber
+  texAssign (countRegAt index) value
+
+advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
+advanceCommand !global = do
+  (et,v) <- evalToken
+  case doAdvance v of
+    Just m -> do n <- m
+                 readOptionalKeyword "by"
+                 n global
+    Nothing -> throwError $ "You can't use " ++ show et ++ " after \\advance"
+
+multiplyCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
+multiplyCommand !global = do
+  (et,v) <- evalToken
+  case doMultiply v of
+    Just m -> do n <- m
+                 readOptionalKeyword "by"
+                 n global
+    Nothing -> throwError $ "You can't use " ++ show et ++ " after \\multiply"
+
+divideCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
+divideCommand !global = do
+  (et,v) <- evalToken
+  case doDivide v of
+    Just m -> do n <- m
+                 readOptionalKeyword "by"
+                 n global
+    Nothing -> throwError $ "You can't use " ++ show et ++ " after \\divide"
+
+advanceInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
+advanceInteger l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  let !value' = value + arg
+  texAssign l value'
+
+advanceInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
+advanceInt l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  let !value' = fromIntegral value + arg
+  if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
+    then throwError "Arithmetic overflow"
+    else texAssign l (fromInteger value')
+
+multiplyInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
+multiplyInteger l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  let !value' = value * arg
+  texAssign l value'
+
+multiplyInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
+multiplyInt l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  let !value' = fromIntegral value * arg
+  if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
+    then throwError "Arithmetic overflow"
+    else texAssign l (fromInteger value')
+
+divideInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
+divideInteger l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  if arg == 0
+    then throwError "Divide by zero" -- TeX says "Arithmetic overflow."
+    else do
+    let !value' = value `quot` arg
+    texAssign l value'
+
+divideInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
+divideInt l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  if arg == 0
+    then throwError "Divide by zero" -- TeX says "Arithmetic overflow."
+    else do
+    let !value' = fromIntegral value `quot` arg
+    if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
+      then throwError "Arithmetic overflow"
+      else texAssign l (fromInteger value')
+
 data CommonExecutable = Eglobal
                       | Elet
                       | Efuturelet
@@ -280,9 +411,22 @@ data CommonExecutable = Eglobal
                       | Eendgroup
                       | Eendlinechar
                       | Eescapechar
+                      | Ecount
+                      | Ecountdef
+                      | Eadvance
+                      | Emultiply
+                      | Edivide
                       deriving (Eq,Show)
 
-instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonExecutable m where
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg m where
+  doExecute (CountReg i)       = runLocal $ setCountReg i
+  doGlobal (CountReg i)        = Just $ runGlobal $ setCountReg i
+  doAdvance (CountReg i)       = Just $ runArithmetic $ advanceInteger (countRegAt i)
+  doMultiply (CountReg i)      = Just $ runArithmetic $ multiplyInteger (countRegAt i)
+  doDivide (CountReg i)        = Just $ runArithmetic $ divideInteger (countRegAt i)
+  getIntegerValue (CountReg i) = Just $ use (localState . countRegAt i)
+
+instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand
   doExecute Elet             = runLocal letCommand
   doExecute Efuturelet       = runLocal futureletCommand
@@ -301,21 +445,49 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonEx
   doExecute Elowercase       = lowercaseCommand
   doExecute Ebegingroup      = begingroupCommand
   doExecute Eendgroup        = endgroupCommand
-  doGlobal Eglobal          = globalCommand
-  doGlobal Elet             = runGlobal letCommand
-  doGlobal Efuturelet       = runGlobal futureletCommand
-  doGlobal Echardef         = runGlobal chardefCommand
-  doGlobal Emathchardef     = runGlobal mathchardefCommand
-  doGlobal EUmathchardef    = runGlobal umathchardefCommand
-  doGlobal EUmathcharnumdef = runGlobal umathcharnumdefCommand
-  doGlobal Ecatcode         = runGlobal catcodeSet
-  doGlobal Elccode          = runGlobal lccodeSet
-  doGlobal Euccode          = runGlobal uccodeSet
-  doGlobal Emathcode        = runGlobal mathcodeSet
-  doGlobal Edelcode         = runGlobal delcodeSet
-  doGlobal Eendlinechar     = runGlobal endlinecharSet
-  doGlobal Eescapechar      = runGlobal escapecharSet
-  doGlobal x                = can'tBeGlobal x
+  doExecute Ecount           = runLocal countSet
+  doExecute Ecountdef        = runLocal countdefCommand
+  doExecute Eadvance         = advanceCommand False
+  doExecute Emultiply        = multiplyCommand False
+  doExecute Edivide          = divideCommand False
+  doGlobal Eglobal          = Just globalCommand
+  doGlobal Elet             = Just $ runGlobal letCommand
+  doGlobal Efuturelet       = Just $ runGlobal futureletCommand
+  doGlobal Echardef         = Just $ runGlobal chardefCommand
+  doGlobal Emathchardef     = Just $ runGlobal mathchardefCommand
+  doGlobal EUmathchardef    = Just $ runGlobal umathchardefCommand
+  doGlobal EUmathcharnumdef = Just $ runGlobal umathcharnumdefCommand
+  doGlobal Ecatcode         = Just $ runGlobal catcodeSet
+  doGlobal Elccode          = Just $ runGlobal lccodeSet
+  doGlobal Euccode          = Just $ runGlobal uccodeSet
+  doGlobal Emathcode        = Just $ runGlobal mathcodeSet
+  doGlobal Edelcode         = Just $ runGlobal delcodeSet
+  doGlobal Eendlinechar     = Just $ runGlobal endlinecharSet
+  doGlobal Eescapechar      = Just $ runGlobal escapecharSet
+  doGlobal Ecount           = Just $ runGlobal countSet
+  doGlobal Ecountdef        = Just $ runGlobal countdefCommand
+  doGlobal Eadvance         = Just $ advanceCommand True
+  doGlobal Emultiply        = Just $ multiplyCommand True
+  doGlobal Edivide          = Just $ divideCommand True
+  doGlobal _                = Nothing
+  doAdvance Eendlinechar    = Just $ runArithmetic $ advanceInt endlinechar
+  doAdvance Eescapechar     = Just $ runArithmetic $ advanceInt escapechar
+  doAdvance Ecount          = Just $ do
+    index <- readCountRegIndex
+    runArithmetic $ advanceInteger (countRegAt index)
+  doAdvance _               = Nothing
+  doMultiply Eendlinechar   = Just $ runArithmetic $ multiplyInt endlinechar
+  doMultiply Eescapechar    = Just $ runArithmetic $ multiplyInt escapechar
+  doMultiply Ecount         = Just $ do
+    index <- readCountRegIndex
+    runArithmetic $ multiplyInteger (countRegAt index)
+  doMultiply _              = Nothing
+  doDivide Eendlinechar     = Just $ runArithmetic $ divideInt endlinechar
+  doDivide Eescapechar      = Just $ runArithmetic $ divideInt escapechar
+  doDivide Ecount           = Just $ do
+    index <- readCountRegIndex
+    runArithmetic $ divideInteger (countRegAt index)
+  doDivide _                = Nothing
   getIntegerValue Ecatcode  = Just catcodeGet
   getIntegerValue Elccode   = Just lccodeGet
   getIntegerValue Euccode   = Just uccodeGet
@@ -323,9 +495,10 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonEx
   getIntegerValue Edelcode  = Just delcodeGet
   getIntegerValue Eendlinechar = Just endlinecharGet
   getIntegerValue Eescapechar  = Just escapecharGet
+  getIntegerValue Ecount    = Just countGet
   getIntegerValue _         = Nothing
 
-executableDefinitions :: (SubList '[CommonValue,CommonExecutable] set) => Map.Map Text (Union set)
+executableDefinitions :: (SubList '[CommonValue,CommonExecutable,CountReg] set) => Map.Map Text (Union set)
 executableDefinitions = Map.fromList
   [("relax",          liftUnion Relax)
   ,("endcsname",      liftUnion Endcsname)
@@ -347,4 +520,9 @@ executableDefinitions = Map.fromList
   ,("endgroup",       liftUnion Eendgroup)
   ,("endlinechar",    liftUnion Eendlinechar)
   ,("escapechar",     liftUnion Eescapechar)
+  ,("count",          liftUnion Ecount)
+  ,("countdef",       liftUnion Ecountdef)
+  ,("advance",        liftUnion Eadvance)
+  ,("multiply",       liftUnion Emultiply)
+  ,("divide",         liftUnion Edivide)
   ]

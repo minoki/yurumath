@@ -456,6 +456,9 @@ readMathToken = do
 
       Mfam -> return $ MTOther Mfam
 
+      MUleft           -> throwError "\\Uleft: not implemented yet"
+      MUmiddle         -> throwError "\\Umiddle: not implemented yet"
+      MUright          -> throwError "\\Uright: not implemented yet"
       Mdiscretionaly   -> throwError "\\discretionaly: not implemented yet"
       MUoverdelimiter  -> throwError "\\Uoverdelimiter: not implemented yet"
       MUunderdelimiter -> throwError "\\Uunderdelimiter: not implemented yet"

@@ -26,14 +26,13 @@ import Control.Lens.Getter (view,use,uses)
 import Control.Lens.Setter (assign,modifying,mapped,ASetter)
 import Data.OpenUnion
 import TypeFun.Data.List (SubList,Elem)
-import Data.Maybe (fromMaybe)
 
 -- \countdef-ed value
-newtype CountReg = CountReg { countIndex :: Int }
+newtype CountReg = CountReg Int
   deriving (Eq,Show)
 
 countRegAt :: (IsLocalState localstate) => Int -> Lens' localstate Integer
-countRegAt index = countReg . at index . non 0
+countRegAt !index = countReg . at index . non 0
 
 -- Used by \count, \countdef
 -- 8-bit (0-255) on the original TeX, 15-bit (0-32767) on e-TeX, and 16-bit (0-65535) on LuaTeX
@@ -45,14 +44,12 @@ readCountRegIndex = do
     else return x
 
 data Assignment s where
-  WillAssign :: ASetter (LocalState s) (LocalState s) a b -> b -> Assignment s
+  WillAssign :: ASetter (LocalState s) (LocalState s) b b -> !b -> Assignment s
 
 runLocal, runGlobal :: (MonadTeXState s m) => m (Assignment s) -> m ()
-
 runLocal m = do
   WillAssign setter value <- m
   assign (localState . setter) value
-
 runGlobal m = do
   WillAssign setter value <- m
   assign (localStates . mapped . setter) value
@@ -60,8 +57,8 @@ runGlobal m = do
 runArithmetic :: (MonadTeXState s m) => m (Assignment s) -> m (Bool -> m ())
 runArithmetic m = return $ \g -> if g then runGlobal m else runLocal m
 
-texAssign :: (MonadTeXState s m) => ASetter (LocalState s) (LocalState s) a b -> b -> m (Assignment s)
-texAssign setter value = return (WillAssign setter value)
+texAssign :: (MonadTeXState s m) => ASetter (LocalState s) (LocalState s) b b -> b -> m (Assignment s)
+texAssign setter !value = return (WillAssign setter value)
 
 globalCommand :: (MonadTeXState s m, MonadError String m) => m ()
 globalCommand = do
@@ -69,9 +66,9 @@ globalCommand = do
   case toCommonValue v of
     Just Relax -> globalCommand -- ignore \relax
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
-    _ -> do case doGlobal v of
-              Just m -> m
-              Nothing -> throwError $ "You can't use a prefix with " ++ show et
+    _ -> case doGlobal v of
+           Just m -> m
+           Nothing -> throwError $ "You can't use a prefix with " ++ show et
 
 letCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 letCommand = do
@@ -287,17 +284,23 @@ endgroupCommand :: (MonadTeXState s m, MonadError String m) => m ()
 endgroupCommand = do
   leaveGroup ScopeByBeginGroup
 
+-- \countdef-ed token
+setCountReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
+setCountReg !index = do
+  readEquals
+  value <- readNumber
+  texAssign (countRegAt index) value
+
+-- \count command
 countSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 countSet = do
   index <- readCountRegIndex
-  readEquals
-  value <- readNumber
-  texAssign (countReg . at index) (Just value)
+  setCountReg index
 
 countGet :: (MonadTeXState s m, MonadError String m) => m Integer
 countGet = do
   index <- readCountRegIndex
-  uses (localState . countReg . at index) (fromMaybe 0)
+  use (localState . countRegAt index)
 
 countdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => m (Assignment s)
 countdefCommand = do
@@ -305,12 +308,6 @@ countdefCommand = do
   readEquals
   index <- readCountRegIndex
   texAssign (definitionAt name) (Right $ liftUnion $ CountReg index)
-
-setCountReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
-setCountReg !index = do
-  readEquals
-  value <- readNumber
-  texAssign (countRegAt index) value
 
 advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 advanceCommand !global = do

@@ -346,6 +346,7 @@ instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalStat
   delcodeMap          = lens _delcodeMap          (\s v -> s { _delcodeMap = v })
   endlinechar         = lens _endlinechar         (\s v -> s { _endlinechar = v })
   escapechar          = lens _escapechar          (\s v -> s { _escapechar = v })
+  countReg            = lens _countReg            (\s v -> s { _countReg = v })
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate

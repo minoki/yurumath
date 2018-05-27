@@ -209,6 +209,10 @@ mtest4 = TestCase $ assertEqual "Math" expected (runMathList True "\\newcommand\
              ]
       ]
 
+arithtest1 = TestCase $ assertEqual "Arithmetic" expected (runMathList True "\\countdef\\foo=0 \\foo=100000 \\multiply\\foo by 2000000 \\the\\foo")
+  where
+    expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 0) "200000000000"
+
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1
                  ,TestLabel "Expansion 2" etest2
@@ -220,6 +224,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Math 2" mtest2
                  ,TestLabel "Math 3" mtest3
                  ,TestLabel "Math 4" mtest4
+                 ,TestLabel "Arithmetic 1" arithtest1
                  ]
 
 main = runTestTT tests

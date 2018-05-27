@@ -6,10 +6,10 @@ import Data.Int
 import Data.Word
 import Data.Char
 import Data.Text (Text)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Control.Lens.Getter (view,use)
 import Control.Lens.Setter (set,assign,modifying)
 

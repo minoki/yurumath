@@ -14,7 +14,7 @@ import Data.Word
 import Data.Text (Text)
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Control.Lens.Lens (Lens',lens)
 import Data.OpenUnion
 import Data.OpenUnion.Internal ((@!>))
@@ -178,17 +178,17 @@ data ScopeType = ScopeByBrace      -- { .. }
 data CommonLocalState ecommand value
   = CommonLocalState
     { _scopeType           :: !ScopeType
-    , _tsDefinitions       :: Map.Map Text (Either ecommand value) -- definitions of control sequences
-    , _tsActiveDefinitions :: Map.Map Char (Either ecommand value) -- definitions of active characters
-    , _catcodeMap          :: Map.Map Char CatCode
-    , _lccodeMap           :: Map.Map Char Char
-    , _uccodeMap           :: Map.Map Char Char
-    , _mathcodeMap         :: Map.Map Char MathCode
-    , _delcodeMap          :: Map.Map Char DelimiterCode
-    -- sfcodeMap           :: Map.Map Char Int
+    , _tsDefinitions       :: !(Map.Map Text (Either ecommand value)) -- definitions of control sequences
+    , _tsActiveDefinitions :: !(Map.Map Char (Either ecommand value)) -- definitions of active characters
+    , _catcodeMap          :: !(Map.Map Char CatCode)
+    , _lccodeMap           :: !(Map.Map Char Char)
+    , _uccodeMap           :: !(Map.Map Char Char)
+    , _mathcodeMap         :: !(Map.Map Char MathCode)
+    , _delcodeMap          :: !(Map.Map Char DelimiterCode)
+    -- sfcodeMap           :: !(Map.Map Char Int)
     , _endlinechar         :: !Int
     , _escapechar          :: !Int
-    , _countReg            :: Map.Map Int Integer
+    , _countReg            :: !(Map.Map Int Integer)
     -- dimen, skip, muskip registers
     -- box registers
     }

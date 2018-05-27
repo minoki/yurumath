@@ -12,7 +12,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Numeric (readHex)
 
 data TokenizerContext = TokenizerContext { tcCatcodeMap :: !(Map.Map Char CatCode)

@@ -9,7 +9,7 @@ import Text.YuruMath.TeX.Execution
 import Data.Text (Text)
 import TypeFun.Data.List (Elem,SubList)
 import Data.OpenUnion
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 tokenizeStaticString :: String -> [TeXToken]
 tokenizeStaticString s = case tokenizeString latexInternalTokenizerContext s of

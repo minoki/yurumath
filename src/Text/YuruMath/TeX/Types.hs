@@ -20,6 +20,7 @@ import Data.OpenUnion
 import Data.OpenUnion.Internal ((@!>))
 import TypeFun.Data.List (Delete,Elem)
 import Data.Typeable (Typeable)
+import Data.Char
 
 data CatCode = CCEscape       -- 0
              | CCBeginGroup   -- 1
@@ -320,6 +321,11 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonVa
   doExecute (Unexpanded _)           = return () -- do nothing
   doExecute (Undefined _)            = throwError $ "Undefined control sequence."
   doExecute Endcsname                = throwError "Extra \\endcsname"
+  getIntegerValue (DefinedCharacter x) = Just (return $ fromIntegral $ ord x)
+  getIntegerValue (DefinedMathCharacter m) = case m of
+    MathCode x -> Just (return $ fromIntegral x)
+    UMathCode x -> Just (return $ fromIntegral x)
+  getIntegerValue (IntegerConstant x) = Just (return $ fromIntegral x)
   getIntegerValue _ = Nothing -- dummy
 
 type Expandable s = ExpandableT (LocalState s)

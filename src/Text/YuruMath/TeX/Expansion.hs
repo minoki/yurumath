@@ -394,11 +394,6 @@ readNumber = do
     Just (Character '"' CCOther) -> readUnsignedHex
     Just (Character '`' CCOther) -> readCharacterCode
     Just (Character c CCOther) | isDigit c -> readUnsignedDecimal c
-    Just (DefinedCharacter c) -> return (fromIntegral $ ord c)
-    Just (IntegerConstant x) -> return (fromIntegral x)
-    Just (DefinedMathCharacter m) -> return $ case m of
-      MathCode x -> fromIntegral x
-      UMathCode x -> fromIntegral x
     _ | Just i <- getIntegerValue v -> i
       | otherwise -> throwError $ "unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
 

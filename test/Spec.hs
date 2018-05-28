@@ -16,6 +16,7 @@ import Control.Monad.Except
 import Control.Lens.Cons (_head)
 import Control.Lens.Setter (modifying)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 import Data.OpenUnion
 import TypeFun.Data.List ((:++:))
 
@@ -127,9 +128,9 @@ $$1+1\showlists$$ ->
 \mathord
 .\fam0 1
 -}
-    expected = Right [IAtom (mkAtom AOrd (MFSymbol 0 '1'))
-                     ,IAtom (mkAtom ABin (MFSymbol 0 '+'))
-                     ,IAtom (mkAtom AOrd (MFSymbol 0 '1'))
+    expected = Right [IAtom (mkAtom AOrd (MFSymbol 0 MVItalic SMSymbol "1"))
+                     ,IAtom (mkAtom ABin (MFSymbol 0 MVNormal SMSymbol "+"))
+                     ,IAtom (mkAtom AOrd (MFSymbol 0 MVItalic SMSymbol "1"))
                      ]
 
 mtest2 = TestCase $ assertEqual "Math" expected (runMathList True "(-1)^n")
@@ -146,12 +147,13 @@ $$(-1)^n\showlists$$ ->
 .\fam0 )
 ^\fam1 n
 -}
-    expected = Right [IAtom (mkAtom AOpen  (MFSymbol 0 '(')) { atomIsDelimiter = True }
-                     ,IAtom (mkAtom ABin   (MFSymbol 0 '\x2212')) -- U+2212: MINUS SIGN
-                     ,IAtom (mkAtom AOrd   (MFSymbol 0 '1'))
-                     ,IAtom (mkAtom AClose (MFSymbol 0 ')')) { atomIsDelimiter = True
-                                                             , atomSuperscript = MFSymbol 1 'n'
-                                                             }
+    expected = Right [IAtom (mkAtom AOpen  (MFSymbol 0 MVNormal SMSymbol "(")) { atomIsDelimiter = True }
+                     ,IAtom (mkAtom ABin   (MFSymbol 0 MVNormal SMSymbol "\x2212")) -- U+2212: MINUS SIGN
+                     ,IAtom (mkAtom AOrd   (MFSymbol 0 MVItalic SMSymbol "1"))
+                     ,IAtom (mkAtom AClose (MFSymbol 0 MVNormal SMSymbol ")"))
+                      { atomIsDelimiter = True
+                      , atomSuperscript = MFSymbol 1 MVItalic SMSymbol "n"
+                      }
                      ]
 
 mtest3 = TestCase $ assertEqual "Math" expected (runMathList True "a<b")
@@ -165,9 +167,9 @@ $$a<b\showlists$$ ->
 \mathord
 .\fam1 b
 -}
-    expected = Right [IAtom (mkAtom AOrd (MFSymbol 1 'a'))
-                     ,IAtom (mkAtom ARel (MFSymbol 1 '<'))
-                     ,IAtom (mkAtom AOrd (MFSymbol 1 'b'))
+    expected = Right [IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "a"))
+                     ,IAtom (mkAtom ARel (MFSymbol 1 MVNormal SMSymbol "<"))
+                     ,IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "b"))
                      ]
 
 mtest4 = TestCase $ assertEqual "Math" expected (runMathList True "\\newcommand\\frac[2]{\\Ustack{{#1} \\over #2}}\\frac12+\\frac{a}{b+c}")
@@ -196,22 +198,22 @@ mtest4 = TestCase $ assertEqual "Math" expected (runMathList True "\\newcommand\
     group l = IAtom (mkAtom AOrd (MFSubList l))
     expected = Right
       [group [IGenFrac GFOver
-               [group [IAtom (mkAtom AOrd (MFSymbol 0 '1'))]]
-               [IAtom (mkAtom AOrd (MFSymbol 0 '2'))]
+               [group [IAtom (mkAtom AOrd (MFSymbol 0 MVItalic SMSymbol "1"))]]
+               [IAtom (mkAtom AOrd (MFSymbol 0 MVItalic SMSymbol "2"))]
              ]
-      ,IAtom (mkAtom ABin (MFSymbol 0 '+'))
+      ,IAtom (mkAtom ABin (MFSymbol 0 MVNormal SMSymbol "+"))
       ,group [IGenFrac GFOver
-               [group [IAtom (mkAtom AOrd (MFSymbol 1 'a'))]]
-               [IAtom (mkAtom AOrd (MFSymbol 1 'b'))
-               ,IAtom (mkAtom ABin (MFSymbol 0 '+'))
-               ,IAtom (mkAtom AOrd (MFSymbol 1 'c'))
+               [group [IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "a"))]]
+               [IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "b"))
+               ,IAtom (mkAtom ABin (MFSymbol 0 MVNormal SMSymbol "+"))
+               ,IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "c"))
                ]
              ]
       ]
 
 arithtest1 = TestCase $ assertEqual "Arithmetic" expected (runMathList True "\\countdef\\foo=0 \\foo=100000 \\multiply\\foo by 2000000 \\the\\foo")
   where
-    expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 0) "200000000000"
+    expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 0 MVItalic SMSymbol . T.singleton) "200000000000"
 
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1

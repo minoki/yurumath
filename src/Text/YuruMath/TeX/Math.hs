@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as Map
 import Data.Word
 import Data.Bits
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Semigroup ((<>))
 import Control.Monad.State.Strict
 import Control.Monad.Except
@@ -58,9 +59,33 @@ mathclassToAtomType MathPunct = APunct
 mathclassToAtomType MathVar   = AOrd
 mathclassToAtomType MathInner = AInner
 
+data MathVariant = MVNormal
+                 | MVBold
+                 | MVItalic
+                 | MVBoldItalic
+                 | MVDoubleStruck
+                 | MVBoldFraktur
+                 | MVScript
+                 | MVBoldScript
+                 | MVFraktur
+                 | MVSansSerif
+                 | MVBoldSansSerif
+                 | MVSansSerifItalic
+                 | MVSansSerifBoldItalic
+                 | MVMonospace
+                 | MVFunctionName
+                 deriving (Eq,Show)
+
+data SymbolMode = SMSymbol
+                | SMText
+                deriving (Eq,Show)
+
 data MathField = MFEmpty
-               | MFSymbol {-family number-} !Word {-position number-} !Char
-               | MFTextSymbol {-family-} !Word !String
+               | MFSymbol { symbolFamily  :: !Word
+                          , symbolVariant :: !MathVariant
+                          , symbolMode    :: !SymbolMode
+                          , symbolContent :: !Text
+                          }
                | MFBox
                | MFSubList MathList
                deriving (Eq,Show)
@@ -249,6 +274,8 @@ type MathList = [MathItem] -- Use Data.Sequence?
 data MathLocalState ecommand value = MathLocalState
                                      { _mCommonLocalState :: !(CommonLocalState ecommand value)
                                      , _famParam :: !Int
+                                     , _currentVariant :: !MathVariant
+                                     , _currentSymbolMode :: !SymbolMode
                                      }
 
 data MathState localstate
@@ -260,6 +287,8 @@ data MathState localstate
 initialLocalMathState :: MathLocalState e v
 initialLocalMathState = MathLocalState { _mCommonLocalState = initialLocalState
                                        , _famParam = -1
+                                       , _currentVariant = MVItalic
+                                       , _currentSymbolMode = SMSymbol
                                        }
 
 initialMathState :: Bool -> CommonState localstate -> MathState localstate
@@ -302,17 +331,17 @@ data MathToken m where
   MTChoice     :: MathToken m -- \mathchoice
   MTStopInline :: MathToken m -- `$' or \Ustopmath
   MTStopDisplay :: MathToken m -- `$$' or \Ustopdisplaymath
+  MTSetVariant :: !MathVariant -> MathToken m
+  MTSetSymbolMode :: !SymbolMode -> MathToken m
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
 
-type MathValueList = '[CommonValue,MathStyleSet,MathAtomCommand,MathCommands]
-
 type MonadMathState localstate set m
   = ( MonadTeXState (MathState localstate) m
     , ValueT localstate ~ Union set
-    , DoExecute (Union (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))) m
-    , Show (Union (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))
+    , DoExecute (Union (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))) m
+    , Show (Union (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))
     , localstate ~ MathLocalState (ExpandableT localstate) (ValueT localstate)
     )
 
@@ -328,6 +357,8 @@ readMathToken = do
                   @> (\(v :: MathStyleSet)    -> Just <$> doMathStyleSet v)
                   @> (\(v :: MathAtomCommand) -> Just <$> doMathAtom v)
                   @> (\(v :: MathCommands)    -> Just <$> doOtherMathCommand v)
+                  @> (\(v :: MathVariantSet)  -> Just <$> doMathVariantSet v)
+                  @> (\(v :: MathSymbolModeSet) -> Just <$> doMathSymbolModeSet v)
                   @> (\v                      -> return $ Just $ MTOther v) -- other assignments, etc
     doCommonValue :: CommonValue -> m (Maybe (MathToken m))
     doCommonValue v = case v of
@@ -353,6 +384,8 @@ readMathToken = do
       v -> doExecute v >> readMathToken -- \relax, etc
     doMathStyleSet (MathStyleSet style) = return $ MTSetStyle style
     doMathAtom (MathAtomCommand atomType) = return $ MTAtomSpec atomType
+    doMathVariantSet (MathVariantSet var) = return $ MTSetVariant var
+    doMathSymbolModeSet (MathSymbolModeSet mode) = return $ MTSetSymbolMode mode
     doOtherMathCommand :: MathCommands -> m (MathToken m)
     doOtherMathCommand v = case v of
 
@@ -733,6 +766,14 @@ readMathMaterial !ctx = loop []
             leaveGroup ScopeByMath
             return (reverse revList)
 
+          MTSetVariant var -> do
+            assign (localState . currentVariant) var
+            loop revList
+
+          MTSetSymbolMode sm -> do
+            assign (localState . currentSymbolMode) sm
+            loop revList
+
           -- assignments, etc
           MTOther v -> do
             doExecute v
@@ -772,10 +813,25 @@ readMathField = do
 makeMathSymbol :: (MonadMathState localstate set m, MonadError String m) => MathClass -> Word8 -> Char -> m MathField
 makeMathSymbol MathVar !fam !slot = do
   famP <- use (localState . famParam)
+  v <- use (localState . currentVariant)
+  sm <- use (localState . currentSymbolMode)
   if 0 <= famP && famP <= 255
-    then return (MFSymbol (fromIntegral famP) slot)
-    else return (MFSymbol (fromIntegral fam) slot)
-makeMathSymbol !_mathclass !fam !slot = return (MFSymbol (fromIntegral fam) slot)
+    then return $ MFSymbol { symbolFamily = fromIntegral famP
+                           , symbolVariant = v
+                           , symbolMode = sm
+                           , symbolContent = T.singleton slot
+                           }
+    else return $ MFSymbol { symbolFamily = fromIntegral fam
+                           , symbolVariant = v
+                           , symbolMode = sm
+                           , symbolContent = T.singleton slot
+                           }
+makeMathSymbol !_mathclass !fam !slot
+  = return $ MFSymbol { symbolFamily = fromIntegral fam
+                      , symbolVariant = MVNormal
+                      , symbolMode = SMSymbol
+                      , symbolContent = T.singleton slot
+                      }
 
 famSet :: (MonadMathState localstate set m, MonadError String m) => m (Assignment (MathState localstate))
 famSet = do
@@ -803,6 +859,26 @@ instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) 
 newtype MathAtomCommand = MathAtomCommand AtomType deriving (Eq,Show)
 
 instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathAtomCommand m where
+  doExecute _ = return () -- dummy
+  getIntegerValue _ = Nothing
+
+--
+-- Setting math variant
+--
+
+newtype MathVariantSet = MathVariantSet MathVariant deriving (Eq,Show)
+
+instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathVariantSet m where
+  doExecute _ = return () -- dummy
+  getIntegerValue _ = Nothing
+
+--
+-- Setting symbol mode
+--
+
+newtype MathSymbolModeSet = MathSymbolModeSet SymbolMode deriving (Eq,Show)
+
+instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathSymbolModeSet m where
   doExecute _ = return () -- dummy
   getIntegerValue _ = Nothing
 
@@ -901,7 +977,7 @@ instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoEx
 --
 
 type MathExpandableList = '[MathExpandable]
-type MathNonExpandablePrimitiveList = '[MathCommands,MathAtomCommand,MathStyleSet]
+type MathNonExpandablePrimitiveList = '[MathCommands,MathAtomCommand,MathStyleSet,MathVariantSet,MathSymbolModeSet]
 
 mathDefinitions :: (SubList MathExpandableList eset, SubList MathNonExpandablePrimitiveList vset) => Map.Map Text (Either (Union eset) (Union vset))
 mathDefinitions = Map.fromList
@@ -976,4 +1052,22 @@ mathDefinitions = Map.fromList
   ,("crampedtextstyle",        liftUnion (MathStyleSet CrampedTextStyle))
   ,("crampedscriptstyle",      liftUnion (MathStyleSet CrampedScriptStyle))
   ,("crampedscriptscriptstyle",liftUnion (MathStyleSet CrampedScriptScriptStyle))
+
+  ,("YuruMathSetNormal",             liftUnion (MathVariantSet MVNormal))
+  ,("YuruMathSetBold",               liftUnion (MathVariantSet MVBold))
+  ,("YuruMathSetItalic",             liftUnion (MathVariantSet MVItalic))
+  ,("YuruMathSetBoldItalic",         liftUnion (MathVariantSet MVBoldItalic))
+  ,("YuruMathSetDoubleStruck",       liftUnion (MathVariantSet MVDoubleStruck))
+  ,("YuruMathSetBoldFraktur",        liftUnion (MathVariantSet MVBoldFraktur))
+  ,("YuruMathSetScript",             liftUnion (MathVariantSet MVScript))
+  ,("YuruMathSetBoldScript",         liftUnion (MathVariantSet MVBoldScript))
+  ,("YuruMathSetFraktur",            liftUnion (MathVariantSet MVFraktur))
+  ,("YuruMathSetSansSerif",          liftUnion (MathVariantSet MVSansSerif))
+  ,("YuruMathSetBoldSansSerif",      liftUnion (MathVariantSet MVBoldSansSerif))
+  ,("YuruMathSetSansSerifItalic",    liftUnion (MathVariantSet MVSansSerifItalic))
+  ,("YuruMathSetSansSerifBoldItalic",liftUnion (MathVariantSet MVSansSerifBoldItalic))
+  ,("YuruMathSetMonospace",          liftUnion (MathVariantSet MVMonospace))
+  ,("YuruMathSetFunctionName",       liftUnion (MathVariantSet MVFunctionName))
+  ,("YuruMathSetText",               liftUnion (MathSymbolModeSet SMText))
+  ,("YuruMathSetSymbol",             liftUnion (MathSymbolModeSet SMSymbol))
   ])

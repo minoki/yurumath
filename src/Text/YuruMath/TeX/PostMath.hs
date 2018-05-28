@@ -3,6 +3,7 @@ import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Math
 import Text.YuruMath.TeX.Math.Style
 import Data.Bifunctor
+import Data.Semigroup ((<>))
 
 doChoice :: MathStyle -> MathList -> MathList -> MathList -> MathList -> MathList
 doChoice        DisplayStyle      d _ _ _  = d
@@ -129,10 +130,9 @@ textSymbol = doList
   where
     doList :: MathList -> MathList
     doList [] = []
-    doList (IAtom atom@(OrdAtom { atomNucleus = MFSymbol fam slot, atomSuperscript = MFEmpty, atomSubscript = MFEmpty }) : IAtom nextAtom@(OrdAtom { atomNucleus = MFSymbol fam' slot2 }) : xs)
-      | fam == fam' = doList (IAtom nextAtom { atomNucleus = MFTextSymbol fam [slot,slot2] } : xs)
-    doList (IAtom atom@(OrdAtom { atomNucleus = MFTextSymbol fam s, atomSuperscript = MFEmpty, atomSubscript = MFEmpty }) : IAtom nextAtom@(OrdAtom { atomNucleus = MFSymbol fam' slot2 }) : xs)
-      | fam == fam' = doList (IAtom nextAtom { atomNucleus = MFTextSymbol fam (s ++ [slot2]) } : xs)
+    doList (IAtom atom@(OrdAtom { atomNucleus = MFSymbol fam var SMText text, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })
+            : IAtom nextAtom@(OrdAtom { atomNucleus = MFSymbol fam' var' SMText text' }) : xs)
+      | fam == fam', var == var' = doList (IAtom nextAtom { atomNucleus = MFSymbol fam var SMText (text <> text') } : xs)
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs

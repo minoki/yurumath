@@ -23,6 +23,9 @@ shortParam, longParam :: MacroParamSpec
 shortParam = StandardMandatory ShortParam
 longParam = StandardMandatory LongParam
 
+protected :: Macro -> Macro
+protected m = m { macroIsProtected = True }
+
 latexDefinitions :: (SubList '[Macro] eset,SubList '[CommonValue,CommonExecutable,MacroCommand] vset) => Map.Map Text (Either (Union eset) (Union vset))
 latexDefinitions = Map.fromList
   [
@@ -96,6 +99,18 @@ latexDefinitions = Map.fromList
   -- \DeclareSymbolFontAlphabet: \mathrm: operators, \mathnormal: letters, \mathcal: symbols
   -- \DeclareMathAlphabet: \mathbf, \mathsf, \mathit, \mathtt
   -- greek letters by DeclareMathSymbol
+  ,("mathnormal", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetSymbol\\YuruMathSetItalic#1}") -- robust
+  ,("mathrm", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetNormal#1}") -- robust
+  ,("mathit", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetItalic#1}") -- robust
+  ,("mathbf", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetBold#1}") -- robust
+  ,("mathsf", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetSansSerif#1}") -- robust
+  ,("mathtt", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetMonospace#1}") -- robust
+  ,("mathcal", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetScript#1}") -- robust
+  -- \mathbb, \mathfrak, \mathscr are defined by amsfonts
+  ,("mathbb", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetDoubleStruck#1}") -- robust
+  ,("mathfrak", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetFraktur#1}") -- robust
+  ,("mathscr", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetScript#1}") -- robust
+  ,("operatorname", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName#1}") -- robust
 
   -- ltmath
   -- \log-like, \bmod, \pmod

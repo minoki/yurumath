@@ -573,36 +573,27 @@ readMathMaterial !ctx = loop []
           -- <character>
           MTChar c -> do
             mc <- mathCodeOf c
-            famP <- use (localState . famParam)
+            delcode <- delimiterCodeOf c
             let mathclass = mathcharClass mc
                 atomType = mathclassToAtomType mathclass
-                fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
-                    | otherwise = fromIntegral $ mathcharFamily mc
-                slot = mathcharSlot mc
-                atom = mkAtom atomType (MFSymbol fam slot)
-            delcode <- delimiterCodeOf c
+            sym <- makeMathSymbol mathclass (mathcharFamily mc) (mathcharSlot mc)
+            let atom = mkAtom atomType sym
             doAtom $ if delcode /= DelimiterCode (-1)
                      then markAtomAsDelimiter atom
                      else atom
 
           -- <math symbol>
           MTMathChar mc -> do -- \mathchar or \mathchardef-ed
-            famP <- use (localState . famParam)
             let mathclass = mathcharClass mc
-                atomType = mathclassToAtomType $ mathcharClass mc
-                fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
-                    | otherwise = fromIntegral $ mathcharFamily mc
-                slot = mathcharSlot mc
-            doAtom (mkAtom atomType (MFSymbol fam slot))
+                atomType = mathclassToAtomType mathclass
+            sym <- makeMathSymbol mathclass (mathcharFamily mc) (mathcharSlot mc)
+            doAtom (mkAtom atomType sym)
 
           -- <math symbol>
           MTDelimiter mathclass del -> do -- \delimiter
-            famP <- use (localState . famParam)
+            sym <- makeMathSymbol mathclass (delimiterFamilySmall del) (delimiterSlotSmall del)
             let atomType = mathclassToAtomType mathclass
-                fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
-                    | otherwise = fromIntegral $ delimiterFamilySmall del
-                slot = delimiterSlotSmall del
-            doAtom (markAtomAsDelimiter (mkAtom atomType (MFSymbol fam slot)))
+            doAtom (markAtomAsDelimiter (mkAtom atomType sym))
 
           -- { <math mode material> }
           MTLBrace -> do
@@ -765,25 +756,11 @@ readMathField = do
     Just t -> case t of
       MTChar c -> do
         mc <- mathCodeOf c
-        famP <- use (localState . famParam)
-        let mathclass = mathcharClass mc
-            fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
-                | otherwise = fromIntegral $ mathcharFamily mc
-            slot = mathcharSlot mc
-        return (MFSymbol fam slot)
+        makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed
-        famP <- use (localState . famParam)
-        let mathclass = mathcharClass mc
-            fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
-                | otherwise = fromIntegral $ mathcharFamily mc
-            slot = mathcharSlot mc
-        return (MFSymbol fam slot)
+        makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTDelimiter mathclass del -> do -- \delimiter
-        famP <- use (localState . famParam)
-        let fam | mathclass == MathVar, 0 <= famP, famP <= 255 = fromIntegral famP
-                | otherwise = fromIntegral $ delimiterFamilySmall del
-            slot = delimiterSlotSmall del
-        return (MFSymbol fam slot)
+        makeMathSymbol mathclass (delimiterFamilySmall del) (delimiterSlotSmall del)
       MTLBrace -> do
         enterGroup ScopeByBrace
         content <- runMMDBrace <$> readMathMaterial defaultMathMaterialContext
@@ -791,6 +768,14 @@ readMathField = do
           [IAtom (OrdAtom { atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
           _ -> MFSubList content
       _ -> throwError $ "Unexpected " ++ show t ++ "; expected a symbol or `{'"
+
+makeMathSymbol :: (MonadMathState localstate set m, MonadError String m) => MathClass -> Word8 -> Char -> m MathField
+makeMathSymbol MathVar !fam !slot = do
+  famP <- use (localState . famParam)
+  if 0 <= famP && famP <= 255
+    then return (MFSymbol (fromIntegral famP) slot)
+    else return (MFSymbol (fromIntegral fam) slot)
+makeMathSymbol !_mathclass !fam !slot = return (MFSymbol (fromIntegral fam) slot)
 
 famSet :: (MonadMathState localstate set m, MonadError String m) => m (Assignment (MathState localstate))
 famSet = do

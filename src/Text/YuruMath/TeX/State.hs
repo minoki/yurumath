@@ -146,14 +146,15 @@ mathcharSlot (UMathCode x) = toEnum $ fromIntegral $ 0x1FFFFF .&. (fromIntegral 
 
 defaultMathCodeOf :: Char -> MathCode
 defaultMathCodeOf c = case c of
+  {-
   -- plain TeX & LaTeX
   '!' -> mkMathCode MathClose operators '!'    -- "21
-  --'*'->mkMathCode MathBin   symbols   '\x03' -- "03
+  '*' -> mkMathCode MathBin   symbols   '\x03' -- "03
   '+' -> mkMathCode MathBin   operators '+'    -- "2B
   ',' -> mkMathCode MathPunct letters   '\x3B' -- "3B
-  --'-'->mkMathCode MathBin   symbols   '\x00' -- "00
+  '-' -> mkMathCode MathBin   symbols   '\x00' -- "00
   '.' -> mkMathCode MathOrd   letters   '\x3A' -- "3A
-  --':'->mkMathCode MathRel   operators ':'    -- "3A
+  ':' -> mkMathCode MathRel   operators ':'    -- "3A
   ';' -> mkMathCode MathPunct operators ';'    -- "3B
   '=' -> mkMathCode MathRel   operators '='    -- "3D
   '?' -> mkMathCode MathClose operators '?'    -- "3F
@@ -168,24 +169,45 @@ defaultMathCodeOf c = case c of
   '\\'-> mkMathCode MathOrd   symbols   '\x6E' -- "6E
   '{' -> mkMathCode MathOpen  symbols   '\x66' -- "66 (plain TeX only)
   '}' -> mkMathCode MathClose symbols   '\x67' -- "67 (plain TeX only)
+  -}
   ' '  -> MathCode 0x8000 -- active
   '\'' -> MathCode 0x8000 -- active
   '_'  -> MathCode 0x8000 -- active
 
   -- unicode-math:
-  '-'  -> mkUMathCode MathBin 0 '\x2212'
-  '*'  -> mkUMathCode MathBin 0 '\x2217'
-  ':'  -> mkUMathCode MathRel 0 '\x2236' -- ?
+  '!'  -> mkUMathCode MathClose 0 '!' -- a postfix operator
+  '+'  -> mkUMathCode MathBin   0 '+'
+  ','  -> mkUMathCode MathPunct 0 ','
+  '.'  -> mkUMathCode MathOrd   0 '.'
+  ';'  -> mkUMathCode MathPunct 0 ';'
+  '='  -> mkUMathCode MathRel   0 '='
+  '?'  -> mkUMathCode MathClose 0 '?' -- a postfix operator
+  '('  -> mkUMathCode MathOpen  0 '('
+  ')'  -> mkUMathCode MathClose 0 ')'
+  '/'  -> mkUMathCode MathOrd   0 '/'
+  '['  -> mkUMathCode MathOpen  0 '['
+  ']'  -> mkUMathCode MathClose 0 ']'
+  '|'  -> mkUMathCode MathOrd   0 '|'
+  '<'  -> mkUMathCode MathRel   0 '<'
+  '>'  -> mkUMathCode MathRel   0 '>'
+  '\\' -> mkUMathCode MathOrd   0 '\\'
+  '{'  -> mkUMathCode MathOpen  0 '{'
+  '}'  -> mkUMathCode MathClose 0 '}'
+  '-'  -> mkUMathCode MathBin   0 '\x2212'
+  '*'  -> mkUMathCode MathBin   0 '\x2217'
+  ':'  -> mkUMathCode MathRel   0 '\x2236' -- ?
 
   _ | isAscii c && isLetter c -> MathCode (fromIntegral (0x7100 + ord c)) -- variable family
     | isDigit c -> MathCode (fromIntegral (0x7000 + ord c)) -- variable family
     | isAscii c -> MathCode (fromIntegral (ord c)) -- ord, family 0 (roman)
     | otherwise -> UMathCode (fromIntegral (ord c)) -- ???
 
+  {-
   where
     operators = 0
     letters = 1
     symbols = 2 -- ?
+  -}
 
 mathCodeOf :: MonadTeXState a m => Char -> m MathCode
 mathCodeOf c = do

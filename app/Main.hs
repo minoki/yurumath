@@ -9,7 +9,6 @@ import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Math
 import Text.YuruMath.TeX.Math.Style
-import Text.YuruMath.TeX.MathData
 import Text.YuruMath.TeX.PostMath
 import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.LaTeX
@@ -33,7 +32,6 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
       modifying (localState . tsDefinitions)
         $ \m -> mconcat [primitiveDefinitions
                         ,mathDefinitions
-                        ,fmap (Right . liftUnion . DefinedMathCharacter) mathCommands
                         ,latexDefinitions
                         ,m
                         ]

@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
-module Text.YuruMath.TeX.LaTeX (latexDefinitions) where
+module Text.YuruMath.TeX.LaTeX where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Macro
-import Text.YuruMath.TeX.Execution
+import Text.YuruMath.TeX.State
 import Data.Text (Text)
 import TypeFun.Data.List (Elem,SubList)
 import Data.OpenUnion
@@ -23,10 +23,25 @@ shortParam, longParam :: MacroParamSpec
 shortParam = StandardMandatory ShortParam
 longParam = StandardMandatory LongParam
 
+optionalStar :: [TeXToken] -> [TeXToken] -> MacroParamSpec
+optionalStar ifTrue ifFalse = OptionalChar
+  { paramSpecConsumeSpace = ConsumeSpaces
+  , paramSpecToken = TTCharacter '*' CCOther
+  , paramSpecIfTrue = ifTrue
+  , paramSpecIfFalse = ifFalse
+  }
+
 protected :: Macro -> Macro
 protected m = m { macroIsProtected = True }
 
-latexDefinitions :: (SubList '[Macro] eset,SubList '[CommonValue,CommonExecutable,MacroCommand] vset) => Map.Map Text (Either (Union eset) (Union vset))
+operatornameM :: String -> LimitsSpec -> Macro
+operatornameM name DisplayLimits = mkSimpleMacroWithString [] $ "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName " ++ name ++ "}"
+operatornameM name NoLimits = mkSimpleMacroWithString [] $ "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName " ++ name ++ "}\\nolimits"
+operatornameM name Limits = mkSimpleMacroWithString [] $ "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName " ++ name ++ "}\\limits"
+operatorname :: (Elem Macro eset) => String -> LimitsSpec -> Either (Union eset) v
+operatorname !name !limits = Left $ liftUnion $ operatornameM name limits
+
+latexDefinitions :: (SubList '[Macro] eset,SubList '[CommonValue,MacroCommand] vset) => Map.Map Text (Either (Union eset) (Union vset))
 latexDefinitions = Map.fromList
   [
   -- ltplain
@@ -42,6 +57,8 @@ latexDefinitions = Map.fromList
   ,("@M",        Right $ liftUnion $ IntegerConstant 10000)
   ,("@MM",       Right $ liftUnion $ IntegerConstant 20000)
   ,("active",    Right $ liftUnion $ IntegerConstant 13)
+  ,("\r",        Left $ liftUnion $ mkSimpleMacroWithString [] "\\ ") -- \^^M
+  ,("\t",        Left $ liftUnion $ mkSimpleMacroWithString [] "\\ ") -- \let\^^I=\^^M
   ,("lq",        Left $ liftUnion $ mkSimpleMacroWithString [] "`")
   ,("rq",        Left $ liftUnion $ mkSimpleMacroWithString [] "'")
   ,("lbrack",    Left $ liftUnion $ mkSimpleMacroWithString [] "[")
@@ -67,7 +84,10 @@ latexDefinitions = Map.fromList
   ,("@thirdofthree", Left $ liftUnion $ mkSimpleMacroWithString [longParam, longParam, longParam] "#3")
   ,("@backslashchar",Left $ liftUnion $ mkSimpleMacro [] [TTCharacter '\\' CCOther]) -- A category code 12 backslash.
   -- \protect and \robust stuff
-  -- ,("@ifundefined")
+  ,("@ifundefined",   Left $ liftUnion $ mkSimpleMacroWithString [shortParam]
+                      "\\expandafter\\ifx\\csname#1\\endcsname\\relax\\expandafter\\@firstoftwo\\else\\expandafter\\@secondoftwo\\fi")
+  ,("@qend",         Left $ liftUnion $ mkSimpleMacro [] $ map (flip TTCharacter CCOther) "end") -- "end" \catcode-d 12
+  ,("@qrelax",       Left $ liftUnion $ mkSimpleMacro [] $ map (flip TTCharacter CCOther) "relax") -- "relax" \catcode-d 12
   ,("@sptoken",      Right $ liftUnion $ Character ' ' CCSpace)
   ,("makeatletter",  Left $ liftUnion $ mkSimpleMacroWithString [] "\\catcode`\\@=11 ") -- catcode 11 = letter
   ,("makeatother",   Left $ liftUnion $ mkSimpleMacroWithString [] "\\catcode`\\@=12 ") -- catcode 12 = other
@@ -99,6 +119,58 @@ latexDefinitions = Map.fromList
   -- \DeclareSymbolFontAlphabet: \mathrm: operators, \mathnormal: letters, \mathcal: symbols
   -- \DeclareMathAlphabet: \mathbf, \mathsf, \mathit, \mathtt
   -- greek letters by DeclareMathSymbol
+
+  -- Ordinary Symbols
+  ,("partial", Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x2202')
+  ,("infty",   Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x221E')
+  ,("prime",   Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x2032')
+  ,("emptyset",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x2205')
+  ,("top",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x22A4')
+  ,("bot",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x22A5')
+  ,("forall",  Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x2200')
+  ,("exists",  Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x2203')
+  ,("neg",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x00AC')
+  ,("lnot",    Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOrd 0 '\x00AC')
+
+  -- Large Operators
+  ,("intop",   Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOp 0 '\x222B') -- nolimits
+  ,("int",     Left $ liftUnion $ mkSimpleMacroWithString [] "\\intop\\nolimits")
+  ,("prod",    Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOp 0 '\x220F')
+  ,("sum",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathOp 0 '\x2211')
+
+  -- Binary Symbols
+  ,("cap",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x2229')
+  ,("cup",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x222A')
+  ,("div",     Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x00F7')
+  ,("otimes",  Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x2297')
+  ,("oplus",   Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x2295')
+  ,("mp",      Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x2213')
+  ,("pm",      Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x00B1')
+  ,("times",   Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathBin 0 '\x00D7')
+
+  -- Relations
+  ,("mid",       Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '|') -- ?
+  ,("leftarrow", Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2190')
+  ,("rightarrow",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2192')
+  ,("in",        Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2208')
+  ,("ni",        Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x220B')
+  ,("leq",       Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2264')
+  ,("le",        Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2264')
+  ,("geq",       Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2265')
+  ,("ge",        Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2265')
+  ,("subset",    Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2282')
+  ,("supset",    Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathRel 0 '\x2283')
+
+  -- Punctuation symbols
+  ,("colon",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathPunct 0 ':')
+  ,("cdots",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathPunct 0 '\x22EF')
+  ,("vdots",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathPunct 0 '\x22EE')
+  ,("ddots",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathPunct 0 '\x22F1')
+
+  -- TODO: Accents
+  -- TODO: Radicals
+  ,("sqrtsign",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Uradical \"0 \"221A ")
+
   ,("mathnormal", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetSymbol\\YuruMathSetItalic#1}") -- robust
   ,("mathrm", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetNormal#1}") -- robust
   ,("mathit", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetItalic#1}") -- robust
@@ -110,10 +182,44 @@ latexDefinitions = Map.fromList
   ,("mathbb", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetDoubleStruck#1}") -- robust
   ,("mathfrak", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetFraktur#1}") -- robust
   ,("mathscr", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetScript#1}") -- robust
-  ,("operatorname", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName#1}") -- robust
+  ,("operatorname", Left $ liftUnion $ protected $ mkSimpleMacroWithString [optionalStar (tokenizeStaticString "") (tokenizeStaticString "\\nolimits"), shortParam] "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName#2}#1") -- robust
 
   -- ltmath
-  -- \log-like, \bmod, \pmod
+  ,("log",   operatorname "log"    NoLimits)
+  ,("lg",    operatorname "lg"     NoLimits)
+  ,("ln",    operatorname "ln"     NoLimits)
+  ,("lim",   operatorname "lim"    DisplayLimits)
+  ,("limsup",operatorname "lim\\,sup" DisplayLimits) -- ?
+  ,("liminf",operatorname "lim\\,inf" DisplayLimits) -- ?
+  ,("sin",   operatorname "sin"    NoLimits)
+  ,("arcsin",operatorname "arcsin" NoLimits)
+  ,("sinh",  operatorname "sinh"   NoLimits)
+  ,("cos",   operatorname "cos"    NoLimits)
+  ,("arccos",operatorname "arccos" NoLimits)
+  ,("cosh",  operatorname "cosh"   NoLimits)
+  ,("tan",   operatorname "tan"    NoLimits)
+  ,("arctan",operatorname "arctan" NoLimits)
+  ,("tanh",  operatorname "tanh"   NoLimits)
+  ,("cot",   operatorname "cot"    NoLimits)
+  ,("coth",  operatorname "coth"   NoLimits)
+  ,("sec",   operatorname "sec"    NoLimits)
+  ,("csc",   operatorname "csc"    NoLimits)
+  ,("max",   operatorname "max"    DisplayLimits)
+  ,("min",   operatorname "min"    DisplayLimits)
+  ,("sup",   operatorname "sup"    DisplayLimits)
+  ,("inf",   operatorname "inf"    DisplayLimits)
+  ,("arg",   operatorname "arg"    NoLimits)
+  ,("ker",   operatorname "ker"    NoLimits)
+  ,("dim",   operatorname "dim"    NoLimits)
+  ,("hom",   operatorname "hom"    NoLimits)
+  ,("det",   operatorname "det"    DisplayLimits)
+  ,("exp",   operatorname "exp"    NoLimits)
+  ,("Pr",    operatorname "Pr"     DisplayLimits)
+  ,("gcd",   operatorname "gcd"    DisplayLimits)
+  ,("deg",   operatorname "deg"    NoLimits)
+  -- ("bmod", Left $ liftUnion $ mkSimpleMacroWithString [] "\\nonscript\\mskip-\\medmuskip\\mkern5mu\\mathbin{\\operator@font mod}\\penalty900\\mkern5mu\\nonscript\\mskip-\\medmuskip")
+  -- ("pmod", Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "\\allowbreak\\mkern18mu({\\operator@font mod}\,\,#1)")
+  -- \bmod, \pmod
   -- \big, \Big, \bigg, \Bigg are defined in fontdef
   ,("bigl",  Left $ liftUnion $ mkSimpleMacroWithString [] "\\mathopen\\big")
   ,("bigm",  Left $ liftUnion $ mkSimpleMacroWithString [] "\\mathrel\\big")
@@ -148,6 +254,6 @@ latexDefinitions = Map.fromList
   -- \sqrt
   -- eqnarray, eqnarray*
   -- \ensuremath
-  ,("ensuremath",   Left $ liftUnion $ mkSimpleMacroWithString [] "\\ifmmode\\expandafter\\@firstofone\\else\\expandafter\\@ensuredmath\\fi") -- TODO: Make robust
+  ,("ensuremath",   Left $ liftUnion $ protected $ mkSimpleMacroWithString [] "\\ifmmode\\expandafter\\@firstofone\\else\\expandafter\\@ensuredmath\\fi")
   ,("@ensuredmath", Left $ liftUnion $ mkSimpleMacroWithString [longParam] "$\\relax#1$")
   ]

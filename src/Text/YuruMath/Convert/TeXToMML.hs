@@ -19,8 +19,8 @@ toMML = doList
     doList style (_ : xs) = doList style xs -- not implemented yet
     doAtom :: MathStyle -> Atom -> MathML
     doAtom style (atom@OpAtom { atomLimits = DisplayLimits })
-      -- TODO: mark nucleus as "movablelimits=true"
-      = let n = doNucleus style (atomType atom) (atomNucleus atom)
+      = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "true" $ toMathML content
+              | otherwise = doNucleus style (atomType atom) (atomNucleus atom)
             sub = doField (subscriptStyle style) (atomSubscript atom)
             sup = doField (superscriptStyle style) (atomSuperscript atom)
         in case (sub,sup) of
@@ -29,8 +29,8 @@ toMML = doList
              (Nothing, Just xs) -> mover n (fromList xs)
              (Just xs, Just ys) -> munderover n (fromList xs) (fromList ys)
     doAtom style (atom@OpAtom { atomLimits = Limits })
-      -- TODO: mark nucleus as "movablelimits=false"
-      = let n = doNucleus style (atomType atom) (atomNucleus atom)
+      = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "false" $ toMathML content
+              | otherwise = doNucleus style (atomType atom) (atomNucleus atom)
             sub = doField (subscriptStyle style) (atomSubscript atom)
             sup = doField (superscriptStyle style) (atomSuperscript atom)
         in case (sub,sup) of

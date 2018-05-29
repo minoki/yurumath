@@ -168,7 +168,7 @@ $$a<b\showlists$$ ->
 .\fam1 b
 -}
     expected = Right [IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "a"))
-                     ,IAtom (mkAtom ARel (MFSymbol 1 MVNormal SMSymbol "<"))
+                     ,IAtom (mkAtom ARel (MFSymbol 0 MVNormal SMSymbol "<"))
                      ,IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "b"))
                      ]
 

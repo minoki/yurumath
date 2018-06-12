@@ -34,7 +34,7 @@ data TypesetCommand
   | Thfil
   | Thfill
   | Thss
-  | Thfillneg
+  | Thfilneg
   | TControlSpace -- "\ "
   | Traise
   | Tlower
@@ -62,7 +62,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute TypesetC
   doExecute Thfil         = throwError $ "You can't use \\hfil in this mode"
   doExecute Thfill        = throwError $ "You can't use \\hfill in this mode"
   doExecute Thss          = throwError $ "You can't use \\hss in this mode"
-  doExecute Thfillneg     = throwError $ "You can't use \\hfillneg in this mode"
+  doExecute Thfilneg      = throwError $ "You can't use \\hfilneg in this mode"
   doExecute TControlSpace = throwError $ "You can't use <control sequence> in this mode"
   doExecute Traise        = throwError $ "You can't use \\raise in this mode"
   doExecute Tlower        = throwError $ "You can't use \\lower in this mode"
@@ -92,7 +92,7 @@ typesetCommands = fmap liftUnion $ Map.fromList
   ,("hfil",         Thfil)
   ,("hfill",        Thfill)
   ,("hss",          Thss)
-  ,("hfillneg",     Thfillneg)
+  ,("hfilneg",      Thfilneg)
   ,(" ",            TControlSpace)
   ,("raise",        Traise)
   ,("lower",        Tlower)

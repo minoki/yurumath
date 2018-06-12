@@ -21,6 +21,40 @@ nucleusStyle AAcc = makeCramped
 nucleusStyle ARad = makeCramped
 nucleusStyle _ = id
 
+isScriptOrSmaller :: MathStyle -> Bool
+isScriptOrSmaller ScriptStyle = True
+isScriptOrSmaller CrampedScriptStyle = True
+isScriptOrSmaller ScriptScriptStyle = True
+isScriptOrSmaller CrampedScriptScriptStyle = True
+isScriptOrSmaller _ = False
+
+stripGlueOrKern :: MathList -> MathList
+stripGlueOrKern (IGlue _ : xs) = xs
+stripGlueOrKern (IKern _ : xs) = xs
+stripGlueOrKern xs = xs
+
+doNonScript :: MathStyle -> MathList -> MathList
+doNonScript = doList
+  where
+    doList :: MathStyle -> MathList -> MathList
+    doList !style [] = []
+    doList !style (IGlue MGNonscript : xs)
+      | isScriptOrSmaller style = doList style (stripGlueOrKern xs)
+      | otherwise = doList style xs
+    doList !style (IAtom atom : xs) = IAtom (doAtom style atom) : doList style xs
+    doList !_ (i@(IStyleChange style) : xs) = i : doList style xs
+    doList !style (IGenFrac gf num den : xs) = IGenFrac gf (doList (smallerStyle style) num) (doList (denominatorStyle style) den) : doList style xs
+    doList !style (x : xs) = x : doList style xs
+    doAtom :: MathStyle -> Atom -> Atom
+    doAtom !style !atom = atom { atomNucleus = doField (nucleusStyle (atomType atom) style) (atomNucleus atom)
+                               , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
+                               , atomSubscript = doField (subscriptStyle style) (atomSubscript atom)
+                               }
+    doField :: MathStyle -> MathField -> MathField
+    doField !style MFBox = MFBox -- TODO
+    doField !style (MFSubList xs) = MFSubList (doList style xs)
+    doField !style field = field
+
 determineChoice :: MathStyle -> MathList -> MathList
 determineChoice = doList
   where

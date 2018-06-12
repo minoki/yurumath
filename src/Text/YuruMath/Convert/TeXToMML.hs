@@ -14,9 +14,14 @@ toMML = doList
     doList :: MathStyle -> MathList -> [MathML]
     doList !style [] = []
     doList style (IAtom atom : xs) = doAtom style atom : doList style xs
-    doList _ (IStyleChange style : xs) = doList style xs
+    doList _ (IStyleChange style : xs) = doList style xs -- TODO: Emit <mstyle> with scriptlevel and displaystyle attributes
     doList style (IGenFrac gf num den : xs) = mfrac (fromList $ doList (smallerStyle style) num) (fromList $ doList (denominatorStyle style) den) : doList style xs
-    doList style (_ : xs) = doList style xs -- not implemented yet
+    doList style (IHorizontalMaterial {} : xs) = doList style xs -- not implemented yet
+    doList style (IVerticalMaterial {} : xs) = doList style xs -- not implemented yet
+    doList style (IGlue {} : xs) = doList style xs -- not implemented yet
+    doList style (IKern {} : xs) = doList style xs -- not implemented yet
+    doList style (IBoundary {} : xs) = doList style xs -- not implemented yet
+    doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
     doAtom :: MathStyle -> Atom -> MathML
     doAtom style (atom@OpAtom { atomLimits = DisplayLimits })
       = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "true" $ toMathML content

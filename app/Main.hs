@@ -44,10 +44,7 @@ main = do
     Left err -> putStrLn ("error: " ++ err)
     Right mathList -> do
       putStrLn ("math list: " ++ show mathList)
-      let mathList' = determineChoice DisplayStyle mathList
-          mathList'' = determineBinForm mathList'
-          mathList''' = pairOpenClose mathList''
-          mathList'''' = textSymbol mathList'''
-      putStrLn ("after some post-processing: " ++ show mathList'''')
-      let mml = math $ mconcat $ toMML DisplayStyle mathList''''
+      let mathList' = textSymbol $ pairOpenClose $ determineBinForm $ doNonScript DisplayStyle $ determineChoice DisplayStyle mathList
+      putStrLn ("after some post-processing: " ++ show mathList')
+      let mml = math $ mconcat $ toMML DisplayStyle mathList'
       putStrLn $ "MathML: " ++ Pretty.renderMarkup mml

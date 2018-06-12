@@ -261,12 +261,21 @@ data BoundaryType = BoundaryLeft
                   | BoundaryMiddle
                   deriving (Eq,Show)
 
+data MathGlue = MGHSkip !(Glue Dimen)
+              | MGMSkip !(Glue MuDimen)
+              | MGNonscript
+              deriving (Eq,Show)
+
+data MathKern = MKKern !Dimen
+              | MKMKern !MuDimen
+              deriving (Eq,Show)
+
 -- See The TeXbook, Chapter 17
 data MathItem = IAtom !Atom
               | IHorizontalMaterial -- a rule or discretionary or penalty or "whatsit"
               | IVerticalMaterial -- \mark or \insert or \vadjust
-              | IGlue -- \hskip or \mskip or \nonscript
-              | IKern -- \kern or \mkern
+              | IGlue !MathGlue -- \hskip or \mskip or \nonscript
+              | IKern !MathKern -- \kern or \mkern
               | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
               | IGenFrac !GenFrac MathList MathList -- \above, \over, etc
               | IBoundary !BoundaryType !DelimiterCode -- \left, \middle, or \right
@@ -337,6 +346,10 @@ data MathToken m where
   MTStopDisplay :: MathToken m -- `$$' or \Ustopdisplaymath
   MTSetVariant :: !MathVariant -> MathToken m
   MTSetSymbolMode :: !SymbolMode -> MathToken m
+  MTGlue       :: !MathGlue -> MathToken m
+  MTKern       :: !MathKern -> MathToken m
+  MTUnKern     :: MathToken m
+  MTUnSkip     :: MathToken m
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
@@ -395,28 +408,40 @@ readMathToken = do
       -- \char<0-"10FFFF>
       Tchar         -> MTChar <$> readUnicodeScalarValue
 
+      -- \kern<dimen>
+      Tkern         -> (MTKern . MKKern) <$> readDimension
+
+      -- \unkern, \unskip
+      Tunkern       -> return MTUnKern
+      Tunskip       -> return MTUnSkip
+
+      -- \hskip<glue>, \hfil, \hfill, \hss, \hfilneg
+      Thskip        -> (MTGlue . MGHSkip) <$> readGlue
+      Thfil         -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS 65536 0, glueShrink = zeroQ }
+      Thfill        -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS 65536 1, glueShrink = zeroQ }
+      Thss          -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS 65536 0, glueShrink = InfiniteSS 1 0 }
+      Thfilneg      -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS (-65536) 0, glueShrink = zeroQ }
+
+      -- \noindent: has no effect in math modes
+      Tnoindent     -> return $ MTOther Relax
+
+      -- <control space>
+      TControlSpace -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = pt 10, glueStretch = zeroQ, glueShrink = zeroQ } -- ?
+
+      -- \/
+      TItalicCorrection -> return $ MTKern $ MKKern zeroQ
+
       Tspecial      -> throwError "\\special: not implemented yet"
       Tpenalty      -> throwError "\\penalty: not implemented yet"
-      Tkern         -> throwError "\\kern: not implemented yet"
       Tunpenalty    -> throwError "\\unpenalty: not implemented yet"
-      Tunkern       -> throwError "\\unkern: not implemented yet"
-      Tunskip       -> throwError "\\unskip: not implemented yet"
       Tmark         -> throwError "\\mark: not implemented yet"
       Tinsert       -> throwError "\\insert: not implemented yet"
       Tvadjust      -> throwError "\\vadjust: not implemented yet"
       Thalign       -> throwError "\\halign: not implemented yet"
       Tindent       -> throwError "\\indent: not implemented yet"
-      Tnoindent     -> throwError "\\noindent: not implemented yet"
       Tvrule        -> throwError "\\vrule: not implemented yet"
-      Thskip        -> throwError "\\hskip: not implemented yet"
-      Thfil         -> throwError "\\hfil: not implemented yet"
-      Thfill        -> throwError "\\hfill: not implemented yet"
-      Thss          -> throwError "\\hss: not implemented yet"
-      Thfillneg     -> throwError "\\hfillneg: not implemented yet"
-      TControlSpace -> throwError "<control space>: not implemented yet"
       Traise        -> throwError "\\raise: not implemented yet"
       Tlower        -> throwError "\\lower: not implemented yet"
-      TItalicCorrection    -> throwError "\\/: not implemented yet"
       Tdiscretionary       -> throwError "\\discretionary: not implemented yet"
       TDiscretionaryHyphen -> throwError "\\-: not implemented yet"
     doOtherMathCommand :: MathCommands -> m (MathToken m)
@@ -517,14 +542,21 @@ readMathToken = do
       MUstopmath -> return MTStopInline
       MUstopdisplaymath -> return MTStopDisplay
 
+      -- \nonscript
+      Mnonscript       -> return $ MTGlue MGNonscript
+
+      -- \mkern<mudimen>
+      Mmkern           -> (MTKern . MKMKern) <$> readMuDimension
+
+      -- \mskip<muglue>
+      Mmskip           -> (MTGlue . MGMSkip) <$> readMuGlue
+
+      -- assignments
       Mfam         -> return $ MTOther Mfam
       Mthinmuskip  -> return $ MTOther Mthinmuskip
       Mmedmuskip   -> return $ MTOther Mmedmuskip
       Mthickmuskip -> return $ MTOther Mthickmuskip
 
-      Mmkern           -> throwError "\\mkern: not implemented yet"
-      Mmskip           -> throwError "\\mskip: not implemented yet"
-      Mnonscript       -> throwError "\\nonscript: not implemented yet"
       MUleft           -> throwError "\\Uleft: not implemented yet"
       MUmiddle         -> throwError "\\Umiddle: not implemented yet"
       MUright          -> throwError "\\Uright: not implemented yet"
@@ -808,6 +840,19 @@ readMathMaterial !ctx = loop []
           MTSetSymbolMode sm -> do
             assign (localState . currentSymbolMode) sm
             loop revList
+
+          MTGlue g -> loop (IGlue g : revList)
+          MTKern k -> loop (IKern k : revList)
+
+          MTUnSkip ->
+            case revList of
+              IGlue _ : revList' -> loop revList'
+              _ -> loop revList
+
+          MTUnKern ->
+            case revList of
+              IKern _ : revList' -> loop revList'
+              _ -> loop revList
 
           -- assignments, etc
           MTOther v -> do

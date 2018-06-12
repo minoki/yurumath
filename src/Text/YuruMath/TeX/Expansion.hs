@@ -905,6 +905,18 @@ ifnumCommand = do
     Right (Just (Character '>' CCOther)) -> return $ x > y
     _ -> throwError "unrecognized relation for \\ifnum"
 
+ifdimCommand :: (MonadTeXState s m, MonadError String m) => m Bool
+ifdimCommand = do
+  x <- readDimension
+  -- TODO: skip spaces
+  rel <- required nextEToken >>= meaning
+  y <- readDimension
+  case toCommonValue <$> rel of
+    Right (Just (Character '<' CCOther)) -> return $ x < y
+    Right (Just (Character '=' CCOther)) -> return $ x == y
+    Right (Just (Character '>' CCOther)) -> return $ x > y
+    _ -> throwError "unrecognized relation for \\ifdim"
+
 ifoddCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifoddCommand = odd <$> readNumber
 
@@ -1015,6 +1027,7 @@ data CommonBoolean = Eiftrue
                    | Eifcat
                    | Eifx
                    | Eifnum
+                   | Eifdim
                    | Eifodd
                    | Eifhmode
                    | Eifvmode
@@ -1038,6 +1051,7 @@ evalCommonBoolean Eif = ifCommand
 evalCommonBoolean Eifcat = ifcatCommand
 evalCommonBoolean Eifx = ifxCommand
 evalCommonBoolean Eifnum = ifnumCommand
+evalCommonBoolean Eifdim = ifdimCommand
 evalCommonBoolean Eifodd = ifoddCommand
 evalCommonBoolean Eifhmode = ifhmodeCommand
 evalCommonBoolean Eifvmode = ifvmodeCommand
@@ -1074,6 +1088,7 @@ expandableDefinitions = Map.fromList
   ,("ifcat",       liftUnion Eifcat)
   ,("ifx",         liftUnion Eifx)
   ,("ifnum",       liftUnion Eifnum)
+  ,("ifdim",       liftUnion Eifdim)
   ,("ifodd",       liftUnion Eifodd)
   ,("ifhmode",     liftUnion Eifhmode)
   ,("ifvmode",     liftUnion Eifvmode)

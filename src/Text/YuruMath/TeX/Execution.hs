@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 module Text.YuruMath.TeX.Execution where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
@@ -34,14 +35,35 @@ newtype CountReg = CountReg Int
 countRegAt :: (IsLocalState localstate) => Int -> Lens' localstate Integer
 countRegAt !index = countReg . at index . non 0
 
--- Used by \count, \countdef
+-- Used by \count, \countdef, etc
 -- 8-bit (0-255) on the original TeX, 15-bit (0-32767) on e-TeX, and 16-bit (0-65535) on LuaTeX
-readCountRegIndex :: (MonadTeXState s m, MonadError String m) => m Int
-readCountRegIndex = do
+readRegIndex :: (MonadTeXState s m, MonadError String m) => m Int
+readRegIndex = do
   x <- readIntBetween minBound maxBound
   if x < 0 || 65536 <= x
     then throwError $ "Bad register code (" ++ show x ++ ")"
     else return x
+
+-- \dimendef-ed value
+newtype DimenReg = DimenReg Int
+  deriving (Eq,Show)
+
+dimenRegAt :: (IsLocalState localstate) => Int -> Lens' localstate Dimen
+dimenRegAt !index = dimenReg . at index . non zeroQ
+
+-- \skipdef-ed value
+newtype SkipReg = SkipReg Int
+  deriving (Eq,Show)
+
+skipRegAt :: (IsLocalState localstate) => Int -> Lens' localstate (Glue Dimen)
+skipRegAt !index = skipReg . at index . non zeroQ
+
+-- \muskipdef-ed value
+newtype MuskipReg = MuskipReg Int
+  deriving (Eq,Show)
+
+muskipRegAt :: (IsLocalState localstate) => Int -> Lens' localstate (Glue MuDimen)
+muskipRegAt !index = muskipReg . at index . non zeroQ
 
 data Assignment s where
   WillAssign :: ASetter (LocalState s) (LocalState s) b b -> !b -> Assignment s
@@ -293,21 +315,88 @@ setCountReg !index = do
 
 -- \count command
 countSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
-countSet = do
-  index <- readCountRegIndex
-  setCountReg index
+countSet = readRegIndex >>= setCountReg
 
 countGet :: (MonadTeXState s m, MonadError String m) => m Integer
 countGet = do
-  index <- readCountRegIndex
+  index <- readRegIndex
   use (localState . countRegAt index)
 
 countdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => m (Assignment s)
 countdefCommand = do
   name <- readCommandName
   readEquals
-  index <- readCountRegIndex
+  index <- readRegIndex
   texAssign (definitionAt name) (Right $ liftUnion $ CountReg index)
+
+-- \dimendef-ed token
+setDimenReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
+setDimenReg !index = do
+  readEquals
+  value <- readDimension
+  texAssign (dimenRegAt index) value
+
+-- \dimen command
+dimenSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+dimenSet = readRegIndex >>= setDimenReg
+
+dimenGet :: (MonadTeXState s m, MonadError String m) => m Dimen
+dimenGet = do
+  index <- readRegIndex
+  use (localState . dimenRegAt index)
+
+dimendefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem DimenReg set) => m (Assignment s)
+dimendefCommand = do
+  name <- readCommandName
+  readEquals
+  index <- readRegIndex
+  texAssign (definitionAt name) (Right $ liftUnion $ DimenReg index)
+
+-- \skipdef-ed token
+setSkipReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
+setSkipReg !index = do
+  readEquals
+  value <- readGlue
+  texAssign (skipRegAt index) value
+
+-- \skip command
+skipSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+skipSet = readRegIndex >>= setSkipReg
+
+skipGet :: (MonadTeXState s m, MonadError String m) => m (Glue Dimen)
+skipGet = do
+  index <- readRegIndex
+  use (localState . skipRegAt index)
+
+skipdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem SkipReg set) => m (Assignment s)
+skipdefCommand = do
+  name <- readCommandName
+  readEquals
+  index <- readRegIndex
+  texAssign (definitionAt name) (Right $ liftUnion $ SkipReg index)
+
+-- \muskipdef-ed token
+setMuskipReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
+setMuskipReg !index = do
+  readEquals
+  value <- readMuGlue
+  texAssign (muskipRegAt index) value
+
+-- \muskip command
+muskipSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+muskipSet = readRegIndex >>= setMuskipReg
+
+muskipGet :: (MonadTeXState s m, MonadError String m) => m (Glue MuDimen)
+muskipGet = do
+  index <- readRegIndex
+  use (localState . muskipRegAt index)
+
+muskipdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem MuskipReg set) => m (Assignment s)
+muskipdefCommand = do
+  name <- readCommandName
+  readEquals
+  index <- readRegIndex
+  texAssign (definitionAt name) (Right $ liftUnion $ MuskipReg index)
 
 advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 advanceCommand !global = do
@@ -352,6 +441,12 @@ advanceInt l = do
     then throwError "Arithmetic overflow"
     else texAssign l (fromInteger value')
 
+advanceQuantity :: (MonadTeXState s m, MonadError String m, QuantityRead q) => Lens' (LocalState s) q -> m (Assignment s)
+advanceQuantity l = do
+  value <- use (localState . l)
+  arg <- readQuantity
+  texAssign l (value <+> arg)
+
 multiplyInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
 multiplyInteger l = do
   value <- use (localState . l)
@@ -368,15 +463,19 @@ multiplyInt l = do
     then throwError "Arithmetic overflow"
     else texAssign l (fromInteger value')
 
+multiplyQuantity :: (MonadTeXState s m, MonadError String m, Quantity q) => Lens' (LocalState s) q -> m (Assignment s)
+multiplyQuantity l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  texAssign l (scaleAsInteger (* arg) value)
+
 divideInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
 divideInteger l = do
   value <- use (localState . l)
   arg <- readNumber
   if arg == 0
     then throwError "Divide by zero" -- TeX says "Arithmetic overflow."
-    else do
-    let !value' = value `quot` arg
-    texAssign l value'
+    else texAssign l (value `quot` arg)
 
 divideInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
 divideInt l = do
@@ -389,6 +488,14 @@ divideInt l = do
     if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
       then throwError "Arithmetic overflow"
       else texAssign l (fromInteger value')
+
+divideQuantity :: (MonadTeXState s m, MonadError String m, Quantity q) => Lens' (LocalState s) q -> m (Assignment s)
+divideQuantity l = do
+  value <- use (localState . l)
+  arg <- readNumber
+  if arg == 0
+    then throwError "Divide by zero"
+    else texAssign l (scaleAsInteger (`quot` arg) value)
 
 data CommonExecutable = Eglobal
                       | Elet
@@ -410,6 +517,12 @@ data CommonExecutable = Eglobal
                       | Eescapechar
                       | Ecount
                       | Ecountdef
+                      | Edimen
+                      | Edimendef
+                      | Eskip
+                      | Eskipdef
+                      | Emuskip
+                      | Emuskipdef
                       | Eadvance
                       | Emultiply
                       | Edivide
@@ -423,7 +536,31 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg
   doDivide (CountReg i)    = Just $ runArithmetic $ divideInteger (countRegAt i)
   getQuantity (CountReg i) = QInteger $ use (localState . countRegAt i)
 
-instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => DoExecute CommonExecutable m where
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute DimenReg m where
+  doExecute (DimenReg i)   = runLocal $ setDimenReg i
+  doGlobal (DimenReg i)    = Just $ runGlobal $ setDimenReg i
+  doAdvance (DimenReg i)   = Just $ runArithmetic $ advanceQuantity (dimenRegAt i)
+  doMultiply (DimenReg i)  = Just $ runArithmetic $ multiplyQuantity (dimenRegAt i)
+  doDivide (DimenReg i)    = Just $ runArithmetic $ divideQuantity (dimenRegAt i)
+  getQuantity (DimenReg i) = QDimension $ use (localState . dimenRegAt i)
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute SkipReg m where
+  doExecute (SkipReg i)   = runLocal $ setSkipReg i
+  doGlobal (SkipReg i)    = Just $ runGlobal $ setSkipReg i
+  doAdvance (SkipReg i)   = Just $ runArithmetic $ advanceQuantity (skipRegAt i)
+  doMultiply (SkipReg i)  = Just $ runArithmetic $ multiplyQuantity (skipRegAt i)
+  doDivide (SkipReg i)    = Just $ runArithmetic $ divideQuantity (skipRegAt i)
+  getQuantity (SkipReg i) = QGlue $ use (localState . skipRegAt i)
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MuskipReg m where
+  doExecute (MuskipReg i)   = runLocal $ setMuskipReg i
+  doGlobal (MuskipReg i)    = Just $ runGlobal $ setMuskipReg i
+  doAdvance (MuskipReg i)   = Just $ runArithmetic $ advanceQuantity (muskipRegAt i)
+  doMultiply (MuskipReg i)  = Just $ runArithmetic $ multiplyQuantity (muskipRegAt i)
+  doDivide (MuskipReg i)    = Just $ runArithmetic $ divideQuantity (muskipRegAt i)
+  getQuantity (MuskipReg i) = QMuGlue $ use (localState . muskipRegAt i)
+
+instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set, Elem DimenReg set, Elem SkipReg set, Elem MuskipReg set) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand
   doExecute Elet             = runLocal letCommand
   doExecute Efuturelet       = runLocal futureletCommand
@@ -444,6 +581,12 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   doExecute Eendgroup        = endgroupCommand
   doExecute Ecount           = runLocal countSet
   doExecute Ecountdef        = runLocal countdefCommand
+  doExecute Edimen           = runLocal dimenSet
+  doExecute Edimendef        = runLocal dimendefCommand
+  doExecute Eskip            = runLocal skipSet
+  doExecute Eskipdef         = runLocal skipdefCommand
+  doExecute Emuskip          = runLocal muskipSet
+  doExecute Emuskipdef       = runLocal muskipdefCommand
   doExecute Eadvance         = advanceCommand False
   doExecute Emultiply        = multiplyCommand False
   doExecute Edivide          = divideCommand False
@@ -463,27 +606,36 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   doGlobal Eescapechar      = Just $ runGlobal escapecharSet
   doGlobal Ecount           = Just $ runGlobal countSet
   doGlobal Ecountdef        = Just $ runGlobal countdefCommand
+  doGlobal Edimen           = Just $ runGlobal dimenSet
+  doGlobal Edimendef        = Just $ runGlobal dimendefCommand
+  doGlobal Eskip            = Just $ runGlobal skipSet
+  doGlobal Eskipdef         = Just $ runGlobal skipdefCommand
+  doGlobal Emuskip          = Just $ runGlobal muskipSet
+  doGlobal Emuskipdef       = Just $ runGlobal muskipdefCommand
   doGlobal Eadvance         = Just $ advanceCommand True
   doGlobal Emultiply        = Just $ multiplyCommand True
   doGlobal Edivide          = Just $ divideCommand True
   doGlobal _                = Nothing
   doAdvance Eendlinechar    = Just $ runArithmetic $ advanceInt endlinechar
   doAdvance Eescapechar     = Just $ runArithmetic $ advanceInt escapechar
-  doAdvance Ecount          = Just $ do
-    index <- readCountRegIndex
-    runArithmetic $ advanceInteger (countRegAt index)
+  doAdvance Ecount          = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceInteger $ countRegAt index)
+  doAdvance Edimen          = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ dimenRegAt index)
+  doAdvance Eskip           = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ skipRegAt index)
+  doAdvance Emuskip         = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ muskipRegAt index)
   doAdvance _               = Nothing
   doMultiply Eendlinechar   = Just $ runArithmetic $ multiplyInt endlinechar
   doMultiply Eescapechar    = Just $ runArithmetic $ multiplyInt escapechar
-  doMultiply Ecount         = Just $ do
-    index <- readCountRegIndex
-    runArithmetic $ multiplyInteger (countRegAt index)
+  doMultiply Ecount         = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyInteger $ countRegAt index)
+  doMultiply Edimen         = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ dimenRegAt index)
+  doMultiply Eskip          = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ skipRegAt index)
+  doMultiply Emuskip        = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ muskipRegAt index)
   doMultiply _              = Nothing
   doDivide Eendlinechar     = Just $ runArithmetic $ divideInt endlinechar
   doDivide Eescapechar      = Just $ runArithmetic $ divideInt escapechar
-  doDivide Ecount           = Just $ do
-    index <- readCountRegIndex
-    runArithmetic $ divideInteger (countRegAt index)
+  doDivide Ecount           = Just $ readRegIndex >>= (\index -> runArithmetic $ divideInteger $ countRegAt index)
+  doDivide Edimen           = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ dimenRegAt index)
+  doDivide Eskip            = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ skipRegAt index)
+  doDivide Emuskip          = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ muskipRegAt index)
   doDivide _                = Nothing
   getQuantity Ecatcode     = QInteger catcodeGet
   getQuantity Elccode      = QInteger lccodeGet
@@ -493,9 +645,12 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   getQuantity Eendlinechar = QInteger endlinecharGet
   getQuantity Eescapechar  = QInteger escapecharGet
   getQuantity Ecount       = QInteger countGet
+  getQuantity Edimen       = QDimension dimenGet
+  getQuantity Eskip        = QGlue skipGet
+  getQuantity Emuskip      = QMuGlue muskipGet
   getQuantity _            = NotQuantity
 
-executableDefinitions :: (SubList '[CommonValue,CommonExecutable,CountReg] set) => Map.Map Text (Union set)
+executableDefinitions :: (SubList '[CommonValue,CommonExecutable,CountReg,DimenReg,SkipReg,MuskipReg] set) => Map.Map Text (Union set)
 executableDefinitions = Map.fromList
   [("relax",          liftUnion Relax)
   ,("endcsname",      liftUnion Endcsname)
@@ -519,6 +674,12 @@ executableDefinitions = Map.fromList
   ,("escapechar",     liftUnion Eescapechar)
   ,("count",          liftUnion Ecount)
   ,("countdef",       liftUnion Ecountdef)
+  ,("dimen",          liftUnion Edimen)
+  ,("dimendef",       liftUnion Edimendef)
+  ,("skip",           liftUnion Eskip)
+  ,("skipdef",        liftUnion Eskipdef)
+  ,("muskip",         liftUnion Emuskip)
+  ,("muskipdef",      liftUnion Emuskipdef)
   ,("advance",        liftUnion Eadvance)
   ,("multiply",       liftUnion Emultiply)
   ,("divide",         liftUnion Edivide)

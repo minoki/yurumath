@@ -191,8 +191,10 @@ data CommonLocalState ecommand value
     , _endlinechar         :: !Int
     , _escapechar          :: !Int
     , _countReg            :: !(Map.Map Int Integer)
-    -- dimen, skip, muskip registers
-    -- box registers
+    , _dimenReg            :: !(Map.Map Int Dimen)
+    , _skipReg             :: !(Map.Map Int (Glue Dimen))
+    , _muskipReg           :: !(Map.Map Int (Glue MuDimen))
+    -- TODO: box registers
     }
 
 data ConditionalKind = CondTruthy
@@ -226,6 +228,9 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   endlinechar         :: Lens' localstate Int
   escapechar          :: Lens' localstate Int
   countReg            :: Lens' localstate (Map.Map Int Integer)
+  dimenReg            :: Lens' localstate (Map.Map Int Dimen)
+  skipReg             :: Lens' localstate (Map.Map Int (Glue Dimen))
+  muskipReg           :: Lens' localstate (Map.Map Int (Glue MuDimen))
   scopeType           = commonLocalState . scopeType
   tsDefinitions       = commonLocalState . tsDefinitions
   tsActiveDefinitions = commonLocalState . tsActiveDefinitions
@@ -237,6 +242,9 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   endlinechar         = commonLocalState . endlinechar
   escapechar          = commonLocalState . escapechar
   countReg            = commonLocalState . countReg
+  dimenReg            = commonLocalState . dimenReg
+  skipReg             = commonLocalState . skipReg
+  muskipReg           = commonLocalState . muskipReg
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where
@@ -362,6 +370,9 @@ instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalStat
   endlinechar         = lens _endlinechar         (\s v -> s { _endlinechar = v })
   escapechar          = lens _escapechar          (\s v -> s { _escapechar = v })
   countReg            = lens _countReg            (\s v -> s { _countReg = v })
+  dimenReg            = lens _dimenReg            (\s v -> s { _dimenReg = v })
+  skipReg             = lens _skipReg             (\s v -> s { _skipReg = v })
+  muskipReg           = lens _muskipReg           (\s v -> s { _muskipReg = v })
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate

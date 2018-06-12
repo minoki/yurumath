@@ -26,6 +26,9 @@ initialLocalState = CommonLocalState
                             , _endlinechar = ord '\r'
                             , _escapechar = ord '\\'
                             , _countReg = Map.empty
+                            , _dimenReg = Map.empty
+                            , _skipReg = Map.empty
+                            , _muskipReg = Map.empty
                             }
 
 initialState :: String -> CommonState (CommonLocalState e v)

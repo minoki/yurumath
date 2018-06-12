@@ -626,6 +626,24 @@ readMuGlue = do
                           , glueShrink = shrink
                           }
 
+class (Quantity q) => QuantityRead q where
+  readQuantity :: (MonadTeXState s m, MonadError String m) => m q
+
+instance QuantityRead Integer where
+  readQuantity = readNumber
+
+instance QuantityRead Dimen where
+  readQuantity = readDimension
+
+instance QuantityRead MuDimen where
+  readQuantity = readMuDimension
+
+instance QuantityRead (Glue Dimen) where
+  readQuantity = readGlue
+
+instance QuantityRead (Glue MuDimen) where
+  readQuantity = readMuGlue
+
 readInt32 :: (MonadTeXState s m, MonadError String m) => m Int32
 readInt32 = do
   x <- readNumber

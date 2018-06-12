@@ -14,9 +14,9 @@ import Data.OpenUnion
 import TypeFun.Data.List (Elem)
 
 data ExprCommand = Enumexpr
-                 | Edimexpr  -- not implemented yet
-                 | Eglueexpr -- not implemented yet
-                 | Emuexpr   -- not implemented yet
+                 | Edimexpr
+                 | Eglueexpr
+                 | Emuexpr
                  | Egluestretch
                  | Eglueshrink
                  | Egluestretchorder
@@ -40,61 +40,19 @@ etexDiv !x !y
   where divPositive !x !y = (2 * x + y) `quot` (2 * y)
 
 -- \numexpr<integer expr><optional spaces and \relax>
--- <integer expr> ::= <integer term> | <integer expr><add or sub><integer term>
--- <integer term> ::= <integer factor> | <integer term><mul or div><integer factor>
--- <integer factor> ::= <number> | <left paren><integer expr><right paren>
+-- \dimexpr<dimen expr><optional spaces and \relax>
+-- \glueexpr<glue expr><optional spaces and \relax>
+-- \muexpr<muglue expr><optional spaces and \relax>
+-- In the following, Q is one of 'integer' ('number'), 'dimen', 'glue' or 'muglue'.
+-- <Q expr> ::= <Q term> | <Q expr><add or sub><Q term>
+-- <Q term> ::= <Q factor> | <Q term><mul or div><integer factor>
+-- <Q factor> ::= <Q> | <left paren><Q expr><right paren>
 -- <add or sub> ::= <optional spaces>'+'12 | <optional spaces>'-'12
 -- <mul or div> ::= <optional spaces>'*'12 | <optional spaces>'/'12
 -- <left paren> ::= <optional spaces>'('12
 -- <right paren> ::= <optional spaces>')'12
-parseExpression :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
+parseExpression :: (MonadTeXState s m, MonadError String m, QuantityRead q) => String -> Int -> m q
 parseExpression name !level = parseTerm >>= readAddOp
-  where
-    readAddOp !acc = do
-      et <- maybeEvalToken
-      case et of
-        Just (t,v) ->
-          case toCommonValue v of
-            Just (Character _ CCSpace) -> readAddOp acc
-            Just (Character '+' CCOther) -> do y <- parseTerm
-                                               readAddOp (acc + y)
-            Just (Character '-' CCOther) -> do y <- parseTerm
-                                               readAddOp (acc - y)
-            Just Relax | level == 0 -> return acc -- end of input
-                       | otherwise -> throwError $ name ++ ": Unexpected \\relax"
-            Just (Character ')' CCOther) | level > 0 -> return acc -- end of input
-            _ -> unreadETokens 0 [t] >> return acc -- end of factor
-        Nothing -> return acc
-
-    parseTerm = parseFactor >>= readMulOp
-
-    readMulOp !acc = do
-      et <- maybeEvalToken
-      case et of
-        Just (t,v) ->
-          case toCommonValue v of
-            Just (Character _ CCSpace) -> readMulOp acc
-            Just (Character '*' CCOther) -> do y <- parseFactor
-                                               readMulOp (acc * y)
-            Just (Character '/' CCOther) -> do y <- parseFactor
-                                               if y == 0
-                                                 then throwError $ name ++ ": Divide by zero"
-                                                 else readMulOp (acc `etexDiv` y)
-            _ -> unreadETokens 0 [t] >> return acc -- end of factor
-        Nothing -> return acc
-
-    parseFactor = parseIntegerFactor name level
-
-parseIntegerFactor :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
-parseIntegerFactor name !level = do
-  (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character '(' CCOther) -> parseExpression name (level + 1)
-    Just (Character _ CCSpace) -> parseIntegerFactor name level
-    _ -> unreadETokens 0 [t] >> readNumber
-
-parseQExpression :: (MonadTeXState s m, MonadError String m, Quantity q) => String -> m q -> Int -> m q
-parseQExpression name readQuantity !level = parseTerm >>= readAddOp
   where
     readAddOp !acc = do
       et <- maybeEvalToken
@@ -132,9 +90,17 @@ parseQExpression name readQuantity !level = parseTerm >>= readAddOp
     parseFactor = do
       (t,v) <- evalToken
       case toCommonValue v of
-        Just (Character '(' CCOther) -> parseQExpression name readQuantity (level + 1)
+        Just (Character '(' CCOther) -> parseExpression name (level + 1)
         Just (Character _ CCSpace) -> parseFactor
         _ -> unreadETokens 0 [t] >> readQuantity
+
+parseIntegerFactor :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
+parseIntegerFactor name !level = do
+  (t,v) <- evalToken
+  case toCommonValue v of
+    Just (Character '(' CCOther) -> parseExpression name (level + 1)
+    Just (Character _ CCSpace) -> parseIntegerFactor name level
+    _ -> unreadETokens 0 [t] >> readNumber
 
 ssToDimen :: StretchShrink Dimen -> Dimen
 ssToDimen (FixedSS dimen) = dimen
@@ -142,7 +108,7 @@ ssToDimen (InfiniteSS i _) = DimenWithSp i
 
 ssToOrder :: StretchShrink Dimen -> Integer
 ssToOrder (FixedSS _) = 0
-ssToOrder (InfiniteSS _ l) = fromIntegral l
+ssToOrder (InfiniteSS _ l) = fromIntegral (l + 1)
 
 mutoglue :: Glue MuDimen -> Glue Dimen
 mutoglue = fmap (DimenWithSp . asScaledMu)
@@ -162,9 +128,9 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute ExprComm
   doExecute Emutoglue         = throwError "You can't use `\\mutoglue' in this mode."
   doExecute Egluetomu         = throwError "You can't use `\\gluetomu' in this mode."
   getQuantity Enumexpr  = QInteger   (parseExpression "\\numexpr" 0)
-  getQuantity Edimexpr  = QDimension (parseQExpression "\\dimexpr" readDimension 0)
-  getQuantity Eglueexpr = QGlue      (parseQExpression "\\glueexpr" readGlue 0)
-  getQuantity Emuexpr   = QMuGlue    (parseQExpression "\\muexpr" readMuGlue 0)
+  getQuantity Edimexpr  = QDimension (parseExpression "\\dimexpr" 0)
+  getQuantity Eglueexpr = QGlue      (parseExpression "\\glueexpr" 0)
+  getQuantity Emuexpr   = QMuGlue    (parseExpression "\\muexpr" 0)
   getQuantity Egluestretch      = QDimension ((ssToDimen . glueStretch) <$> readGlue)
   getQuantity Eglueshrink       = QDimension ((ssToDimen . glueShrink) <$> readGlue)
   getQuantity Egluestretchorder = QInteger ((ssToOrder . glueStretch) <$> readGlue)

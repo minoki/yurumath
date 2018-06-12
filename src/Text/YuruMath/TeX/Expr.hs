@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Text.YuruMath.TeX.Expr (ExprCommand,exprCommands) where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Expansion
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
@@ -16,6 +17,12 @@ data ExprCommand = Enumexpr
                  | Edimexpr  -- not implemented yet
                  | Eglueexpr -- not implemented yet
                  | Emuexpr   -- not implemented yet
+                 | Egluestretch
+                 | Eglueshrink
+                 | Egluestretchorder
+                 | Eglueshrinkorder
+                 | Emutoglue
+                 | Egluetomu
                  deriving (Eq,Show)
 
 -- \numexpr's rounded division:
@@ -40,8 +47,8 @@ etexDiv !x !y
 -- <mul or div> ::= <optional spaces>'*'12 | <optional spaces>'/'12
 -- <left paren> ::= <optional spaces>'('12
 -- <right paren> ::= <optional spaces>')'12
-parseExpression :: (MonadTeXState s m, MonadError String m) => Int -> m Integer
-parseExpression !level = parseTerm >>= readAddOp
+parseExpression :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
+parseExpression name !level = parseTerm >>= readAddOp
   where
     readAddOp !acc = do
       et <- maybeEvalToken
@@ -54,7 +61,7 @@ parseExpression !level = parseTerm >>= readAddOp
             Just (Character '-' CCOther) -> do y <- parseTerm
                                                readAddOp (acc - y)
             Just Relax | level == 0 -> return acc -- end of input
-                       | otherwise -> throwError "\\numexpr: Unexpected \\relax"
+                       | otherwise -> throwError $ name ++ ": Unexpected \\relax"
             Just (Character ')' CCOther) | level > 0 -> return acc -- end of input
             _ -> unreadETokens 0 [t] >> return acc -- end of factor
         Nothing -> return acc
@@ -71,25 +78,99 @@ parseExpression !level = parseTerm >>= readAddOp
                                                readMulOp (acc * y)
             Just (Character '/' CCOther) -> do y <- parseFactor
                                                if y == 0
-                                                 then throwError "\\numexpr: Divide by zero"
+                                                 then throwError $ name ++ ": Divide by zero"
                                                  else readMulOp (acc `etexDiv` y)
+            _ -> unreadETokens 0 [t] >> return acc -- end of factor
+        Nothing -> return acc
+
+    parseFactor = parseIntegerFactor name level
+
+parseIntegerFactor :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
+parseIntegerFactor name !level = do
+  (t,v) <- evalToken
+  case toCommonValue v of
+    Just (Character '(' CCOther) -> parseExpression name (level + 1)
+    Just (Character _ CCSpace) -> parseIntegerFactor name level
+    _ -> unreadETokens 0 [t] >> readNumber
+
+parseQExpression :: (MonadTeXState s m, MonadError String m, Quantity q) => String -> m q -> Int -> m q
+parseQExpression name readQuantity !level = parseTerm >>= readAddOp
+  where
+    readAddOp !acc = do
+      et <- maybeEvalToken
+      case et of
+        Just (t,v) ->
+          case toCommonValue v of
+            Just (Character _ CCSpace) -> readAddOp acc
+            Just (Character '+' CCOther) -> do y <- parseTerm
+                                               readAddOp (acc <+> y)
+            Just (Character '-' CCOther) -> do y <- parseTerm
+                                               readAddOp (acc <-> y)
+            Just Relax | level == 0 -> return acc -- end of input
+                       | otherwise -> throwError $ name ++ ": Unexpected \\relax"
+            Just (Character ')' CCOther) | level > 0 -> return acc -- end of input
+            _ -> unreadETokens 0 [t] >> return acc -- end of factor
+        Nothing -> return acc
+
+    parseTerm = parseFactor >>= readMulOp
+
+    readMulOp !acc = do
+      et <- maybeEvalToken
+      case et of
+        Just (t,v) ->
+          case toCommonValue v of
+            Just (Character _ CCSpace) -> readMulOp acc
+            Just (Character '*' CCOther) -> do y <- parseIntegerFactor name level
+                                               readMulOp (scaleAsInteger (* y) acc)
+            Just (Character '/' CCOther) -> do y <- parseIntegerFactor name level
+                                               if y == 0
+                                                 then throwError $ name ++ ": Divide by zero"
+                                                 else readMulOp (scaleAsInteger (`etexDiv` y) acc)
             _ -> unreadETokens 0 [t] >> return acc -- end of factor
         Nothing -> return acc
 
     parseFactor = do
       (t,v) <- evalToken
       case toCommonValue v of
-        Just (Character '(' CCOther) -> parseExpression (level + 1)
+        Just (Character '(' CCOther) -> parseQExpression name readQuantity (level + 1)
         Just (Character _ CCSpace) -> parseFactor
-        _ -> unreadETokens 0 [t] >> readNumber
+        _ -> unreadETokens 0 [t] >> readQuantity
+
+ssToDimen :: StretchShrink Dimen -> Dimen
+ssToDimen (FixedSS dimen) = dimen
+ssToDimen (InfiniteSS i _) = DimenWithSp i
+
+ssToOrder :: StretchShrink Dimen -> Integer
+ssToOrder (FixedSS _) = 0
+ssToOrder (InfiniteSS _ l) = fromIntegral l
+
+mutoglue :: Glue MuDimen -> Glue Dimen
+mutoglue = fmap (DimenWithSp . asScaledMu)
+
+gluetomu :: Glue Dimen -> Glue MuDimen
+gluetomu = fmap (DimenWithScaledMu . asScaledPoints)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute ExprCommand m where
   doExecute Enumexpr  = throwError "You can't use `\\numexpr' in this mode."
-  doExecute Edimexpr  = throwError "\\dimexpr: Not implemented yet"
-  doExecute Eglueexpr = throwError "\\glueexpr: Not implemented yet"
-  doExecute Emuexpr   = throwError "\\muexpr: Not implemented yet"
-  getIntegerValue Enumexpr = Just (parseExpression 0)
-  getIntegerValue _ = Nothing
+  doExecute Edimexpr  = throwError "You can't use `\\dimexpr' in this mode."
+  doExecute Eglueexpr = throwError "You can't use `\\glueexpr' in this mode."
+  doExecute Emuexpr   = throwError "You can't use `\\muexpr' in this mode."
+  doExecute Egluestretch      = throwError "You can't use `\\gluestretch' in this mode."
+  doExecute Eglueshrink       = throwError "You can't use `\\glueshrink' in this mode."
+  doExecute Egluestretchorder = throwError "You can't use `\\gluestretchorder' in this mode."
+  doExecute Eglueshrinkorder  = throwError "You can't use `\\glueshrinkorder' in this mode."
+  doExecute Emutoglue         = throwError "You can't use `\\mutoglue' in this mode."
+  doExecute Egluetomu         = throwError "You can't use `\\gluetomu' in this mode."
+  getQuantity Enumexpr  = QInteger   (parseExpression "\\numexpr" 0)
+  getQuantity Edimexpr  = QDimension (parseQExpression "\\dimexpr" readDimension 0)
+  getQuantity Eglueexpr = QGlue      (parseQExpression "\\glueexpr" readGlue 0)
+  getQuantity Emuexpr   = QMuGlue    (parseQExpression "\\muexpr" readMuGlue 0)
+  getQuantity Egluestretch      = QDimension ((ssToDimen . glueStretch) <$> readGlue)
+  getQuantity Eglueshrink       = QDimension ((ssToDimen . glueShrink) <$> readGlue)
+  getQuantity Egluestretchorder = QInteger ((ssToOrder . glueStretch) <$> readGlue)
+  getQuantity Eglueshrinkorder  = QInteger ((ssToOrder . glueShrink) <$> readGlue)
+  getQuantity Emutoglue         = QGlue (mutoglue <$> readMuGlue)
+  getQuantity Egluetomu         = QMuGlue (gluetomu <$> readGlue)
 
 exprCommands :: (Elem ExprCommand set) => Map.Map Text (Union set)
 exprCommands = Map.fromList
@@ -97,4 +178,10 @@ exprCommands = Map.fromList
   ,("dimexpr", liftUnion Edimexpr)
   ,("glueexpr",liftUnion Eglueexpr)
   ,("muexpr",  liftUnion Emuexpr)
+  ,("gluestretch",     liftUnion Egluestretch)
+  ,("glueshrink",      liftUnion Eglueshrink)
+  ,("gluestretchorder",liftUnion Egluestretchorder)
+  ,("glueshrinkorder", liftUnion Eglueshrinkorder)
+  ,("mutoglue",        liftUnion Emutoglue)
+  ,("gluetomu",        liftUnion Egluetomu)
   ]

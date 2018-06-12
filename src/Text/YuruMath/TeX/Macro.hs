@@ -487,7 +487,7 @@ instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadEr
   doGlobal Mlong      = Just $ doPrefix "long" (globalPrefix { prefixLong = True })
   doGlobal Mprotected = Just $ doPrefix "protected" (globalPrefix { prefixProtected = True })
   doGlobal _          = Nothing
-  getIntegerValue _ = Nothing
+  getQuantity _ = NotQuantity
 
 macroCommands :: (Elem MacroCommand set) => Map.Map Text (Union set)
 macroCommands = Map.fromList

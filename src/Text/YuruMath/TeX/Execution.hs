@@ -416,12 +416,12 @@ data CommonExecutable = Eglobal
                       deriving (Eq,Show)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg m where
-  doExecute (CountReg i)       = runLocal $ setCountReg i
-  doGlobal (CountReg i)        = Just $ runGlobal $ setCountReg i
-  doAdvance (CountReg i)       = Just $ runArithmetic $ advanceInteger (countRegAt i)
-  doMultiply (CountReg i)      = Just $ runArithmetic $ multiplyInteger (countRegAt i)
-  doDivide (CountReg i)        = Just $ runArithmetic $ divideInteger (countRegAt i)
-  getIntegerValue (CountReg i) = Just $ use (localState . countRegAt i)
+  doExecute (CountReg i)   = runLocal $ setCountReg i
+  doGlobal (CountReg i)    = Just $ runGlobal $ setCountReg i
+  doAdvance (CountReg i)   = Just $ runArithmetic $ advanceInteger (countRegAt i)
+  doMultiply (CountReg i)  = Just $ runArithmetic $ multiplyInteger (countRegAt i)
+  doDivide (CountReg i)    = Just $ runArithmetic $ divideInteger (countRegAt i)
+  getQuantity (CountReg i) = QInteger $ use (localState . countRegAt i)
 
 instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand
@@ -485,15 +485,15 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
     index <- readCountRegIndex
     runArithmetic $ divideInteger (countRegAt index)
   doDivide _                = Nothing
-  getIntegerValue Ecatcode  = Just catcodeGet
-  getIntegerValue Elccode   = Just lccodeGet
-  getIntegerValue Euccode   = Just uccodeGet
-  getIntegerValue Emathcode = Just mathcodeGet
-  getIntegerValue Edelcode  = Just delcodeGet
-  getIntegerValue Eendlinechar = Just endlinecharGet
-  getIntegerValue Eescapechar  = Just escapecharGet
-  getIntegerValue Ecount    = Just countGet
-  getIntegerValue _         = Nothing
+  getQuantity Ecatcode     = QInteger catcodeGet
+  getQuantity Elccode      = QInteger lccodeGet
+  getQuantity Euccode      = QInteger uccodeGet
+  getQuantity Emathcode    = QInteger mathcodeGet
+  getQuantity Edelcode     = QInteger delcodeGet
+  getQuantity Eendlinechar = QInteger endlinecharGet
+  getQuantity Eescapechar  = QInteger escapecharGet
+  getQuantity Ecount       = QInteger countGet
+  getQuantity _            = NotQuantity
 
 executableDefinitions :: (SubList '[CommonValue,CommonExecutable,CountReg] set) => Map.Map Text (Union set)
 executableDefinitions = Map.fromList

@@ -5,10 +5,12 @@
 {-# LANGUAGE DataKinds #-}
 module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
 import Data.Int
 import Data.Char
+import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
@@ -141,6 +143,26 @@ readKeyword xs = do
         Just (d,t) -> do unreadETokens d [t]
                          return False
         Nothing -> return False
+
+readOneOfKeywords :: (MonadTeXState s m, MonadError String m) => [String] -> m (Maybe String)
+readOneOfKeywords keywords = do
+  readOptionalSpaces
+  loop keywords
+  where
+    loop [] = return Nothing
+    loop keywords | "" `elem` keywords = return (Just "")
+    loop keywords = do
+      t <- nextETokenWithDepth
+      case t of
+        Just (d,t@(ETCharacter { etChar = c })) -> do
+          k <- loop [xs | x:xs <- keywords, x == c || x == toLower c]
+          case k of
+            Just r -> return $ Just (toLower c : r)
+            Nothing -> do unreadETokens d [t]
+                          return Nothing
+        Just (d,t) -> do unreadETokens d [t]
+                         return Nothing
+        Nothing -> return Nothing
 
 readOptionalKeyword :: (MonadTeXState s m, MonadError String m) => String -> m ()
 readOptionalKeyword name = do _ <- readKeyword name
@@ -317,6 +339,7 @@ csstringCommand = do
     ETCharacter { etChar = c } ->
       stringToEToken [c]
 
+-- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
   (t,v) <- evalToken
@@ -326,8 +349,8 @@ readOptionalSigns !s = do
     Just (Character '-' CCOther) -> readOptionalSigns (-s)
     _ -> unreadETokens 0 [t] >> return s
 
-readUnsignedDecimal :: (MonadTeXState s m, MonadError String m) => Char -> m Integer
-readUnsignedDecimal c = readRest (fromIntegral (digitToInt c))
+readUnsignedDecimalInteger :: (MonadTeXState s m, MonadError String m) => Char -> m Integer
+readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
   where readRest !x = do
           (t,v) <- evalToken
           case toCommonValue v of
@@ -371,13 +394,17 @@ readUnsignedHex = do
             _ -> unreadETokens 0 [t] >> return x
         isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
-readCharacterCode :: (MonadTeXState s m, MonadError String m) => m Integer
-readCharacterCode = do
-  t <- required nextEToken
-  (u,v) <- evalToken -- one optional space
+readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
+readOneOptionalSpace = do
+  (u,v) <- evalToken
   case toCommonValue v of
     Just (Character _ CCSpace) -> return () -- consumed
     _ -> unreadETokens 0 [u]
+
+readCharacterCode :: (MonadTeXState s m, MonadError String m) => m Integer
+readCharacterCode = do
+  t <- required nextEToken
+  readOneOptionalSpace
   case t of
     ETCommandName { etName = NControlSeq name } -> case T.unpack name of
       [c] -> return (fromIntegral $ ord c)
@@ -385,6 +412,14 @@ readCharacterCode = do
     ETCommandName { etName = NActiveChar c } -> return (fromIntegral $ ord c)
     ETCharacter { etChar = c } -> return (fromIntegral $ ord c)
 
+-- <number> ::= <optional signs><unsigned number>
+-- <unsigned number> ::= <normal integer> | <coerced integer>
+-- <normal integer> ::= <internal integer>
+--                    | <integer constant><one optional space>
+--                    | '\''12<octal constant><one optional space>
+--                    | '"'12<hexadecimal constant><one optional space>
+--                    | '`'12<character token><one optional space>
+-- <integer constant> ::= <digit> | <digit><integer constant>
 readNumber :: (MonadTeXState s m, MonadError String m) => m Integer
 readNumber = do
   sign <- readOptionalSigns 1
@@ -393,9 +428,203 @@ readNumber = do
     Just (Character '\'' CCOther) -> readUnsignedOctal
     Just (Character '"' CCOther) -> readUnsignedHex
     Just (Character '`' CCOther) -> readCharacterCode
-    Just (Character c CCOther) | isDigit c -> readUnsignedDecimal c
-    _ | Just i <- getIntegerValue v -> i
-      | otherwise -> throwError $ "unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
+    Just (Character c CCOther) | isDigit c -> readUnsignedDecimalInteger c
+    _ -> case getQuantity v of
+           QInteger getInteger -> getInteger
+           QDimension getDimension -> asScaledPoints <$> getDimension
+           QGlue getGlue -> (asScaledPoints . glueSpace) <$> getGlue
+           _ -> throwError $ "Unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
+
+readUnsignedDecimalFraction :: (MonadTeXState s m, MonadError String m) => Char -> m Rational
+readUnsignedDecimalFraction c
+  | c == '.' || c == ',' = readFractionPart 0 0
+  | otherwise = readIntegerPart (fromIntegral (digitToInt c)) -- c should be a digit
+  where
+    readIntegerPart !x = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character '.' CCOther) -> readFractionPart x 0
+        Just (Character ',' CCOther) -> readFractionPart x 0
+        Just (Character c CCOther) | isDigit c -> do
+                                       readIntegerPart (10 * x + fromIntegral (digitToInt c))
+        _ -> unreadETokens 0 [t] >> return (fromInteger x)
+    readFractionPart !intPart !expPart = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character c CCOther) | isDigit c -> do
+                                       readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
+        _ -> unreadETokens 0 [t] >> return (fromInteger intPart * 10^(negate expPart :: Int))
+
+class DimenRead f where
+  doUnit :: (MonadTeXState s m, MonadError String m) => (Rational -> m a) -> Rational -> m (f a)
+  fixedDimen :: a -> f a
+  negateDim :: (Quantity a) => f a -> f a
+
+newtype SimpleDimen a = SimpleDimen { runSimpleDimen :: a }
+instance DimenRead SimpleDimen where
+  doUnit m !factor = SimpleDimen <$> m factor
+  fixedDimen = SimpleDimen
+  negateDim (SimpleDimen x) = SimpleDimen (negateQ x)
+
+instance DimenRead StretchShrink where
+  doUnit m !factor = do
+    fil <- readKeyword "fil"
+    if fil
+      then readFil 0
+      else FixedSS <$> m factor
+      where readFil !i = do l <- readKeyword "l"
+                            if l
+                              then readFil (i + 1)
+                              else return (InfiniteSS (truncate (65536 * factor)) i)
+  fixedDimen = FixedSS
+  negateDim = negateQ
+
+-- <dimen> ::= <optional signs><unsigned dimen>
+-- <unsigned dimen> ::= <normal dimen> | <coerced dimen>
+-- <normal dimen> ::= <internal dimen> | <factor><unit of measure>
+-- <coerced dimen> ::= <internal glue>
+-- <unit of measure> ::= <optional spaces><internal unit>
+--                     | <optional "true"><physical unit><one optional space>
+-- <internal unit> ::= "em"<one optional space> | "ex"<one optional space>
+--                   | <internal integer> | <internal dimen> | <internal glue>
+-- <optional "true"> ::= "true" | <empty>
+-- <physical unit> ::= "pt" | "pc" | "in" | "bp" | "cm" | "mm" | "dd" | "cc" | "sp"
+readDimensionF :: (MonadTeXState s m, MonadError String m, DimenRead f) => m (f Dimen)
+readDimensionF = do
+  -- read <optional signs>
+  sign <- readOptionalSigns 1
+  let applySign | sign > 0 = id
+                | otherwise = negateDim
+  -- read <internal dimen> or <factor> or <internal glue>
+  (t,v) <- evalToken
+  applySign <$> case toCommonValue v of
+    Just (Character '\'' CCOther) -> (fromInteger <$> readUnsignedOctal) >>= doUnit readDimenUnit
+    Just (Character '"' CCOther) -> (fromInteger <$> readUnsignedHex) >>= doUnit readDimenUnit
+    Just (Character '`' CCOther) -> (fromInteger <$> readCharacterCode) >>= doUnit readDimenUnit
+    Just (Character c CCOther) | isDigit c || c == '.' || c == '.' ->
+                                 readUnsignedDecimalFraction c >>= doUnit readDimenUnit
+    _ -> case getQuantity v of
+           QInteger getInteger -> (fromInteger <$> getInteger) >>= doUnit readDimenUnit
+           QDimension getDimen -> fixedDimen <$> getDimen
+           QGlue getGlue -> (fixedDimen . glueSpace) <$> getGlue
+           _ -> throwError $ "Unexpected " ++ show t ++ " while reading dimension"
+  where
+    readDimenUnit !factor = do
+      -- read <unit of measure>
+      readOptionalSpaces
+      -- "em" | "ex" | "true"<physical unit> | <physical unit> | <internal integer> | <internal dimen> | <internal glue>
+      (t,v) <- evalToken
+      case getQuantity v of
+        QInteger getInteger -> do v <- getInteger
+                                  return (sp (factor * fromInteger v))
+        QDimension getDimen -> scaleByRational factor <$> getDimen
+        QGlue getGlue -> (scaleByRational factor . glueSpace) <$> getGlue
+        _ -> do unreadETokens 0 [t]
+                true <- readKeyword "true"
+                -- if true, read <physical unit>
+                -- otherwise, read "em" | "ex" | <physical unit>
+                kw <- readOneOfKeywords $ if true
+                                          then ["pt","pc","in","bp","cm","mm","dd","cc","sp"]
+                                          else ["em","ex","pt","pc","in","bp","cm","mm","dd","cc","sp"]
+                readOneOptionalSpace
+                case kw of
+                  Just "em" -> return $ pt (10 * factor)
+                  Just "ex" -> return $ pt (4.3 * factor)
+                  Just "pt" -> return $ pt factor
+                  Just "pc" -> return $ pc factor
+                  Just "in" -> return $ inch factor
+                  Just "bp" -> return $ bp factor
+                  Just "cm" -> return $ cm factor
+                  Just "mm" -> return $ mm factor
+                  Just "dd" -> return $ dd factor
+                  Just "cc" -> return $ cc factor
+                  Just "sp" -> return $ sp factor
+                  Just _ -> error "Internal error (non-exhaustive patterm match...why?)"
+                  Nothing -> throwError "Illegal unit of measure"
+
+readDimension :: (MonadTeXState s m, MonadError String m) => m Dimen
+readDimension = runSimpleDimen <$> readDimensionF
+
+-- <mudimen> ::= <optional signs><unsigned mudimen>
+-- <unsigned mudimen> ::= <normal mudimen> | <coerced mudimen>
+-- <coerced mudimen> ::= <internal muglue>
+-- <normal mudimen> ::= <factor><mu unit>
+-- <mu unit> ::= <optional spaces><internal muglue> | "mu"<one optional space>
+readMuDimensionF :: (MonadTeXState s m, MonadError String m, DimenRead f) => m (f MuDimen)
+readMuDimensionF = do
+  -- read <optional signs>
+  sign <- readOptionalSigns 1
+  let applySign | sign > 0 = id
+                | otherwise = negateDim
+  -- read <factor> or <internal muglue>
+  (t,v) <- evalToken
+  applySign <$> case toCommonValue v of
+    Just (Character '\'' CCOther) -> (fromInteger <$> readUnsignedOctal) >>= doUnit readMuUnit
+    Just (Character '"' CCOther) -> (fromInteger <$> readUnsignedHex) >>= doUnit readMuUnit
+    Just (Character '`' CCOther) -> (fromInteger <$> readCharacterCode) >>= doUnit readMuUnit
+    Just (Character c CCOther) | isDigit c || c == '.' || c == '.' -> (readUnsignedDecimalFraction c) >>= doUnit readMuUnit
+    _ -> case getQuantity v of
+           QInteger getInteger -> (fromInteger <$> getInteger) >>= doUnit readMuUnit
+           QMuGlue getMuGlue -> (fixedDimen . glueSpace) <$> getMuGlue
+           _ -> throwError $ "Unexpected " ++ show t ++ " while reading mu-dimension"
+  where
+    readMuUnit !factor = do
+      muKeyword <- readKeyword "mu"
+      if muKeyword
+        then readOneOptionalSpace >> return (mu factor)
+        else do (t,v) <- evalToken
+                case getQuantity v of
+                  QMuGlue getMuGlue -> (scaleByRational factor . glueSpace) <$> getMuGlue
+                  _ -> throwError "Illegal unit of measure"
+
+readMuDimension :: (MonadTeXState s m, MonadError String m) => m MuDimen
+readMuDimension = runSimpleDimen <$> readMuDimensionF
+
+readGlue :: (MonadTeXState s m, MonadError String m) => m (Glue Dimen)
+readGlue = do
+  sign <- readOptionalSigns 1
+  let applySign | sign > 0 = id
+                | otherwise = negateQ
+  (t,v) <- evalToken
+  applySign <$> case getQuantity v of
+    QGlue getGlue -> getGlue
+    _ -> do unreadETokens 0 [t]
+            dimen <- readDimension
+            plus <- readKeyword "plus"
+            stretch <- if plus
+                       then readDimensionF
+                       else pure zeroQ
+            minus <- readKeyword "minus"
+            shrink <- if minus
+                      then readDimensionF
+                      else pure zeroQ
+            return $ Glue { glueSpace = dimen
+                          , glueStretch = stretch
+                          , glueShrink = shrink
+                          }
+
+readMuGlue :: (MonadTeXState s m, MonadError String m) => m (Glue MuDimen)
+readMuGlue = do
+  sign <- readOptionalSigns 1
+  let applySign | sign > 0 = id
+                | otherwise = negateQ
+  (t,v) <- evalToken
+  applySign <$> case getQuantity v of
+    QMuGlue getMuGlue -> getMuGlue
+    _ -> do unreadETokens 0 [t]
+            dimen <- readMuDimension
+            plus <- readKeyword "plus"
+            stretch <- if plus
+                       then readMuDimensionF
+                       else pure zeroQ
+            minus <- readKeyword "minus"
+            shrink <- if minus
+                      then readMuDimensionF
+                      else pure zeroQ
+            return $ Glue { glueSpace = dimen
+                          , glueStretch = stretch
+                          , glueShrink = shrink
+                          }
 
 readInt32 :: (MonadTeXState s m, MonadError String m) => m Int32
 readInt32 = do
@@ -416,11 +645,47 @@ numberCommand = do
   x <- readNumber
   stringToEToken (show x)
 
+-- \the, \showthe
+theString :: (MonadTeXState s m, MonadError String m) => String -> m String
+theString name = do
+  (t,v) <- evalToken
+  case getQuantity v of
+    QInteger getInteger ->
+      do show <$> getInteger
+    QDimension getDimension ->
+      do showDimension <$> getDimension
+    QGlue getGlue ->
+      do Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getGlue
+         return $ showDimension x ++ showSS " plus " stretch ++ showSS " minus " shrink
+    QMuGlue getMuGlue ->
+      do Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getMuGlue
+         return $ showMuDimension x ++ showMuSS " plus " stretch ++ showMuSS " minus " shrink
+    _ -> throwError $ "You can't use `" ++ show t ++ "' after " ++ name
+  where
+    showDimension x = showScaledAsDecimal (asScaledPoints x) ++ "pt"
+    showMuDimension x = showScaledAsDecimal (asScaledMu x) ++ "mu"
+    showSS prefix (FixedSS s) | s == zeroQ = ""
+                              | otherwise = prefix ++ showDimension s
+    showSS prefix (InfiniteSS i l) = prefix ++ showScaledAsDecimal i ++ "fil" ++ replicate l 'l'
+    showMuSS prefix (FixedSS s) | s == zeroQ = ""
+                                | otherwise = prefix ++ showMuDimension s
+    showMuSS prefix (InfiniteSS i l) = prefix ++ showScaledAsDecimal i ++ "fil" ++ replicate l 'l'
+    showScaledAsDecimal :: Integer -> String
+    showScaledAsDecimal x
+      | x < 0 = '-' : showScaledAsDecimal (- x)
+      | otherwise = case quotRem (round (x * 100000 % 65536) :: Integer) 100000 of
+                      (intPart,0) -> show intPart ++ ".0"
+                      (intPart,fracPart) -> show intPart ++ "." ++ adjustFracPart (show fracPart)
+    adjustFracPart s | length s < 5 = stripTrailingZero (replicate (5 - length s) '0' ++ s)
+                     | otherwise = stripTrailingZero s
+    stripTrailingZero "" = ""
+    stripTrailingZero "0" = ""
+    stripTrailingZero (x:xs) = case x:stripTrailingZero xs of
+                                 "0" -> ""
+                                 y -> y
+
 theCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-theCommand = do
-  x <- readNumber
-  -- TODO: support other quantities
-  stringToEToken (show x)
+theCommand = theString "\\the" >>= stringToEToken
 
 meaningCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 meaningCommand = do

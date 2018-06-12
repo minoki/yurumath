@@ -117,6 +117,22 @@ etest6 = TestCase $ assertEqual "\\numexpr" expected (expandAllString "\\number\
       ,Character '1' CCOther
       ]
 
+etest7 = TestCase $ assertEqual "\\dimexpr" expected (expandAllString "\\the\\dimexpr(10pt+2in*3)/  ( 3+6 ) * 4+-14cm/\\numexpr-2-3\\relax\\relax")
+  where
+    expected = Right $ map liftUnion
+      [Character '2' CCOther
+      ,Character '7' CCOther
+      ,Character '6' CCOther
+      ,Character '.' CCOther
+      ,Character '8' CCOther
+      ,Character '3' CCOther
+      ,Character '2' CCOther
+      ,Character '1' CCOther
+      ,Character '4' CCOther
+      ,Character 'p' CCOther
+      ,Character 't' CCOther
+      ]
+
 mtest1 = TestCase $ assertEqual "Math" expected (runMathList True "1+1")
   where
 {-
@@ -222,6 +238,9 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 4" etest4
                  ,TestLabel "Expansion 5" etest5
                  ,TestLabel "Expansion 6 (\\numexpr)" etest6
+                 ,TestLabel "Expansion 7 (\\dimexpr)" etest7
+                 --,TestLabel "Expansion 8 (\\glueexpr)" etest8
+                 --,TestLabel "Expansion 9 (\\muexpr)" etest9
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2
                  ,TestLabel "Math 3" mtest3

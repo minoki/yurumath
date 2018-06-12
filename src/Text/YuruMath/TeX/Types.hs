@@ -21,6 +21,7 @@ import Data.OpenUnion.Internal ((@!>))
 import TypeFun.Data.List (Delete,Elem)
 import Data.Typeable (Typeable)
 import Data.Char
+import Text.YuruMath.TeX.Quantity
 
 data CatCode = CCEscape       -- 0
              | CCBeginGroup   -- 1
@@ -278,6 +279,14 @@ instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpan
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 
+data QuantityGetter f
+  = QInteger (f Integer)       -- <internal integer>
+  | QDimension (f Dimen)       -- <internal dimen>
+  | QGlue (f (Glue Dimen))     -- <internal glue>
+  | QMuGlue (f (Glue MuDimen)) -- <internal muglue>
+  -- Note: there is no <internal mudimen>
+  | NotQuantity
+
 class (Eq c, Monad m) => DoExecute c m where
   doExecute :: c -> m ()
   doGlobal :: c -> Maybe (m ())
@@ -288,7 +297,7 @@ class (Eq c, Monad m) => DoExecute c m where
   doAdvance _ = Nothing
   doMultiply _ = Nothing
   doDivide _ = Nothing
-  getIntegerValue :: c -> Maybe (m Integer)
+  getQuantity :: c -> QuantityGetter m
 
 instance (Monad m) => DoExecute (Union '[]) m where
   doExecute = typesExhausted
@@ -296,7 +305,7 @@ instance (Monad m) => DoExecute (Union '[]) m where
   doAdvance = typesExhausted
   doMultiply = typesExhausted
   doDivide = typesExhausted
-  getIntegerValue = typesExhausted
+  getQuantity = typesExhausted
 
 instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExecute (Union (c : cs)) m where
   doExecute       = (doExecute :: c -> m ())
@@ -309,8 +318,8 @@ instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExe
                     @> (doMultiply :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
   doDivide        = (doDivide :: c -> Maybe (m (Bool -> m ())))
                     @> (doDivide :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
-  getIntegerValue = (getIntegerValue :: c -> Maybe (m Integer))
-                    @> (getIntegerValue :: Union (Delete c cs) -> Maybe (m Integer))
+  getQuantity     = (getQuantity :: c -> QuantityGetter m)
+                    @> (getQuantity :: Union (Delete c cs) -> QuantityGetter m)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonValue m where
   doExecute (Character _ _)          = return () -- dummy
@@ -321,12 +330,12 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonVa
   doExecute (Unexpanded _)           = return () -- do nothing
   doExecute (Undefined _)            = throwError $ "Undefined control sequence."
   doExecute Endcsname                = throwError "Extra \\endcsname"
-  getIntegerValue (DefinedCharacter x) = Just (return $ fromIntegral $ ord x)
-  getIntegerValue (DefinedMathCharacter m) = case m of
-    MathCode x -> Just (return $ fromIntegral x)
-    UMathCode x -> Just (return $ fromIntegral x)
-  getIntegerValue (IntegerConstant x) = Just (return $ fromIntegral x)
-  getIntegerValue _ = Nothing -- dummy
+  getQuantity (DefinedCharacter x) = QInteger (return $ fromIntegral $ ord x)
+  getQuantity (DefinedMathCharacter m) = case m of
+    MathCode x -> QInteger (return $ fromIntegral x)
+    UMathCode x -> QInteger (return $ fromIntegral x)
+  getQuantity (IntegerConstant x) = QInteger (return $ fromIntegral x)
+  getQuantity _ = NotQuantity
 
 type Expandable s = ExpandableT (LocalState s)
 type Value s = ValueT (LocalState s)

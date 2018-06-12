@@ -850,7 +850,7 @@ newtype MathStyleSet = MathStyleSet MathStyle
 
 instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathStyleSet m where
   doExecute (MathStyleSet s) = return () -- dummy
-  getIntegerValue (MathStyleSet v) = Just $ return $ fromIntegral $ fromEnum v -- LuaTeX extension
+  getQuantity (MathStyleSet v) = QInteger $ return $ fromIntegral $ fromEnum v -- LuaTeX extension
 
 --
 -- Math atom command (like \mathord)
@@ -860,7 +860,7 @@ newtype MathAtomCommand = MathAtomCommand AtomType deriving (Eq,Show)
 
 instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathAtomCommand m where
   doExecute _ = return () -- dummy
-  getIntegerValue _ = Nothing
+  getQuantity _ = NotQuantity
 
 --
 -- Setting math variant
@@ -870,7 +870,7 @@ newtype MathVariantSet = MathVariantSet MathVariant deriving (Eq,Show)
 
 instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathVariantSet m where
   doExecute _ = return () -- dummy
-  getIntegerValue _ = Nothing
+  getQuantity _ = NotQuantity
 
 --
 -- Setting symbol mode
@@ -880,7 +880,7 @@ newtype MathSymbolModeSet = MathSymbolModeSet SymbolMode deriving (Eq,Show)
 
 instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathSymbolModeSet m where
   doExecute _ = return () -- dummy
-  getIntegerValue _ = Nothing
+  getQuantity _ = NotQuantity
 
 --
 -- Expandable math commands
@@ -969,8 +969,8 @@ instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoEx
   doMultiply _    = Nothing
   doDivide Mfam   = Just $ runArithmetic $ divideInt famParam
   doDivide _      = Nothing
-  getIntegerValue Mfam = Just famGet
-  getIntegerValue _ = Nothing
+  getQuantity Mfam = QInteger famGet
+  getQuantity _ = NotQuantity
 
 --
 -- List of commands

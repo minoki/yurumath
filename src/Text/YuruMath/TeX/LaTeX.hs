@@ -104,10 +104,15 @@ latexDefinitions = Map.fromList
   -- \newline, \addvspace, \addpenalty, \vspace
   -- \smallskip, \medskip, \bigskip
   -- \nobreakdashes, \nobreakspace, ~
-  -- \, \@
+  ,(",", Left $ liftUnion $ protected $ mkSimpleMacroWithString [] "\\relax\\ifmmode\\mskip\\thinmuskip\\else\\thinspace\\fi")
+  ,("@", Left $ liftUnion $ mkSimpleMacroWithString [] "\\spacefactor\\@m{}")
   -- \hspace, \fill, \stretch
-  -- \thinspace, \negthinspace, \enspace
-  -- \enskip, \quad, \qquad
+  ,("thinspace", Left $ liftUnion $ mkSimpleMacroWithString [] "\\kern .16667em ")
+  ,("negthinspace", Left $ liftUnion $ mkSimpleMacroWithString [] "\\kern-.16667em ")
+  ,("enspace", Left $ liftUnion $ mkSimpleMacroWithString [] "\\kern.5em ")
+  ,("enskip", Left $ liftUnion $ mkSimpleMacroWithString [] "\\hskip.5em\\relax")
+  ,("quad", Left $ liftUnion $ mkSimpleMacroWithString [] "\\hskip1em\\relax")
+  ,("qquad", Left $ liftUnion $ mkSimpleMacroWithString [] "\\hskip2em\\relax")
 
   -- ltlogos
   -- \TeX, \LaTeX, \LaTeXe
@@ -243,6 +248,12 @@ latexDefinitions = Map.fromList
   -- \cases, \matrix, \pmatrix, \bordermatrix
   -- \openup, \displaylines
   -- \> (in ltspace), \;, \!, \*, \:
+  -- \,: already defined in ltspace
+  ,(">", Left $ liftUnion $ mkSimpleMacroWithString [] "\\mskip\\medmuskip")
+  ,(";", Left $ liftUnion $ mkSimpleMacroWithString [] "\\mskip\\thickmuskip")
+  ,("!", Left $ liftUnion $ mkSimpleMacroWithString [] "\\mskip-\\thinmuskip")
+  ,(":", Left $ liftUnion $ mkSimpleMacroWithString [] "\\mskip\\medmuskip") -- \let\:=\>
+  -- ,("*", Left $ liftUnion $ mkSimpleMacroWithString [] "\\discretionary{...}{}{}") -- invisible times
   ,("sp", Right $ liftUnion $ Character '^' CCSup) -- \let\sp=^
   ,("sb", Right $ liftUnion $ Character '_' CCSub) -- \let\sb=_
   -- \active@math@prime

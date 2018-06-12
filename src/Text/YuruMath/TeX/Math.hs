@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -13,10 +14,12 @@
 {-# LANGUAGE StandaloneDeriving #-}
 module Text.YuruMath.TeX.Math where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
+import Text.YuruMath.TeX.Typeset
 import Text.YuruMath.TeX.Math.Style
 import qualified Data.Map.Strict as Map
 import Data.Word
@@ -27,6 +30,7 @@ import Data.Semigroup ((<>))
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad.Identity
+import Control.Lens.Lens (Lens')
 import Control.Lens.Getter (use,uses)
 import Control.Lens.Setter (assign,modifying)
 import Control.Lens.TH
@@ -340,8 +344,8 @@ deriving instance Show (MathToken m)
 type MonadMathState localstate set m
   = ( MonadTeXState (MathState localstate) m
     , ValueT localstate ~ Union set
-    , DoExecute (Union (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))) m
-    , Show (Union (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))
+    , DoExecute (Union (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))) m
+    , Show (Union (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))))
     , localstate ~ MathLocalState (ExpandableT localstate) (ValueT localstate)
     )
 
@@ -359,6 +363,7 @@ readMathToken = do
                   @> (\(v :: MathCommands)    -> Just <$> doOtherMathCommand v)
                   @> (\(v :: MathVariantSet)  -> Just <$> doMathVariantSet v)
                   @> (\(v :: MathSymbolModeSet) -> Just <$> doMathSymbolModeSet v)
+                  @> (\(v :: TypesetCommand)  -> Just <$> doTypesetCommand v)
                   @> (\v                      -> return $ Just $ MTOther v) -- other assignments, etc
     doCommonValue :: CommonValue -> m (Maybe (MathToken m))
     doCommonValue v = case v of
@@ -386,11 +391,36 @@ readMathToken = do
     doMathAtom (MathAtomCommand atomType) = return $ MTAtomSpec atomType
     doMathVariantSet (MathVariantSet var) = return $ MTSetVariant var
     doMathSymbolModeSet (MathSymbolModeSet mode) = return $ MTSetSymbolMode mode
+    doTypesetCommand v = case v of
+      -- \char<0-"10FFFF>
+      Tchar         -> MTChar <$> readUnicodeScalarValue
+
+      Tspecial      -> throwError "\\special: not implemented yet"
+      Tpenalty      -> throwError "\\penalty: not implemented yet"
+      Tkern         -> throwError "\\kern: not implemented yet"
+      Tunpenalty    -> throwError "\\unpenalty: not implemented yet"
+      Tunkern       -> throwError "\\unkern: not implemented yet"
+      Tunskip       -> throwError "\\unskip: not implemented yet"
+      Tmark         -> throwError "\\mark: not implemented yet"
+      Tinsert       -> throwError "\\insert: not implemented yet"
+      Tvadjust      -> throwError "\\vadjust: not implemented yet"
+      Thalign       -> throwError "\\halign: not implemented yet"
+      Tindent       -> throwError "\\indent: not implemented yet"
+      Tnoindent     -> throwError "\\noindent: not implemented yet"
+      Tvrule        -> throwError "\\vrule: not implemented yet"
+      Thskip        -> throwError "\\hskip: not implemented yet"
+      Thfil         -> throwError "\\hfil: not implemented yet"
+      Thfill        -> throwError "\\hfill: not implemented yet"
+      Thss          -> throwError "\\hss: not implemented yet"
+      Thfillneg     -> throwError "\\hfillneg: not implemented yet"
+      TControlSpace -> throwError "<control space>: not implemented yet"
+      Traise        -> throwError "\\raise: not implemented yet"
+      Tlower        -> throwError "\\lower: not implemented yet"
+      TItalicCorrection    -> throwError "\\/: not implemented yet"
+      Tdiscretionary       -> throwError "\\discretionary: not implemented yet"
+      TDiscretionaryHyphen -> throwError "\\-: not implemented yet"
     doOtherMathCommand :: MathCommands -> m (MathToken m)
     doOtherMathCommand v = case v of
-
-      -- \char<0-"10FFFF>
-      Mchar -> MTChar <$> readUnicodeScalarValue
 
       -- \mathchar<15-bit integer>
       Mmathchar -> do
@@ -487,12 +517,17 @@ readMathToken = do
       MUstopmath -> return MTStopInline
       MUstopdisplaymath -> return MTStopDisplay
 
-      Mfam -> return $ MTOther Mfam
+      Mfam         -> return $ MTOther Mfam
+      Mthinmuskip  -> return $ MTOther Mthinmuskip
+      Mmedmuskip   -> return $ MTOther Mmedmuskip
+      Mthickmuskip -> return $ MTOther Mthickmuskip
 
+      Mmkern           -> throwError "\\mkern: not implemented yet"
+      Mmskip           -> throwError "\\mskip: not implemented yet"
+      Mnonscript       -> throwError "\\nonscript: not implemented yet"
       MUleft           -> throwError "\\Uleft: not implemented yet"
       MUmiddle         -> throwError "\\Umiddle: not implemented yet"
       MUright          -> throwError "\\Uright: not implemented yet"
-      Mdiscretionaly   -> throwError "\\discretionaly: not implemented yet"
       MUoverdelimiter  -> throwError "\\Uoverdelimiter: not implemented yet"
       MUunderdelimiter -> throwError "\\Uunderdelimiter: not implemented yet"
       MUdelimiterover  -> throwError "\\Udelimiterover: not implemented yet"
@@ -841,6 +876,9 @@ famSet = do
 famGet :: (MonadMathState localstate set m, MonadError String m) => m Integer
 famGet = uses (localState . famParam) fromIntegral
 
+muskipParamSet :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) (Glue MuDimen) -> m (Assignment s)
+muskipParamSet muskip = readMuGlue >>= texAssign muskip
+
 --
 -- Setting math style
 --
@@ -907,15 +945,13 @@ instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) 
 --
 
 data MathCommands
-  = Mchar -- not really a math command
-  | Mmathchar
+  = Mmathchar
   | Mmathaccent
   | Mdelimiter
   | Mradical
   | Mdisplaylimits
   | Mlimits
   | Mnolimits
-  | Mdiscretionaly -- not really a math command
   | Mmathchoice
   | Mleft
   | Mright
@@ -926,6 +962,12 @@ data MathCommands
   | Matopwithdelims
   | Mabovewithdelims
   | Mfam
+  | Mthinmuskip
+  | Mmedmuskip
+  | Mthickmuskip
+  | Mmkern
+  | Mmskip
+  | Mnonscript
 
     -- e-TeX extension:
   | Mmiddle
@@ -959,18 +1001,36 @@ data MathCommands
   deriving (Eq,Show)
 
 instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoExecute MathCommands m where
-  doExecute Mfam = runLocal famSet
-  doExecute x = throwError $ "You can't use " ++ show x ++ " in non-math mode"
-  doGlobal Mfam = Just $ runGlobal famSet
-  doGlobal _ = Nothing
-  doAdvance Mfam  = Just $ runArithmetic $ advanceInt famParam
-  doAdvance _     = Nothing
-  doMultiply Mfam = Just $ runArithmetic $ multiplyInt famParam
-  doMultiply _    = Nothing
-  doDivide Mfam   = Just $ runArithmetic $ divideInt famParam
-  doDivide _      = Nothing
-  getQuantity Mfam = QInteger famGet
-  getQuantity _ = NotQuantity
+  doExecute Mfam           = runLocal famSet
+  doExecute Mthinmuskip    = runLocal (muskipParamSet thinmuskip)
+  doExecute Mmedmuskip     = runLocal (muskipParamSet medmuskip)
+  doExecute Mthickmuskip   = runLocal (muskipParamSet thickmuskip)
+  doExecute x              = throwError $ "You can't use " ++ show x ++ " in non-math mode"
+  doGlobal Mfam            = Just $ runGlobal famSet
+  doGlobal Mthinmuskip     = Just $ runGlobal (muskipParamSet thinmuskip)
+  doGlobal Mmedmuskip      = Just $ runGlobal (muskipParamSet medmuskip)
+  doGlobal Mthickmuskip    = Just $ runGlobal (muskipParamSet thickmuskip)
+  doGlobal _               = Nothing
+  doAdvance Mfam           = Just $ runArithmetic $ advanceInt famParam
+  doAdvance Mthinmuskip    = Just $ runArithmetic $ advanceQuantity thinmuskip
+  doAdvance Mmedmuskip     = Just $ runArithmetic $ advanceQuantity medmuskip
+  doAdvance Mthickmuskip   = Just $ runArithmetic $ advanceQuantity thickmuskip
+  doAdvance _              = Nothing
+  doMultiply Mfam          = Just $ runArithmetic $ multiplyInt famParam
+  doMultiply Mthinmuskip   = Just $ runArithmetic $ multiplyQuantity thinmuskip
+  doMultiply Mmedmuskip    = Just $ runArithmetic $ multiplyQuantity medmuskip
+  doMultiply Mthickmuskip  = Just $ runArithmetic $ multiplyQuantity thickmuskip
+  doMultiply _             = Nothing
+  doDivide Mfam            = Just $ runArithmetic $ divideInt famParam
+  doDivide Mthinmuskip     = Just $ runArithmetic $ divideQuantity thinmuskip
+  doDivide Mmedmuskip      = Just $ runArithmetic $ divideQuantity medmuskip
+  doDivide Mthickmuskip    = Just $ runArithmetic $ divideQuantity thickmuskip
+  doDivide _               = Nothing
+  getQuantity Mfam         = QInteger famGet
+  getQuantity Mthinmuskip  = QMuGlue (use (localState . thinmuskip))
+  getQuantity Mmedmuskip   = QMuGlue (use (localState . medmuskip))
+  getQuantity Mthickmuskip = QMuGlue (use (localState . thickmuskip))
+  getQuantity _            = NotQuantity
 
 --
 -- List of commands
@@ -984,8 +1044,7 @@ mathDefinitions = Map.fromList
   [("mathstyle", Left $ liftUnion Mmathstyle) -- LuaTeX extension
   ]
   <> fmap Right (Map.fromList
-  [("char",         liftUnion Mchar)
-  ,("mathchar",     liftUnion Mmathchar)
+  [("mathchar",     liftUnion Mmathchar)
   ,("delimiter",    liftUnion Mdelimiter)
   ,("mathord",      liftUnion (MathAtomCommand AOrd))
   ,("mathop",       liftUnion (MathAtomCommand AOp))
@@ -1002,7 +1061,6 @@ mathDefinitions = Map.fromList
   ,("displaylimits",liftUnion Mdisplaylimits)
   ,("limits",       liftUnion Mlimits)
   ,("nolimits",     liftUnion Mnolimits)
-  ,("discretionaly",liftUnion Mdiscretionaly)
   ,("mathchoice",   liftUnion Mmathchoice)
   ,("left",         liftUnion Mleft)
   ,("right",        liftUnion Mright)
@@ -1013,6 +1071,12 @@ mathDefinitions = Map.fromList
   ,("atopwithdelims",liftUnion Matopwithdelims)
   ,("abovewithdelims",liftUnion Mabovewithdelims)
   ,("fam",          liftUnion Mfam)
+  ,("thinmuskip",   liftUnion Mthinmuskip)
+  ,("medmuskip",    liftUnion Mmedmuskip)
+  ,("thickmuskip",  liftUnion Mthickmuskip)
+  ,("mkern",        liftUnion Mmkern)
+  ,("mskip",        liftUnion Mmskip)
+  ,("nonscript",    liftUnion Mnonscript)
 
   -- e-TeX extension:
   ,("middle",       liftUnion Mmiddle)

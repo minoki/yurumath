@@ -195,6 +195,10 @@ data CommonLocalState ecommand value
     , _skipReg             :: !(Map.Map Int (Glue Dimen))
     , _muskipReg           :: !(Map.Map Int (Glue MuDimen))
     -- TODO: box registers
+    , _thinmuskip          :: !(Glue MuDimen)
+    , _medmuskip           :: !(Glue MuDimen)
+    , _thickmuskip         :: !(Glue MuDimen)
+    -- TODO: Use extensible variants?
     }
 
 data ConditionalKind = CondTruthy
@@ -245,6 +249,11 @@ class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => Is
   dimenReg            = commonLocalState . dimenReg
   skipReg             = commonLocalState . skipReg
   muskipReg           = commonLocalState . muskipReg
+
+thinmuskip, medmuskip, thickmuskip :: IsLocalState localstate => Lens' localstate (Glue MuDimen)
+thinmuskip  = commonLocalState . lens _thinmuskip  (\s v -> s { _thinmuskip = v })
+medmuskip   = commonLocalState . lens _medmuskip   (\s v -> s { _medmuskip = v })
+thickmuskip = commonLocalState . lens _thickmuskip (\s v -> s { _thickmuskip = v })
 
 -- state -> localstate
 class (IsLocalState (LocalState state)) => IsState state where

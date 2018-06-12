@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Text.YuruMath.TeX.State where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Data.Bits
 import Data.Int
 import Data.Word
@@ -29,6 +30,9 @@ initialLocalState = CommonLocalState
                             , _dimenReg = Map.empty
                             , _skipReg = Map.empty
                             , _muskipReg = Map.empty
+                            , _thinmuskip = Glue { glueSpace = mu 3, glueStretch = zeroQ, glueShrink = zeroQ } -- 3mu
+                            , _medmuskip = Glue { glueSpace = mu 4, glueStretch = FixedSS (mu 2), glueShrink = FixedSS (mu 4) } -- 4mu plus 2mu minus 4mu
+                            , _thickmuskip = Glue { glueSpace = mu 5, glueStretch = FixedSS (mu 5), glueShrink = zeroQ } -- 5mu plus 5mu
                             }
 
 initialState :: String -> CommonState (CommonLocalState e v)

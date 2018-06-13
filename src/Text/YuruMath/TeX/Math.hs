@@ -32,7 +32,8 @@ import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Lens.Lens (Lens')
 import Control.Lens.Getter (use,uses)
-import Control.Lens.Setter (assign,modifying)
+import Control.Lens.Setter (set,assign,modifying)
+import Control.Lens.Tuple (_1,_2,_3,_4,_5)
 import Control.Lens.TH
 import Data.OpenUnion
 import TypeFun.Data.List (SubList,Delete,(:++:))
@@ -350,6 +351,7 @@ data MathToken m where
   MTKern       :: !MathKern -> MathToken m
   MTUnKern     :: MathToken m
   MTUnSkip     :: MathToken m
+  MTSizedDelimiter :: !MathClass -> MathToken m
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
@@ -557,9 +559,10 @@ readMathToken = do
       Mmedmuskip   -> return $ MTOther Mmedmuskip
       Mthickmuskip -> return $ MTOther Mthickmuskip
 
-      MUleft           -> throwError "\\Uleft: not implemented yet"
-      MUmiddle         -> throwError "\\Umiddle: not implemented yet"
-      MUright          -> throwError "\\Uright: not implemented yet"
+      MUleft           -> return $ MTSizedDelimiter MathOpen
+      MUmiddle         -> return $ MTSizedDelimiter MathRel
+      MUright          -> return $ MTSizedDelimiter MathClose
+
       MUoverdelimiter  -> throwError "\\Uoverdelimiter: not implemented yet"
       MUunderdelimiter -> throwError "\\Uunderdelimiter: not implemented yet"
       MUdelimiterover  -> throwError "\\Udelimiterover: not implemented yet"
@@ -853,6 +856,30 @@ readMathMaterial !ctx = loop []
             case revList of
               IKern _ : revList' -> loop revList'
               _ -> loop revList
+
+          -- \Uleft<Uleft-like options><delim>
+          -- \Umiddle<Uleft-like options><delim>
+          -- \Uright<Uleft-like options><delim>
+          -- <Uleft-like option> ::= "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>
+          MTSizedDelimiter defaultClass -> do
+            let processOptions options = do
+                  keyword <- readOneOfKeywords ["height","depth","exact","axis","noaxis","class"]
+                  case keyword of
+                    Just "height" -> do height <- readDimension
+                                        processOptions (set _1 (Just height) options)
+                    Just "depth"  -> do depth <- readDimension
+                                        processOptions (set _2 (Just depth) options)
+                    Just "exact"  -> do processOptions (set _3 True options)
+                    Just "axis"   -> do processOptions (set _4 (Just True) options)
+                    Just "noaxis" -> do processOptions (set _4 (Just False) options)
+                    Just "class"  -> do mathclass <- toEnum <$> readIntBetween 0 7
+                                        processOptions (set _5 mathclass options)
+                    _ -> do let (_mheight,_mdepth,_exact,_maxis,mathclass) = options
+                            let atomType = mathclassToAtomType mathclass
+                            del <- readDelimiter
+                            sym <- makeMathSymbol mathclass (delimiterFamilySmall del) (delimiterSlotSmall del)
+                            doAtom (markAtomAsDelimiter (mkAtom atomType sym))
+            processOptions ({-height-} Nothing, {-depth-} Nothing, {-exact-} False, {-axis-} Nothing, {-class-} defaultClass)
 
           -- assignments, etc
           MTOther v -> do

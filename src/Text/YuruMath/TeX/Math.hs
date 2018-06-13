@@ -247,15 +247,19 @@ markAtomAsDelimiter atom@(CloseAtom {}) = atom { atomIsDelimiter = True }
 markAtomAsDelimiter atom = atom
 
 -- generalized fraction
-data GenFrac = GFOver
-             | GFAtop
-             | GFAbove {-dimen-}
-             | GFSkewed !DelimiterCode {- options: noaxis, exact -}
-             | GFOverWithDelims !DelimiterCode !DelimiterCode
-             | GFAtopWithDelims !DelimiterCode !DelimiterCode
-             | GFAboveWithDelims !DelimiterCode !DelimiterCode {-dimen-} {- option: exact -}
-             | GFSkewedWithDelims !DelimiterCode !DelimiterCode !DelimiterCode {- options: noaxis, exact -}
-             deriving (Eq,Show)
+data GenFracLine
+  = GFOver
+  | GFAtop
+  | GFAbove !Dimen
+  | GFSkewed !DelimiterCode {- options: noaxis, exact -}
+  deriving (Eq,Show)
+
+data WithDelims a
+  = WithoutDelims !a
+  | WithDelims {-left-} !DelimiterCode {-right-} !DelimiterCode !a
+  deriving (Eq,Show)
+
+type GenFrac = WithDelims GenFracLine
 
 data BoundaryType = BoundaryLeft
                   | BoundaryRight
@@ -522,15 +526,51 @@ readMathToken = do
       Mright  -> MTRight  <$> readDelimiter
       Mmiddle -> MTMiddle <$> readDelimiter
 
-      -- \over, \atop, \above<dimen>, \Uskewed<delim>, \overwithdelims<delim><delim>, \atopwithdelims<delim><delim>, \abovewithdelims<delim><delim><dimen>, \Uskewedwithdelims<delim><delim><delim>
-      Mover    -> return $ MTGenFrac GFOver
-      Matop    -> return $ MTGenFrac GFAtop
-      Mabove   -> throwError "\\above: not implemented yet"
-      MUskewed -> (MTGenFrac . GFSkewed) <$> readDelimiter -- TODO: Handle keywords
-      Moverwithdelims    -> MTGenFrac <$> (GFOverWithDelims <$> readDelimiter <*> readDelimiter)
-      Matopwithdelims    -> MTGenFrac <$> (GFAtopWithDelims <$> readDelimiter <*> readDelimiter)
-      Mabovewithdelims   -> throwError "\\abovewithdelims: not implemented yet"
-      MUskewedwithdelims -> MTGenFrac <$> (GFSkewedWithDelims <$> readDelimiter <*> readDelimiter <*> readDelimiter) -- TODO: Handle keywords
+      -- \over, \atop
+      Mover    -> return $ MTGenFrac $ WithoutDelims GFOver
+      Matop    -> return $ MTGenFrac $ WithoutDelims GFAtop
+
+      -- \above<optional "exact"><dimen>
+      Mabove   -> do
+        _exact <- readKeyword "exact" -- LuaTeX extension
+        thickness <- readDimension
+        return $ MTGenFrac (WithoutDelims (GFAbove thickness))
+
+      -- \Uskewed<delim><options>
+      MUskewed -> do
+        slash <- readDelimiter
+        (Any _exact,Any _noaxis) <- readKeywordArguments [("exact",pure (Any True,mempty)),("noaxis",pure (mempty,Any True))]
+        -- TODO: Handle keywords ("exact", "noaxis")
+        return $ MTGenFrac (WithoutDelims (GFSkewed slash))
+
+      -- \overwithdelims<delim><delim>
+      Moverwithdelims -> do
+        leftDelim <- readDelimiter
+        rightDelim <- readDelimiter
+        return $ MTGenFrac (WithDelims leftDelim rightDelim GFOver)
+
+      -- \atopwithdelims<delim><delim>
+      Matopwithdelims -> do
+        leftDelim <- readDelimiter
+        rightDelim <- readDelimiter
+        return $ MTGenFrac (WithDelims leftDelim rightDelim GFAtop)
+
+      -- \abovewithdelims<left delim><right delim><optional "exact"><dimen>
+      Mabovewithdelims -> do
+        leftDelim <- readDelimiter
+        rightDelim <- readDelimiter
+        _exact <- readKeyword "exact" -- LuaTeX extension
+        thickness <- readDimension
+        return $ MTGenFrac (WithDelims leftDelim rightDelim (GFAbove thickness))
+
+      -- \Uskewedwithdelims<slash delim><left delim><right delim><options>
+      MUskewedwithdelims -> do
+        slash <- readDelimiter
+        leftDelim <- readDelimiter
+        rightDelim <- readDelimiter
+        (Any _exact,Any _noaxis) <- readKeywordArguments [("exact",pure (Any True,mempty)),("noaxis",pure (mempty,Any True))]
+        -- TODO: Handle keywords ("noaxis", "exact")
+        return $ MTGenFrac (WithDelims leftDelim rightDelim (GFSkewed slash))
 
       MUstack -> return MTUstack
 

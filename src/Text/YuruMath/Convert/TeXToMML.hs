@@ -1,10 +1,13 @@
 module Text.YuruMath.Convert.TeXToMML where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.State (delimiterSlotSmall)
+import Text.YuruMath.TeX.Expansion (showDimension)
 import Text.YuruMath.TeX.Math
 import Text.YuruMath.TeX.Math.Style
 import Text.YuruMath.TeX.PostMath
 import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A
+import Text.Blaze
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Semigroup ((<>))
@@ -16,12 +19,21 @@ toMML = doList
     doList !style [] = []
     doList style (IAtom atom : xs) = doAtom style atom : doList style xs
     doList _ (IStyleChange style : xs) = doList style xs -- TODO: Emit <mstyle> with scriptlevel and displaystyle attributes
-    doList style (IGenFrac gf num den : xs) = (mfrac $ (fromList $ doList (smallerStyle style) num) <> (fromList $ doList (denominatorStyle style) den)) : doList style xs
+    doList style (IGenFrac gf num den : xs) = gfrac : doList style xs
+      where gfrac = case gf of
+                      WithoutDelims bar -> doGFLine bar (num' <> den')
+                      WithDelims leftDelim rightDelim bar -> fromList $ doDelimiter leftDelim ++ [doGFLine bar (num' <> den')] ++ doDelimiter rightDelim
+            doGFLine GFOver = mfrac
+            doGFLine GFAtop = mfrac ! A.linethickness "0"
+            doGFLine (GFAbove dimen) = mfrac ! A.linethickness (toValue $ showDimension dimen)
+            doGFLine (GFSkewed _slash) = mfrac ! A.bevelled "true" -- the delimiter should be a forward slash
+            num' = fromList $ doList (smallerStyle style) num
+            den' = fromList $ doList (denominatorStyle style) den
     doList style (IHorizontalMaterial {} : xs) = doList style xs -- not implemented yet
     doList style (IVerticalMaterial {} : xs) = doList style xs -- not implemented yet
-    doList style (IGlue {} : xs) = doList style xs -- not implemented yet
-    doList style (IKern {} : xs) = doList style xs -- not implemented yet
-    doList style (IBoundary {} : xs) = doList style xs -- not implemented yet
+    doList style (IGlue {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
+    doList style (IKern {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
+    doList style (IBoundary _ delim : xs) = doDelimiter delim ++ doList style xs
     doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
     doAtom :: MathStyle -> Atom -> MathML
     doAtom style (atom@OpAtom { atomLimits = DisplayLimits })
@@ -62,6 +74,9 @@ toMML = doList
     doNucleus style atomType (MFSymbol { symbolVariant = v, symbolContent = content })
       | atomType `elem` [AOp,ABin,ARel,AOpen,AClose,APunct]
       = mo $ toMathML content
+    doNucleus style atomType (MFSymbol { symbolVariant = v, symbolContent = content })
+      -- atomType == AInner,AOver,AUnder,AAcc,ARad,AVcent
+      = mo $ toMathML content
     doNucleus style atomType (MFSubList xs) = fromList $ doList style xs
     doNucleus style atomType _ = mrow mempty -- not supported yet
       -- movable limits
@@ -69,8 +84,10 @@ toMML = doList
     doField !style MFEmpty = Nothing
     doField style (MFSymbol { symbolVariant = v, symbolContent = content })
       = Just [makeMathIdentifier v content] -- TODO: Handle numeric literal (<mn>)
-    doField style MFBox = Nothing -- ignored for now
+    doField style (MFBox {}) = Nothing -- ignored for now
     doField style (MFSubList xs) = Just $ doList style xs
+    doDelimiter (DelimiterCode 0) = []
+    doDelimiter delim = [mo {- stretchy="true" -} $ toMathML (delimiterSlotSmall delim)] -- expected size?
 
 fromList :: [MathML] -> MathML
 fromList [x] = x

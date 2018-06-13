@@ -213,12 +213,12 @@ mtest4 = TestCase $ assertEqual "Math" expected (runMathList True "\\newcommand\
 -}
     group l = IAtom (mkAtom AOrd (MFSubList l))
     expected = Right
-      [group [IGenFrac GFOver
+      [group [IGenFrac (WithoutDelims GFOver)
                [group [IAtom (mkAtom AOrd (MFSymbol 0 MVItalic SMSymbol "1"))]]
                [IAtom (mkAtom AOrd (MFSymbol 0 MVItalic SMSymbol "2"))]
              ]
       ,IAtom (mkAtom ABin (MFSymbol 0 MVNormal SMSymbol "+"))
-      ,group [IGenFrac GFOver
+      ,group [IGenFrac (WithoutDelims GFOver)
                [group [IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "a"))]]
                [IAtom (mkAtom AOrd (MFSymbol 1 MVItalic SMSymbol "b"))
                ,IAtom (mkAtom ABin (MFSymbol 0 MVNormal SMSymbol "+"))

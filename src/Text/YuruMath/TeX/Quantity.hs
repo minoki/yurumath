@@ -11,9 +11,17 @@ class Quantity a where
   negateQ :: a -> a
   zeroQ :: a
 
+instance Quantity Integer where
+  (<+>) = (+)
+  (<->) = (-)
+  scaleByRational s x = truncate $ s * fromInteger x -- ???
+  scaleAsInteger f x = f x
+  negateQ = negate
+  zeroQ = 0
+
 newtype Dimen = DimenWithSp { asScaledPoints :: Integer } deriving (Eq,Ord,Show)
--- { scaledPoints :: Integer, em :: Integer, ex :: Integer }
--- Xsp + Yem + Zex
+-- TODO: should keep the original unit?
+-- (one of {pt, pc, in, bp, cm, mm, dd, cc, em, ex})
 
 instance Quantity Dimen where
   DimenWithSp x <+> DimenWithSp y = DimenWithSp (x + y)

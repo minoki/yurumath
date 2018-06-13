@@ -679,21 +679,30 @@ theString name = do
       do Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getMuGlue
          return $ showMuDimension x ++ showMuSS " plus " stretch ++ showMuSS " minus " shrink
     _ -> throwError $ "You can't use `" ++ show t ++ "' after " ++ name
+
+showDimension :: Dimen -> String
+showDimension x = showScaledAsDecimal (asScaledPoints x) ++ "pt"
+
+showMuDimension :: MuDimen -> String
+showMuDimension x = showScaledAsDecimal (asScaledMu x) ++ "mu"
+
+showSS :: String -> StretchShrink Dimen -> String
+showSS prefix (FixedSS s) | s == zeroQ = ""
+                          | otherwise = prefix ++ showDimension s
+showSS prefix (InfiniteSS i l) = prefix ++ showScaledAsDecimal i ++ "fil" ++ replicate l 'l'
+
+showMuSS :: String -> StretchShrink MuDimen -> String
+showMuSS prefix (FixedSS s) | s == zeroQ = ""
+                            | otherwise = prefix ++ showMuDimension s
+showMuSS prefix (InfiniteSS i l) = prefix ++ showScaledAsDecimal i ++ "fil" ++ replicate l 'l'
+
+showScaledAsDecimal :: Integer -> String
+showScaledAsDecimal x
+  | x < 0 = '-' : showScaledAsDecimal (- x)
+  | otherwise = case quotRem (round (x * 100000 % 65536) :: Integer) 100000 of
+                  (intPart,0) -> show intPart ++ ".0"
+                  (intPart,fracPart) -> show intPart ++ "." ++ adjustFracPart (show fracPart)
   where
-    showDimension x = showScaledAsDecimal (asScaledPoints x) ++ "pt"
-    showMuDimension x = showScaledAsDecimal (asScaledMu x) ++ "mu"
-    showSS prefix (FixedSS s) | s == zeroQ = ""
-                              | otherwise = prefix ++ showDimension s
-    showSS prefix (InfiniteSS i l) = prefix ++ showScaledAsDecimal i ++ "fil" ++ replicate l 'l'
-    showMuSS prefix (FixedSS s) | s == zeroQ = ""
-                                | otherwise = prefix ++ showMuDimension s
-    showMuSS prefix (InfiniteSS i l) = prefix ++ showScaledAsDecimal i ++ "fil" ++ replicate l 'l'
-    showScaledAsDecimal :: Integer -> String
-    showScaledAsDecimal x
-      | x < 0 = '-' : showScaledAsDecimal (- x)
-      | otherwise = case quotRem (round (x * 100000 % 65536) :: Integer) 100000 of
-                      (intPart,0) -> show intPart ++ ".0"
-                      (intPart,fracPart) -> show intPart ++ "." ++ adjustFracPart (show fracPart)
     adjustFracPart s | length s < 5 = stripTrailingZero (replicate (5 - length s) '0' ++ s)
                      | otherwise = stripTrailingZero s
     stripTrailingZero "" = ""

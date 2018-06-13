@@ -52,7 +52,6 @@ module Text.YuruMath.Builder.MathML3
   ) where
 import Text.Blaze
 import Text.Blaze.Internal
-import Data.Semigroup ((<>))
 
 type MathML = Markup
 
@@ -86,8 +85,8 @@ merror = Parent "merror" "<merror" "</merror>"
 mfenced :: MathML -> MathML
 mfenced = Parent "mfenced" "<mfenced" "</mfenced>"
 
-mfrac :: MathML -> MathML -> MathML
-mfrac a b = Parent "mfrac" "<mfrac" "</mfrac>" (a <> b)
+mfrac :: MathML -> MathML
+mfrac = Parent "mfrac" "<mfrac" "</mfrac>"
 
 mglyph :: MathML
 mglyph = Leaf "mglyph" "<mglyph" " />" ()
@@ -110,8 +109,8 @@ mn = Parent "mn" "<mn" "</mn>"
 mo :: MathML -> MathML
 mo = Parent "mo" "<mo" "</mo>"
 
-mover :: MathML -> MathML -> MathML
-mover a b = Parent "mover" "<mover" "</mover>" (a <> b)
+mover :: MathML -> MathML
+mover = Parent "mover" "<mover" "</mover>"
 
 mpadded :: MathML -> MathML
 mpadded = Parent "mpadded" "<mpadded" "</mpadded>"
@@ -122,8 +121,8 @@ mphantom = Parent "mphantom" "<mphantom" "</mphantom>"
 mprescripts :: MathML
 mprescripts = Leaf "mprescripts" "<mprescripts" " />" ()
 
-mroot :: MathML -> MathML -> MathML
-mroot a b = Parent "mroot" "<mroot" "</mroot>" (a <> b)
+mroot :: MathML -> MathML
+mroot = Parent "mroot" "<mroot" "</mroot>"
 
 mrow :: MathML -> MathML
 mrow = Parent "mrow" "<mrow" "</mrow>"
@@ -158,14 +157,14 @@ mstack = Parent "mstack" "<mstack" "</mstack>"
 mstyle :: MathML -> MathML
 mstyle = Parent "mstyle" "<mstyle" "</mstyle>"
 
-msub :: MathML -> MathML -> MathML
-msub a b = Parent "msub" "<msub" "</msub>" (a <> b)
+msub :: MathML -> MathML
+msub = Parent "msub" "<msub" "</msub>"
 
-msubsup :: MathML -> MathML -> MathML -> MathML
-msubsup a b c = Parent "msubsup" "<msubsup" "</msubsup>" (a <> b <> c)
+msubsup :: MathML -> MathML
+msubsup = Parent "msubsup" "<msubsup" "</msubsup>"
 
-msup :: MathML -> MathML -> MathML
-msup a b = Parent "msup" "<msup" "</msup>" (a <> b)
+msup :: MathML -> MathML
+msup = Parent "msup" "<msup" "</msup>"
 
 mtable :: MathML -> MathML
 mtable = Parent "mtable" "<mtable" "</mtable>"
@@ -179,11 +178,11 @@ mtext = Parent "mtext" "<mtext" "</mtext>"
 mtr :: MathML -> MathML
 mtr = Parent "mtr" "<mtr" "</mtr>"
 
-munder :: MathML -> MathML -> MathML
-munder a b = Parent "munder" "<munder" "</munder>" (a <> b)
+munder :: MathML -> MathML
+munder = Parent "munder" "<munder" "</munder>"
 
-munderover :: MathML -> MathML -> MathML -> MathML
-munderover a b c = Parent "munderover" "<munderover" "</munderover>" (a <> b <> c)
+munderover :: MathML -> MathML
+munderover = Parent "munderover" "<munderover" "</munderover>"
 
 none :: MathML
 none = Leaf "none" "<none" " />" ()

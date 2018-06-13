@@ -7,6 +7,7 @@ import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Semigroup ((<>))
 
 toMML :: MathStyle -> MathList -> [MathML]
 toMML = doList
@@ -15,7 +16,7 @@ toMML = doList
     doList !style [] = []
     doList style (IAtom atom : xs) = doAtom style atom : doList style xs
     doList _ (IStyleChange style : xs) = doList style xs -- TODO: Emit <mstyle> with scriptlevel and displaystyle attributes
-    doList style (IGenFrac gf num den : xs) = mfrac (fromList $ doList (smallerStyle style) num) (fromList $ doList (denominatorStyle style) den) : doList style xs
+    doList style (IGenFrac gf num den : xs) = (mfrac $ (fromList $ doList (smallerStyle style) num) <> (fromList $ doList (denominatorStyle style) den)) : doList style xs
     doList style (IHorizontalMaterial {} : xs) = doList style xs -- not implemented yet
     doList style (IVerticalMaterial {} : xs) = doList style xs -- not implemented yet
     doList style (IGlue {} : xs) = doList style xs -- not implemented yet
@@ -30,9 +31,9 @@ toMML = doList
             sup = doField (superscriptStyle style) (atomSuperscript atom)
         in case (sub,sup) of
              (Nothing, Nothing) -> n
-             (Just xs, Nothing) -> munder n (fromList xs)
-             (Nothing, Just xs) -> mover n (fromList xs)
-             (Just xs, Just ys) -> munderover n (fromList xs) (fromList ys)
+             (Just xs, Nothing) -> munder $ n <> (fromList xs)
+             (Nothing, Just xs) -> mover $ n <> (fromList xs)
+             (Just xs, Just ys) -> munderover $ n <> (fromList xs) <> (fromList ys)
     doAtom style (atom@OpAtom { atomLimits = Limits })
       = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "false" $ toMathML content
               | otherwise = doNucleus style (atomType atom) (atomNucleus atom)
@@ -40,9 +41,9 @@ toMML = doList
             sup = doField (superscriptStyle style) (atomSuperscript atom)
         in case (sub,sup) of
              (Nothing, Nothing) -> n
-             (Just xs, Nothing) -> munder n (fromList xs)
-             (Nothing, Just xs) -> mover n (fromList xs)
-             (Just xs, Just ys) -> munderover n (fromList xs) (fromList ys)
+             (Just xs, Nothing) -> munder $ n <> (fromList xs)
+             (Nothing, Just xs) -> mover $ n <> (fromList xs)
+             (Just xs, Just ys) -> munderover $ n <> (fromList xs) <> (fromList ys)
     -- doAtom style (atom@RadAtom {}) = _
     -- doAtom style (atom@AccAtom {}) = _
     doAtom style atom
@@ -51,9 +52,9 @@ toMML = doList
             sup = doField (superscriptStyle style) (atomSuperscript atom)
         in case (sub,sup) of
              (Nothing, Nothing) -> n
-             (Just xs, Nothing) -> msub n (fromList xs)
-             (Nothing, Just xs) -> msup n (fromList xs)
-             (Just xs, Just ys) -> msubsup n (fromList xs) (fromList ys)
+             (Just xs, Nothing) -> msub $ n <> (fromList xs)
+             (Nothing, Just xs) -> msup $ n <> (fromList xs)
+             (Just xs, Just ys) -> msubsup $ n <> (fromList xs) <> (fromList ys)
     doNucleus :: MathStyle -> AtomType -> MathField -> MathML
     doNucleus !style !atomType MFEmpty = mrow mempty
     doNucleus style AOrd (MFSymbol { symbolVariant = v, symbolContent = content })

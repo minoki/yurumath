@@ -22,8 +22,8 @@ writeMMLVariant mmlVariant = do
   createDirectoryIfMissing True basePath
 
   let tags = map (id &&& makeParent) (parents mmlVariant ++ unaryParents mmlVariant)
-        ++ map (id &&& makeBinary) (binaryParents mmlVariant)
-        ++ map (id &&& makeTernary) (ternaryParents mmlVariant)
+        ++ map (id &&& makeParent) (binaryParents mmlVariant)
+        ++ map (id &&& makeParent) (ternaryParents mmlVariant)
         ++ map (id &&& makeLeaf) (leafs mmlVariant)
       sortedTags = sortBy (comparing fst) tags
 
@@ -35,7 +35,6 @@ writeMMLVariant mmlVariant = do
     , generateExports ("module Text.Blaze" : "MathML" : "toMathML" : map (sanitize . fst) sortedTags) ++ " where"
     , "import Text.Blaze"
     , "import Text.Blaze.Internal"
-    , "import Data.Semigroup ((<>))"
     , ""
     , "type MathML = Markup"
     , ""
@@ -72,20 +71,6 @@ makeParent :: String -> String
 makeParent name = unlines
   [ fname ++ " :: MathML -> MathML"
   , fname ++ " = Parent " ++ show name ++ " " ++ show ("<" ++ name) ++ " " ++ show ("</" ++ name ++ ">")
-  ]
-  where fname = sanitize name
-
-makeBinary :: String -> String
-makeBinary name = unlines
-  [ fname ++ " :: MathML -> MathML -> MathML"
-  , fname ++ " a b = Parent " ++ show name ++ " " ++ show ("<" ++ name) ++ " " ++ show ("</" ++ name ++ ">") ++ " (a <> b)"
-  ]
-  where fname = sanitize name
-
-makeTernary :: String -> String
-makeTernary name = unlines
-  [ fname ++ " :: MathML -> MathML -> MathML -> MathML"
-  , fname ++ " a b c = Parent " ++ show name ++ " " ++ show ("<" ++ name) ++ " " ++ show ("</" ++ name ++ ">") ++ " (a <> b <> c)"
   ]
   where fname = sanitize name
 

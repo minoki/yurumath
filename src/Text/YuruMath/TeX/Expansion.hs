@@ -14,6 +14,7 @@ import Data.Ratio
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
+import Data.Monoid ((<>))
 import Control.Monad
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
@@ -145,24 +146,39 @@ readKeyword xs = do
         Nothing -> return False
 
 readOneOfKeywords :: (MonadTeXState s m, MonadError String m) => [String] -> m (Maybe String)
-readOneOfKeywords keywords = do
+readOneOfKeywords keywords = readOneOfKeywordsV (map (\k -> (k,k)) keywords)
+
+-- read an optional keyword and return the associated value with it
+readOneOfKeywordsV :: (MonadTeXState s m, MonadError String m) => [(String,v)] -> m (Maybe v)
+readOneOfKeywordsV keywords = do
   readOptionalSpaces
   loop keywords
   where
     loop [] = return Nothing
-    loop keywords | "" `elem` keywords = return (Just "")
+    loop keywords | Just v <- lookup "" keywords = return (Just v)
     loop keywords = do
       t <- nextETokenWithDepth
       case t of
         Just (d,t@(ETCharacter { etChar = c })) -> do
-          k <- loop [xs | x:xs <- keywords, x == c || x == toLower c]
+          k <- loop [(xs,v) | (x:xs,v) <- keywords, x == c || x == toLower c]
           case k of
-            Just r -> return $ Just (toLower c : r)
+            Just _ -> return k
             Nothing -> do unreadETokens d [t]
                           return Nothing
         Just (d,t) -> do unreadETokens d [t]
                          return Nothing
         Nothing -> return Nothing
+
+readKeywordArguments :: (MonadTeXState s m, MonadError String m, Monoid n) => [(String,m n)] -> m n
+readKeywordArguments keywords = doRead mempty $ map (\(k,v) -> (k,(k,v))) keywords
+  where
+    doRead !acc argSpec = do
+      k <- readOneOfKeywordsV argSpec
+      case k of
+        Just (w,action) -> do
+          v <- action
+          doRead (acc <> v) [a | a <- argSpec, fst a /= w]
+        _ -> return acc
 
 readOptionalKeyword :: (MonadTeXState s m, MonadError String m) => String -> m ()
 readOptionalKeyword name = do _ <- readKeyword name

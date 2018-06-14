@@ -4,8 +4,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
@@ -21,6 +19,7 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
 import Text.YuruMath.TeX.Typeset
 import Text.YuruMath.TeX.Math.List
+import Text.YuruMath.TeX.Math.State
 import qualified Data.Map.Strict as Map
 import Data.Word
 import Data.Bits
@@ -35,48 +34,9 @@ import Control.Lens.Lens (Lens')
 import Control.Lens.Getter (use,uses)
 import Control.Lens.Setter (set,assign,modifying)
 import Control.Lens.Tuple (_1,_2,_3,_4,_5)
-import Control.Lens.TH
 import Data.OpenUnion
 import TypeFun.Data.List (SubList,Delete,(:++:))
 import Data.Proxy
-
-data MathLocalState ecommand value = MathLocalState
-                                     { _mCommonLocalState :: !(CommonLocalState ecommand value)
-                                     , _famParam :: !Int
-                                     , _currentVariant :: !MathVariant
-                                     , _currentSymbolMode :: !SymbolMode
-                                     }
-
-data MathState localstate
-  = MathState
-    { _mCommonState :: !(CommonState localstate)
-    , _currentMathStyle :: !MathStyle
-    }
-
-initialLocalMathState :: MathLocalState e v
-initialLocalMathState = MathLocalState { _mCommonLocalState = initialLocalState
-                                       , _famParam = -1
-                                       , _currentVariant = MVItalic
-                                       , _currentSymbolMode = SMSymbol
-                                       }
-
-initialMathState :: Bool -> CommonState localstate -> MathState localstate
-initialMathState !isDisplay !commonState
-  = MathState { _mCommonState = commonState { _mode = if isDisplay then DisplayMathMode else MathMode }
-              , _currentMathStyle = if isDisplay then DisplayStyle else TextStyle
-              }
-
-makeLenses ''MathLocalState
-makeLenses ''MathState
-
-instance (IsExpandable ecommand, IsValue value) => IsLocalState (MathLocalState ecommand value) where
-  type ExpandableT (MathLocalState ecommand value) = ecommand
-  type ValueT (MathLocalState ecommand value) = value
-  commonLocalState = mCommonLocalState
-
-instance (IsLocalState localstate) => IsState (MathState localstate) where
-  type LocalState (MathState localstate) = localstate
-  commonState = mCommonState
 
 data MathToken m where
   MTChar       :: !Char -> MathToken m -- letter, other, \char or \chardef-ed
@@ -110,15 +70,15 @@ data MathToken m where
 
 deriving instance Show (MathToken m)
 
-type MonadMathState localstate set m
-  = ( MonadTeXState (MathState localstate) m
-    , ValueT localstate ~ Union set
+type MonadMathState state set m
+  = ( MonadTeXState state m
+    , IsMathState state
+    , Value state ~ Union set
     , DoExecute (Union (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))) m
     , Show (Union (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))))
-    , localstate ~ MathLocalState (ExpandableT localstate) (ValueT localstate)
     )
 
-readMathToken :: forall m localstate set. (MonadMathState localstate set m, MonadError String m) => m (Maybe (MathToken m))
+readMathToken :: forall m state set. (MonadMathState state set m, MonadError String m) => m (Maybe (MathToken m))
 readMathToken = do
   v <- evalToValue
   case v of
@@ -361,7 +321,7 @@ readMathToken = do
       MUnosuperscript  -> throwError "\\Unosuperscript: not implemented yet"
       MUnosubscript    -> throwError "\\Unosubscript: not implemented yet"
 
-readDelimiter :: (MonadMathState localstate set m, MonadError String m) => m DelimiterCode
+readDelimiter :: (MonadMathState state set m, MonadError String m) => m DelimiterCode
 readDelimiter = do
   t <- readMathToken
   case t of
@@ -395,7 +355,7 @@ readDelimiterOptions = do
     ]
   return $ DelimiterOptions mheight mdepth exact maxis mmathclass
 
-withMathStyle :: (MonadTeXState (MathState localstate) m) => (MathStyle -> MathStyle) -> m a -> m a
+withMathStyle :: (MonadTeXState state m, IsMathState state) => (MathStyle -> MathStyle) -> m a -> m a
 withMathStyle f m = do
   oldStyle <- use currentMathStyle
   assign currentMathStyle (f oldStyle)
@@ -460,7 +420,7 @@ instance MathMaterialEnding MMDDenominator where
   onGenFrac _ _ = throwError "Ambiguous: you need another { and }"
   expectedEnding _ = "`}'"
 
-readMathMaterial :: forall f localstate set m. (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => m (f MathList)
+readMathMaterial :: forall f state set m. (MathMaterialEnding f, MonadMathState state set m, MonadError String m) => m (f MathList)
 readMathMaterial = loop []
   where
     loop :: MathList -> m (f MathList)
@@ -654,7 +614,7 @@ readMathMaterial = loop []
             doExecute v
             loop revList
 
-readLBrace :: (MonadMathState localstate set m, MonadError String m) => m ()
+readLBrace :: (MonadMathState state set m, MonadError String m) => m ()
 readLBrace = do
   t <- readMathToken
   case t of
@@ -664,7 +624,7 @@ readLBrace = do
 
 -- <math symbol> ::= <character> | <math character>
 -- <math field> ::= <math symbol> | {<math mode material>}
-readMathField :: (MonadMathState localstate set m, MonadError String m) => m MathField
+readMathField :: (MonadMathState state set m, MonadError String m) => m MathField
 readMathField = do
   t <- readMathToken
   case t of
@@ -685,7 +645,7 @@ readMathField = do
           _ -> MFSubList content
       _ -> throwError $ "Unexpected " ++ show t ++ "; expected a symbol or `{'"
 
-makeMathSymbol :: (MonadMathState localstate set m, MonadError String m) => MathClass -> Word8 -> Char -> m MathField
+makeMathSymbol :: (MonadTeXState state m, IsMathState state) => MathClass -> Word8 -> Char -> m MathField
 makeMathSymbol MathVar !fam !slot = do
   famP <- use (localState . famParam)
   v <- use (localState . currentVariant)
@@ -708,12 +668,12 @@ makeMathSymbol !_mathclass !fam !slot
                       , symbolContent = T.singleton slot
                       }
 
-famSet :: (MonadMathState localstate set m, MonadError String m) => m (Assignment (MathState localstate))
+famSet :: (MonadTeXState state m, MonadError String m, IsMathState state) => m (Assignment state)
 famSet = do
   val <- readIntBetween 0 255
   texAssign famParam val
 
-famGet :: (MonadMathState localstate set m, MonadError String m) => m Integer
+famGet :: (MonadTeXState state m, IsMathState state) => m Integer
 famGet = uses (localState . famParam) fromIntegral
 
 muskipParamSet :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) (Glue MuDimen) -> m (Assignment s)
@@ -726,7 +686,7 @@ muskipParamSet muskip = readMuGlue >>= texAssign muskip
 newtype MathStyleSet = MathStyleSet MathStyle
                      deriving (Eq,Show)
 
-instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathStyleSet m where
+instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathStyleSet m where
   doExecute (MathStyleSet s) = return () -- dummy
   getQuantity (MathStyleSet v) = QInteger $ return $ fromIntegral $ fromEnum v -- LuaTeX extension
 
@@ -736,7 +696,7 @@ instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) 
 
 newtype MathAtomCommand = MathAtomCommand AtomType deriving (Eq,Show)
 
-instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathAtomCommand m where
+instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathAtomCommand m where
   doExecute _ = return () -- dummy
   getQuantity _ = NotQuantity
 
@@ -746,7 +706,7 @@ instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) 
 
 newtype MathVariantSet = MathVariantSet MathVariant deriving (Eq,Show)
 
-instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathVariantSet m where
+instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathVariantSet m where
   doExecute _ = return () -- dummy
   getQuantity _ = NotQuantity
 
@@ -756,7 +716,7 @@ instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) 
 
 newtype MathSymbolModeSet = MathSymbolModeSet SymbolMode deriving (Eq,Show)
 
-instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExecute MathSymbolModeSet m where
+instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathSymbolModeSet m where
   doExecute _ = return () -- dummy
   getQuantity _ = NotQuantity
 
@@ -768,7 +728,7 @@ data MathExpandable = Mmathstyle -- LuaTeX extension
                     deriving (Eq,Show)
 
 -- LuaTeX extension: \mathstyle
-mathstyleCommand :: (MonadTeXState (MathState localstate) m, MonadError String m) => m [ExpansionToken]
+mathstyleCommand :: (MonadTeXState state m, MonadError String m, IsMathState state) => m [ExpansionToken]
 mathstyleCommand = do
   style <- use currentMathStyle
   stringToEToken $ show $ fromEnum style -- 0..7
@@ -776,7 +736,7 @@ mathstyleCommand = do
 instance IsExpandable MathExpandable where
   isConditional _ = False
 
-instance (Monad m, MonadTeXState (MathState localstate) m, MonadError String m) => DoExpand MathExpandable m where
+instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExpand MathExpandable m where
   doExpand Mmathstyle = mathstyleCommand
   evalBooleanConditional _ = Nothing
 
@@ -840,7 +800,7 @@ data MathCommands
 
   deriving (Eq,Show)
 
-instance (Monad m, MonadMathState localstate set m, MonadError String m) => DoExecute MathCommands m where
+instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathCommands m where
   doExecute Mfam           = runLocal famSet
   doExecute Mthinmuskip    = runLocal (muskipParamSet thinmuskip)
   doExecute Mmedmuskip     = runLocal (muskipParamSet medmuskip)

@@ -11,6 +11,7 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.Math
 import Text.YuruMath.TeX.Math.List
+import Text.YuruMath.TeX.Math.State
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Cons (_head)

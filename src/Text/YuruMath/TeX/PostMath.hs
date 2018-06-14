@@ -1,7 +1,6 @@
 module Text.YuruMath.TeX.PostMath where
 import Text.YuruMath.TeX.Types
-import Text.YuruMath.TeX.Math
-import Text.YuruMath.TeX.Math.Style
+import Text.YuruMath.TeX.Math.List
 import Data.Bifunctor
 import Data.Semigroup ((<>))
 
@@ -14,19 +13,6 @@ doChoice        ScriptStyle       _ _ s _  = s
 doChoice CrampedScriptStyle       _ _ s _  = s
 doChoice        ScriptScriptStyle _ _ _ ss = ss
 doChoice CrampedScriptScriptStyle _ _ _ ss = ss
-
-nucleusStyle :: AtomType -> MathStyle -> MathStyle
-nucleusStyle AOver = makeCramped
-nucleusStyle AAcc = makeCramped
-nucleusStyle ARad = makeCramped
-nucleusStyle _ = id
-
-isScriptOrSmaller :: MathStyle -> Bool
-isScriptOrSmaller ScriptStyle = True
-isScriptOrSmaller CrampedScriptStyle = True
-isScriptOrSmaller ScriptScriptStyle = True
-isScriptOrSmaller CrampedScriptScriptStyle = True
-isScriptOrSmaller _ = False
 
 stripGlueOrKern :: MathList -> MathList
 stripGlueOrKern (IGlue _ : xs) = xs

@@ -1,4 +1,14 @@
-module Text.YuruMath.TeX.Math.Style where
+module Text.YuruMath.TeX.Math.Style
+ (MathStyle(..)
+ ,isCramped
+ ,makeCramped
+ ,makeCrampedIf
+ ,superscriptStyle
+ ,subscriptStyle
+ ,smallerStyle
+ ,denominatorStyle
+ ,isScriptOrSmaller
+ ) where
 
 data MathStyle = DisplayStyle             -- \displaystyle, 0
                | CrampedDisplayStyle      -- \crampeddisplaystyle, 1
@@ -56,3 +66,11 @@ smallerStyle scriptscriptstyle = scriptscriptstyle
 -- denominator
 denominatorStyle :: MathStyle -> MathStyle
 denominatorStyle = makeCramped . smallerStyle
+
+-- Used by \nonscript
+isScriptOrSmaller :: MathStyle -> Bool
+isScriptOrSmaller ScriptStyle = True
+isScriptOrSmaller CrampedScriptStyle = True
+isScriptOrSmaller ScriptScriptStyle = True
+isScriptOrSmaller CrampedScriptScriptStyle = True
+isScriptOrSmaller _ = False

@@ -311,9 +311,9 @@ csnameCommand = do
   let tname = T.pack name
 
   -- THE DREADED SIDE EFFECT OF \csname
-  d <- use (localState . tsDefinitions)
+  d <- use (localState . controlSeqDef)
   when (Map.notMember tname d)
-    $ modifying (localState . tsDefinitions) (Map.insert tname (Right (injectCommonValue Relax)))
+    $ modifying (localState . controlSeqDef) (Map.insert tname (Right (injectCommonValue Relax)))
 
   return [ETCommandName { etNoexpand = False, etName = NControlSeq tname }]
 
@@ -990,7 +990,7 @@ ifcsnameCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifcsnameCommand = do
   name <- readUntilEndcsname []
   let tname = T.pack name
-  d <- use (localState . tsDefinitions)
+  d <- use (localState . controlSeqDef)
   return (Map.member tname d)
 
 -- e-TeX extension: \unless

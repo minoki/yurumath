@@ -179,25 +179,25 @@ data ScopeType = ScopeByBrace      -- { .. }
 
 data CommonLocalState ecommand value
   = CommonLocalState
-    { _scopeType           :: !ScopeType
-    , _tsDefinitions       :: !(Map.Map Text (Either ecommand value)) -- definitions of control sequences
-    , _tsActiveDefinitions :: !(Map.Map Char (Either ecommand value)) -- definitions of active characters
-    , _catcodeMap          :: !(Map.Map Char CatCode)
-    , _lccodeMap           :: !(Map.Map Char Char)
-    , _uccodeMap           :: !(Map.Map Char Char)
-    , _mathcodeMap         :: !(Map.Map Char MathCode)
-    , _delcodeMap          :: !(Map.Map Char DelimiterCode)
-    -- sfcodeMap           :: !(Map.Map Char Int)
-    , _endlinechar         :: !Int
-    , _escapechar          :: !Int
-    , _countReg            :: !(Map.Map Int Integer)
-    , _dimenReg            :: !(Map.Map Int Dimen)
-    , _skipReg             :: !(Map.Map Int (Glue Dimen))
-    , _muskipReg           :: !(Map.Map Int (Glue MuDimen))
+    { _scopeType     :: !ScopeType
+    , _controlSeqDef :: !(Map.Map Text (Either ecommand value)) -- definitions of control sequences
+    , _activeDef     :: !(Map.Map Char (Either ecommand value)) -- definitions of active characters
+    , _catcodeMap    :: !(Map.Map Char CatCode)
+    , _lccodeMap     :: !(Map.Map Char Char)
+    , _uccodeMap     :: !(Map.Map Char Char)
+    , _mathcodeMap   :: !(Map.Map Char MathCode)
+    , _delcodeMap    :: !(Map.Map Char DelimiterCode)
+    -- sfcodeMap     :: !(Map.Map Char Int)
+    , _endlinechar   :: !Int
+    , _escapechar    :: !Int
+    , _countReg      :: !(Map.Map Int Integer)
+    , _dimenReg      :: !(Map.Map Int Dimen)
+    , _skipReg       :: !(Map.Map Int (Glue Dimen))
+    , _muskipReg     :: !(Map.Map Int (Glue MuDimen))
     -- TODO: box registers
-    , _thinmuskip          :: !(Glue MuDimen)
-    , _medmuskip           :: !(Glue MuDimen)
-    , _thickmuskip         :: !(Glue MuDimen)
+    , _thinmuskip    :: !(Glue MuDimen)
+    , _medmuskip     :: !(Glue MuDimen)
+    , _thickmuskip   :: !(Glue MuDimen)
     -- TODO: Use extensible variants?
     }
 
@@ -220,67 +220,75 @@ data CommonState localstate
 class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => IsLocalState localstate where
   type ExpandableT localstate
   type ValueT localstate
-  commonLocalState    :: Lens' localstate (CommonLocalState (ExpandableT localstate) (ValueT localstate))
-  scopeType           :: Lens' localstate ScopeType
-  tsDefinitions       :: Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
-  tsActiveDefinitions :: Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
-  catcodeMap          :: Lens' localstate (Map.Map Char CatCode)
-  lccodeMap           :: Lens' localstate (Map.Map Char Char)
-  uccodeMap           :: Lens' localstate (Map.Map Char Char)
-  mathcodeMap         :: Lens' localstate (Map.Map Char MathCode)
-  delcodeMap          :: Lens' localstate (Map.Map Char DelimiterCode)
-  endlinechar         :: Lens' localstate Int
-  escapechar          :: Lens' localstate Int
-  countReg            :: Lens' localstate (Map.Map Int Integer)
-  dimenReg            :: Lens' localstate (Map.Map Int Dimen)
-  skipReg             :: Lens' localstate (Map.Map Int (Glue Dimen))
-  muskipReg           :: Lens' localstate (Map.Map Int (Glue MuDimen))
-  scopeType           = commonLocalState . scopeType
-  tsDefinitions       = commonLocalState . tsDefinitions
-  tsActiveDefinitions = commonLocalState . tsActiveDefinitions
-  catcodeMap          = commonLocalState . catcodeMap
-  lccodeMap           = commonLocalState . lccodeMap
-  uccodeMap           = commonLocalState . uccodeMap
-  mathcodeMap         = commonLocalState . mathcodeMap
-  delcodeMap          = commonLocalState . delcodeMap
-  endlinechar         = commonLocalState . endlinechar
-  escapechar          = commonLocalState . escapechar
-  countReg            = commonLocalState . countReg
-  dimenReg            = commonLocalState . dimenReg
-  skipReg             = commonLocalState . skipReg
-  muskipReg           = commonLocalState . muskipReg
+  commonLocalState :: Lens' localstate (CommonLocalState (ExpandableT localstate) (ValueT localstate))
 
+definitionAt  :: (IsLocalState localstate) => CommandName -> Lens' localstate (Either (ExpandableT localstate) (ValueT localstate))
+scopeType     :: (IsLocalState localstate) => Lens' localstate ScopeType
+controlSeqDef :: (IsLocalState localstate) => Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
+activeDef     :: (IsLocalState localstate) => Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
+catcodeMap    :: (IsLocalState localstate) => Lens' localstate (Map.Map Char CatCode)
+lccodeMap, uccodeMap :: (IsLocalState localstate) => Lens' localstate (Map.Map Char Char)
+mathcodeMap   :: (IsLocalState localstate) => Lens' localstate (Map.Map Char MathCode)
+delcodeMap    :: (IsLocalState localstate) => Lens' localstate (Map.Map Char DelimiterCode)
+endlinechar, escapechar :: (IsLocalState localstate) => Lens' localstate Int
+countReg      :: (IsLocalState localstate) => Lens' localstate (Map.Map Int Integer)
+dimenReg      :: (IsLocalState localstate) => Lens' localstate (Map.Map Int Dimen)
+skipReg       :: (IsLocalState localstate) => Lens' localstate (Map.Map Int (Glue Dimen))
+muskipReg     :: (IsLocalState localstate) => Lens' localstate (Map.Map Int (Glue MuDimen))
 thinmuskip, medmuskip, thickmuskip :: IsLocalState localstate => Lens' localstate (Glue MuDimen)
-thinmuskip  = commonLocalState . lens _thinmuskip  (\s v -> s { _thinmuskip = v })
-medmuskip   = commonLocalState . lens _medmuskip   (\s v -> s { _medmuskip = v })
-thickmuskip = commonLocalState . lens _thickmuskip (\s v -> s { _thickmuskip = v })
 
--- state -> localstate
+scopeType     = commonLocalState . lens _scopeType   (\s v -> s { _scopeType = v})
+controlSeqDef = commonLocalState . lens _controlSeqDef (\s v -> s { _controlSeqDef = v })
+activeDef     = commonLocalState . lens _activeDef   (\s v -> s { _activeDef = v })
+catcodeMap    = commonLocalState . lens _catcodeMap  (\s v -> s { _catcodeMap = v })
+lccodeMap     = commonLocalState . lens _lccodeMap   (\s v -> s { _lccodeMap = v })
+uccodeMap     = commonLocalState . lens _uccodeMap   (\s v -> s { _uccodeMap = v })
+mathcodeMap   = commonLocalState . lens _mathcodeMap (\s v -> s { _mathcodeMap = v })
+delcodeMap    = commonLocalState . lens _delcodeMap  (\s v -> s { _delcodeMap = v })
+endlinechar   = commonLocalState . lens _endlinechar (\s v -> s { _endlinechar = v })
+escapechar    = commonLocalState . lens _escapechar  (\s v -> s { _escapechar = v })
+countReg      = commonLocalState . lens _countReg    (\s v -> s { _countReg = v })
+dimenReg      = commonLocalState . lens _dimenReg    (\s v -> s { _dimenReg = v })
+skipReg       = commonLocalState . lens _skipReg     (\s v -> s { _skipReg = v })
+muskipReg     = commonLocalState . lens _muskipReg   (\s v -> s { _muskipReg = v })
+thinmuskip    = commonLocalState . lens _thinmuskip  (\s v -> s { _thinmuskip = v })
+medmuskip     = commonLocalState . lens _medmuskip   (\s v -> s { _medmuskip = v })
+thickmuskip   = commonLocalState . lens _thickmuskip (\s v -> s { _thickmuskip = v })
+
+definitionAt cn@(NControlSeq name) = controlSeqDef . lens getter setter
+  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) name
+        setter s v = Map.insert name v s
+definitionAt cn@(NActiveChar c) = activeDef . lens getter setter
+  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) c
+        setter s v = Map.insert c v s
+
 class (IsLocalState (LocalState state)) => IsState state where
   type LocalState state
-
   commonState        :: Lens' state (CommonState (LocalState state))
 
-  -- tokenizer
-  tokenizerState     :: Lens' state TokenizerState
+-- tokenizer
+tokenizerState     :: (IsState state) => Lens' state TokenizerState
+tokenizerState     = commonState . lens _tokenizerState     (\s v -> s { _tokenizerState = v })
 
-  -- expansion processor
-  esMaxDepth         :: Lens' state Int -- read-only?
-  esMaxPendingToken  :: Lens' state Int -- read-only?
-  esPendingTokenList :: Lens' state [(Int,ExpansionToken)]
-  conditionals       :: Lens' state [ConditionalKind]
+-- expansion processor
+esMaxDepth         :: (IsState state) => Lens' state Int -- read-only?
+esMaxPendingToken  :: (IsState state) => Lens' state Int -- read-only?
+esPendingTokenList :: (IsState state) => Lens' state [(Int,ExpansionToken)]
+conditionals       :: (IsState state) => Lens' state [ConditionalKind]
+esMaxDepth         = commonState . lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
+esMaxPendingToken  = commonState . lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
+esPendingTokenList = commonState . lens _esPendingTokenList (\s v -> s { _esPendingTokenList = v })
+conditionals       = commonState . lens _conditionals       (\s v -> s { _conditionals = v })
 
-  -- others
-  localStates        :: Lens' state [LocalState state]
-  mode               :: Lens' state Mode
-
-  tokenizerState     = commonState . tokenizerState
-  esMaxDepth         = commonState . esMaxDepth
-  esMaxPendingToken  = commonState . esMaxPendingToken
-  esPendingTokenList = commonState . esPendingTokenList
-  conditionals       = commonState . conditionals
-  localStates        = commonState . localStates
-  mode               = commonState . mode
+-- others
+localStates        :: (IsState state) => Lens' state [LocalState state]
+localState         :: (IsState state) => Lens' state (LocalState state)
+mode               :: (IsState state) => Lens' state Mode
+localStates        = commonState . lens _localStates        (\s v -> s { _localStates = v })
+mode               = commonState . lens _mode               (\s v -> s { _mode = v })
+localState = localStates . lens head setter
+  where setter [] x = error "Invalid local state"
+        setter (_:xs) x = x:xs
 
 class (IsExpandable e, Monad m) => DoExpand e m where
   doExpand               :: e -> m [ExpansionToken]
@@ -367,45 +375,11 @@ instance Show ConditionalMarker where
 instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalState ecommand value) where
   type ExpandableT (CommonLocalState ecommand value) = ecommand
   type ValueT (CommonLocalState ecommand value) = value
-  commonLocalState    = id
-  scopeType           = lens _scopeType           (\s v -> s { _scopeType = v})
-  tsDefinitions       = lens _tsDefinitions       (\s v -> s { _tsDefinitions = v })
-  tsActiveDefinitions = lens _tsActiveDefinitions (\s v -> s { _tsActiveDefinitions = v })
-  catcodeMap          = lens _catcodeMap          (\s v -> s { _catcodeMap = v })
-  lccodeMap           = lens _lccodeMap           (\s v -> s { _lccodeMap = v })
-  uccodeMap           = lens _uccodeMap           (\s v -> s { _uccodeMap = v })
-  mathcodeMap         = lens _mathcodeMap         (\s v -> s { _mathcodeMap = v })
-  delcodeMap          = lens _delcodeMap          (\s v -> s { _delcodeMap = v })
-  endlinechar         = lens _endlinechar         (\s v -> s { _endlinechar = v })
-  escapechar          = lens _escapechar          (\s v -> s { _escapechar = v })
-  countReg            = lens _countReg            (\s v -> s { _countReg = v })
-  dimenReg            = lens _dimenReg            (\s v -> s { _dimenReg = v })
-  skipReg             = lens _skipReg             (\s v -> s { _skipReg = v })
-  muskipReg           = lens _muskipReg           (\s v -> s { _muskipReg = v })
+  commonLocalState = id
 
 instance IsLocalState localstate => IsState (CommonState localstate) where
   type LocalState (CommonState localstate) = localstate
   commonState        = id
-  tokenizerState     = lens _tokenizerState     (\s v -> s { _tokenizerState = v })
-  esMaxDepth         = lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
-  esMaxPendingToken  = lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
-  esPendingTokenList = lens _esPendingTokenList (\s v -> s { _esPendingTokenList = v })
-  localStates        = lens _localStates        (\s v -> s { _localStates = v })
-  mode               = lens _mode               (\s v -> s { _mode = v })
-  conditionals       = lens _conditionals       (\s v -> s { _conditionals = v })
-
-definitionAt :: IsLocalState localstate => CommandName -> Lens' localstate (Either (ExpandableT localstate) (ValueT localstate))
-definitionAt cn@(NControlSeq name) = tsDefinitions . lens getter setter
-  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) name
-        setter s v = Map.insert name v s
-definitionAt cn@(NActiveChar c) = tsActiveDefinitions . lens getter setter
-  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) c
-        setter s v = Map.insert c v s
-
-localState :: IsState s => Lens' s (LocalState s)
-localState = localStates . lens head setter
-  where setter [] x = error "Invalid local state"
-        setter (_:xs) x = x:xs
 
 -- TODO: Better place?
 isUnicodeScalarValue :: (Integral a) => a -> Bool

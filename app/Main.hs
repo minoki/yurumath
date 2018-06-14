@@ -31,7 +31,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
   where
     action :: StateT (MathState MathLocalState') (Except String) MathList
     action = do
-      modifying (localState . tsDefinitions)
+      modifying (localState . controlSeqDef)
         $ \m -> mconcat [primitiveDefinitions
                         ,mathDefinitions
                         ,latexDefinitions

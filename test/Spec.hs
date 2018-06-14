@@ -24,7 +24,7 @@ import TypeFun.Data.List ((:++:))
 
 defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union NonExpandablePrimitiveList, Expandable s ~ Union ExpandablePrimitiveList) => m ()
 defineBuiltins = do
-  modifying (localState . tsDefinitions)
+  modifying (localState . controlSeqDef)
     $ \s -> primitiveDefinitions <> s
 
 tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union ExpandablePrimitiveList) => m [TeXToken]
@@ -55,7 +55,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
   where
     action :: StateT (MathState MathLocalState') (Except String) MathList
     action = do
-      modifying (localState . tsDefinitions)
+      modifying (localState . controlSeqDef)
         $ \m -> mconcat [primitiveDefinitions
                         ,mathDefinitions
                         ,m

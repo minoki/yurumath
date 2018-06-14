@@ -17,8 +17,8 @@ import Control.Lens.Setter (set,assign,modifying)
 initialLocalState :: CommonLocalState e v
 initialLocalState = CommonLocalState
                             { _scopeType = GlobalScope
-                            , _tsDefinitions = Map.empty
-                            , _tsActiveDefinitions = Map.empty
+                            , _controlSeqDef = Map.empty
+                            , _activeDef = Map.empty
                             , _catcodeMap = Map.empty
                             , _lccodeMap = Map.empty
                             , _uccodeMap = Map.empty

@@ -1,4 +1,4 @@
-module Text.YuruMath.TeX.PostMath where
+module Text.YuruMath.TeX.Math.Postprocess where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Math.List
 import Data.Bifunctor
@@ -165,3 +165,5 @@ textSymbol = doList
     doField MFBox = MFBox -- TODO
     doField (MFSubList xs) = MFSubList (doList xs)
     doField field = field
+
+-- TODO: Handle generalized fraction with delims

@@ -10,14 +10,9 @@ import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.Math
-import Text.YuruMath.TeX.Math.List
-import Text.YuruMath.TeX.Math.State
-import Text.YuruMath.TeX.Math.Command
 import Control.Monad.State.Strict
 import Control.Monad.Except
-import Control.Lens.Cons (_head)
 import Control.Lens.Setter (modifying)
-import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import Data.OpenUnion
 import TypeFun.Data.List ((:++:))

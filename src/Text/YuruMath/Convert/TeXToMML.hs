@@ -3,7 +3,7 @@ import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State (delimiterSlotSmall)
 import Text.YuruMath.TeX.Expansion (showDimension)
 import Text.YuruMath.TeX.Math.List
-import Text.YuruMath.TeX.PostMath
+import Text.YuruMath.TeX.Math.Postprocess
 import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A
 import Text.Blaze

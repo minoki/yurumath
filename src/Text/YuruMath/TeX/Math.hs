@@ -26,7 +26,8 @@ import Data.Word
 import Data.Bits
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Semigroup ((<>))
+import Data.Maybe
+import Data.Monoid ((<>),mempty,Any(..),First(..))
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad.Identity
@@ -283,9 +284,22 @@ data MathItem = IAtom !Atom
               | IKern !MathKern -- \kern or \mkern
               | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
               | IGenFrac !GenFrac MathList MathList -- \above, \over, etc
-              | IBoundary !BoundaryType !DelimiterCode -- \left, \middle, or \right
+              | IBoundary !BoundaryType !DelimiterOptions !DelimiterCode -- \left, \middle, or \right
               | IChoice MathList MathList MathList MathList -- \mathchoice
               deriving (Eq,Show)
+
+-- Options for \Uleft: "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>
+data DelimiterOptions = DelimiterOptions
+                        { delimiterHeight :: !(Maybe Dimen)
+                        , delimiterDepth :: !(Maybe Dimen)
+                        , delimiterExact :: !Bool
+                        , delimiterAxis :: !(Maybe Bool)
+                        , delimiterClass :: !(Maybe MathClass)
+                        }
+                      deriving (Eq,Show)
+
+defaultDelimiterOptions :: DelimiterOptions
+defaultDelimiterOptions = DelimiterOptions Nothing Nothing False Nothing Nothing
 
 type MathList = [MathItem] -- Use Data.Sequence?
 
@@ -341,9 +355,9 @@ data MathToken m where
   MTAccent     :: !MathCode -> MathToken m
   MTLimitsSpec :: !LimitsSpec -> MathToken m
   MTSetStyle   :: !MathStyle -> MathToken m -- \displaystyle, \textstyle, etc
-  MTLeft       :: !DelimiterCode -> MathToken m
-  MTMiddle     :: !DelimiterCode -> MathToken m
-  MTRight      :: !DelimiterCode -> MathToken m
+  MTLeft       :: !DelimiterOptions -> !DelimiterCode -> MathToken m
+  MTMiddle     :: !DelimiterOptions -> !DelimiterCode -> MathToken m
+  MTRight      :: !DelimiterOptions -> !DelimiterCode -> MathToken m
   MTGenFrac    :: !GenFrac -> MathToken m -- \over, \atop, \above<dimen>, ..withdelims<delim><delim>
   MTUstack     :: MathToken m -- \Ustack
   MTChoice     :: MathToken m -- \mathchoice
@@ -355,7 +369,6 @@ data MathToken m where
   MTKern       :: !MathKern -> MathToken m
   MTUnKern     :: MathToken m
   MTUnSkip     :: MathToken m
-  MTSizedDelimiter :: !MathClass -> MathToken m
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
@@ -521,10 +534,14 @@ readMathToken = do
       MUsuperscript -> return MTSup
       MUsubscript -> return MTSub
 
-      -- \left<delim>, \right<delim>, \middle<delim>
-      Mleft   -> MTLeft   <$> readDelimiter
-      Mright  -> MTRight  <$> readDelimiter
-      Mmiddle -> MTMiddle <$> readDelimiter
+      -- \left<delim>, \middle<delim>, \right<delim>
+      Mleft   -> MTLeft   defaultDelimiterOptions <$> readDelimiter
+      Mmiddle -> MTMiddle defaultDelimiterOptions <$> readDelimiter
+      Mright  -> MTRight  defaultDelimiterOptions <$> readDelimiter
+      -- \Uleft<Uleft-like options><delim>, \Umiddle<Uleft-like options><delim>, \Uright<Uleft-like options><delim>
+      MUleft           -> MTLeft   <$> readDelimiterOptions <*> readDelimiter
+      MUmiddle         -> MTMiddle <$> readDelimiterOptions <*> readDelimiter
+      MUright          -> MTRight  <$> readDelimiterOptions <*> readDelimiter
 
       -- \over, \atop
       Mover    -> return $ MTGenFrac $ WithoutDelims GFOver
@@ -599,10 +616,6 @@ readMathToken = do
       Mmedmuskip   -> return $ MTOther Mmedmuskip
       Mthickmuskip -> return $ MTOther Mthickmuskip
 
-      MUleft           -> return $ MTSizedDelimiter MathOpen
-      MUmiddle         -> return $ MTSizedDelimiter MathRel
-      MUright          -> return $ MTSizedDelimiter MathClose
-
       MUoverdelimiter  -> throwError "\\Uoverdelimiter: not implemented yet"
       MUunderdelimiter -> throwError "\\Uunderdelimiter: not implemented yet"
       MUdelimiterover  -> throwError "\\Udelimiterover: not implemented yet"
@@ -622,6 +635,29 @@ readDelimiter = do
       return code
     Just t -> throwError $ "Missing delimiter: got " ++ show t
 
+-- <Uleft-like option> ::= "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>
+readDelimiterOptions :: (MonadTeXState s m, MonadError String m) => m DelimiterOptions
+readDelimiterOptions = do
+  let emptyOptions = mempty :: (First Dimen,First Dimen, Any, First Bool, First MathClass)
+  (First mheight,First mdepth,Any exact,First maxis,First mmathclass) <- readKeywordArguments
+    [("height"
+     ,do height <- readDimension
+         pure (set _1 (First (Just height)) emptyOptions)
+     )
+    ,("depth"
+     ,do depth <- readDimension
+         pure (set _2 (First (Just depth)) emptyOptions)
+     )
+    ,("exact", pure (set _3 (Any True) emptyOptions))
+    ,("axis",  pure (set _4 (First (Just True)) emptyOptions))
+    ,("noaxis",pure (set _4 (First (Just False)) emptyOptions))
+    ,("class"
+     ,do mathclass <- toEnum <$> readIntBetween 0 7
+         pure (set _5 (First (Just mathclass)) emptyOptions)
+     )
+    ]
+  return $ DelimiterOptions mheight mdepth exact maxis mmathclass
+
 withMathStyle :: (MonadTeXState (MathState localstate) m) => (MathStyle -> MathStyle) -> m a -> m a
 withMathStyle f m = do
   oldStyle <- use currentMathStyle
@@ -633,8 +669,8 @@ withMathStyle f m = do
 class (Functor f) => MathMaterialEnding f where
   onEndOfInput :: MonadError String m => m MathList -> m (f MathList)
   onRightBrace :: MonadError String m => m MathList -> m (f MathList)
-  onMiddleDelim :: MonadError String m => DelimiterCode -> m MathList -> m (f MathList)
-  onRightDelim :: MonadError String m => DelimiterCode -> m MathList -> m (f MathList)
+  onMiddleDelim :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
+  onRightDelim :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
   onStopInlineMath :: MonadError String m => m MathList -> m (f MathList)
   onStopDisplayMath :: MonadError String m => m MathList -> m (f MathList)
 
@@ -642,8 +678,8 @@ newtype MMDGlobal a = MMDGlobal { runMMDGlobal :: a } deriving (Functor)
 instance MathMaterialEnding MMDGlobal where
   onEndOfInput m = MMDGlobal <$> m
   onRightBrace _ = throwError "Unexpected `}': expected end of input"
-  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected end of input"
-  onRightDelim _ _ = throwError "Unexpected \\right: expected end of input"
+  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected end of input"
+  onRightDelim _ _ _ = throwError "Unexpected \\right: expected end of input"
   onStopInlineMath _ = throwError "Unexpected `$': expected end of input"
   onStopDisplayMath _ = throwError "Unexpected `$$': expected end of input"
 
@@ -651,19 +687,19 @@ newtype MMDBrace a = MMDBrace { runMMDBrace :: a } deriving (Functor)
 instance MathMaterialEnding MMDBrace where
   onEndOfInput _ = throwError "Unexpected end of input: expected `}'"
   onRightBrace m = MMDBrace <$> m
-  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `}'"
-  onRightDelim _ _ = throwError "Unexpected \\right: expected `}'"
+  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected `}'"
+  onRightDelim _ _ _ = throwError "Unexpected \\right: expected `}'"
   onStopInlineMath _ = throwError "Unexpected `$': expected `}'"
   onStopDisplayMath _ = throwError "Unexpected `$$': expected `}'"
 
-data MMDLeftRight a = MMDRight !DelimiterCode a
-                    | MMDMiddle !DelimiterCode a
+data MMDLeftRight a = MMDRight !DelimiterOptions !DelimiterCode a
+                    | MMDMiddle !DelimiterOptions !DelimiterCode a
                     deriving (Functor)
 instance MathMaterialEnding MMDLeftRight where
   onEndOfInput _ = throwError "Unexpected end of input: expected \\right"
   onRightBrace _ = throwError "Unexpected `}': expected \\right"
-  onMiddleDelim delim m = MMDMiddle delim <$> m
-  onRightDelim delim m = MMDRight delim <$> m
+  onMiddleDelim opt delim m = MMDMiddle opt delim <$> m
+  onRightDelim opt delim m = MMDRight opt delim <$> m
   onStopInlineMath _ = throwError "Unexpected `$': expected \\right"
   onStopDisplayMath _ = throwError "Unexpected `$$': expected \\right"
 
@@ -671,8 +707,8 @@ newtype MMDInline a = MMDInline { runInlineMath :: a } deriving (Functor)
 instance MathMaterialEnding MMDInline where
   onEndOfInput _ = throwError "Unexpected end of input: expected `$'"
   onRightBrace _ = throwError "Unexpected `}': expected `$'"
-  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `$'"
-  onRightDelim _ _ = throwError "Unexpected \\right: expected `$'"
+  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected `$'"
+  onRightDelim _ _ _ = throwError "Unexpected \\right: expected `$'"
   onStopInlineMath m = MMDInline <$> m
   onStopDisplayMath _ = throwError "Unexpected \\Ustopdisplaymath: expected `$'"
 
@@ -680,8 +716,8 @@ newtype MMDDisplay a = MMDDisplay { runDisplayMath :: a } deriving (Functor)
 instance MathMaterialEnding MMDDisplay where
   onEndOfInput _ = throwError "Unexpected end of input: expected `$$'"
   onRightBrace _ = throwError "Unexpected `}': expected `$$'"
-  onMiddleDelim _ _ = throwError "Unexpected \\middle: expected `$$'"
-  onRightDelim _ _ = throwError "Unexpected \\right: expected `$$'"
+  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected `$$'"
+  onRightDelim _ _ _ = throwError "Unexpected \\right: expected `$$'"
   onStopInlineMath _ = throwError "Unexpected \\Ustopmath: expected `$$'"
   onStopDisplayMath m = MMDDisplay <$> m
 
@@ -805,25 +841,26 @@ readMathMaterial !ctx = loop []
                       loop (IStyleChange newStyle : revList)
 
           -- \left<delim> <math mode material> (\middle<delim><math mode material>)* \right<delim>
-          MTLeft leftDelim -> do
+          -- or \Uleft<Uleft-like options><delim> ...
+          MTLeft leftOptions leftDelim -> do
             let readUntilRight revContentList = do
                   enterGroup ScopeByLeftRight
                   result <- withMathStyle id $ readMathMaterial (ctx { mmcPosition = NotInFraction }) -- MMDLeftRight
                   case result of
-                    MMDMiddle delim content -> do
-                      readUntilRight ([IBoundary BoundaryMiddle delim] : content : revContentList)
-                    MMDRight delim content -> do
-                      let content' = concat $ reverse $ [IBoundary BoundaryRight delim] : content : revContentList
+                    MMDMiddle middleOptions delim content -> do
+                      readUntilRight ([IBoundary BoundaryMiddle middleOptions delim] : content : revContentList)
+                    MMDRight rightOptions delim content -> do
+                      let content' = concat $ reverse $ [IBoundary BoundaryRight rightOptions delim] : content : revContentList
                       loop (IAtom (mkAtom AInner (MFSubList content')) : revList)
-            readUntilRight [[IBoundary BoundaryLeft leftDelim]]
+            readUntilRight [[IBoundary BoundaryLeft leftOptions leftDelim]]
 
-          -- \middle<delim>
-          MTMiddle delim -> onMiddleDelim delim $ do
+          -- \middle<delim> or \Umiddle<Uleft-like options><delim>
+          MTMiddle options delim -> onMiddleDelim options delim $ do
             leaveGroup ScopeByLeftRight
             return (reverse revList)
 
-          -- \right<delim>
-          MTRight delim -> onRightDelim delim $ do
+          -- \right<delim> or \Uright<Uleft-like options><delim>
+          MTRight options delim -> onRightDelim options delim $ do
             leaveGroup ScopeByLeftRight
             return (reverse revList)
 
@@ -896,30 +933,6 @@ readMathMaterial !ctx = loop []
             case revList of
               IKern _ : revList' -> loop revList'
               _ -> loop revList
-
-          -- \Uleft<Uleft-like options><delim>
-          -- \Umiddle<Uleft-like options><delim>
-          -- \Uright<Uleft-like options><delim>
-          -- <Uleft-like option> ::= "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>
-          MTSizedDelimiter defaultClass -> do
-            let processOptions options = do
-                  keyword <- readOneOfKeywords ["height","depth","exact","axis","noaxis","class"]
-                  case keyword of
-                    Just "height" -> do height <- readDimension
-                                        processOptions (set _1 (Just height) options)
-                    Just "depth"  -> do depth <- readDimension
-                                        processOptions (set _2 (Just depth) options)
-                    Just "exact"  -> do processOptions (set _3 True options)
-                    Just "axis"   -> do processOptions (set _4 (Just True) options)
-                    Just "noaxis" -> do processOptions (set _4 (Just False) options)
-                    Just "class"  -> do mathclass <- toEnum <$> readIntBetween 0 7
-                                        processOptions (set _5 mathclass options)
-                    _ -> do let (_mheight,_mdepth,_exact,_maxis,mathclass) = options
-                            let atomType = mathclassToAtomType mathclass
-                            del <- readDelimiter
-                            sym <- makeMathSymbol mathclass (delimiterFamilySmall del) (delimiterSlotSmall del)
-                            doAtom (markAtomAsDelimiter (mkAtom atomType sym))
-            processOptions ({-height-} Nothing, {-depth-} Nothing, {-exact-} False, {-axis-} Nothing, {-class-} defaultClass)
 
           -- assignments, etc
           MTOther v -> do

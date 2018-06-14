@@ -33,7 +33,7 @@ toMML = doList
     doList style (IVerticalMaterial {} : xs) = doList style xs -- not implemented yet
     doList style (IGlue {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
     doList style (IKern {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
-    doList style (IBoundary _ delim : xs) = doDelimiter delim ++ doList style xs
+    doList style (IBoundary _ _options delim : xs) = doDelimiter delim ++ doList style xs
     doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
     doAtom :: MathStyle -> Atom -> MathML
     doAtom style (atom@OpAtom { atomLimits = DisplayLimits })

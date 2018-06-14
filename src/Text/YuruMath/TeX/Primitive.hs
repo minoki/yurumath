@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module Text.YuruMath.TeX.Primitive (ExpandablePrimitiveList,NonExpandablePrimitiveList,primitiveDefinitions) where
 import Text.YuruMath.TeX.Types
-import Text.YuruMath.TeX.Expansion (ConditionalMarkerCommand, CommonExpandable, CommonBoolean, expandableDefinitions)
+import Text.YuruMath.TeX.Primitive.Expandable
 import Text.YuruMath.TeX.Execution (CommonExecutable, CountReg, DimenReg, SkipReg, MuskipReg, executableDefinitions)
 import Text.YuruMath.TeX.Macro     (Macro, MacroCommand, macroCommands)
 import Text.YuruMath.TeX.Expr      (ExprCommand, exprCommands)

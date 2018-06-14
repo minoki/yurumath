@@ -10,6 +10,7 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Math
 import Text.YuruMath.TeX.Math.List
 import Text.YuruMath.TeX.Math.State
+import Text.YuruMath.TeX.Math.Command
 import Text.YuruMath.TeX.PostMath
 import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.LaTeX

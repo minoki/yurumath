@@ -33,39 +33,41 @@ instance Quantity Dimen where
 
 sp, pt, pc, inch, bp, cm, mm, dd, cc :: Rational -> Dimen
 
--- scaled point (65536sp = 1pt)
+-- scaled point (65536sp = 1pt), not available in MathML
 sp = DimenWithSp . truncate
 
--- point
+-- point, also available in MathML
 pt x = sp (65536 * x)
 
--- pica (1pc = 12pt)
+-- pica (1pc = 12pt), also available in MathML
 pc x = pt (12 * x)
 
--- inch (1in = 72.27pt)
+-- inch (1in = 72.27pt), also available in MathML
 inch x = pt (72.27 * x)
 -- 1in = 72.27 * 65536sp = 4736286.72sp
 
--- big point (72bp = 1in)
+-- big point (72bp = 1in), not available in MathML
 bp x = inch (x / 72)
 -- 1bp = 72.27 * 65536sp / 72 = 65781.76sp
 
--- centimeter (2.54cm = 1in)
+-- centimeter (2.54cm = 1in), also available in MathML
 cm x = inch (x / 2.54)
 -- 1cm = 72.27 * 65536sp / 2.54 = 1864679.8110236218sp
 
--- millimeter (10mm = 1cm)
+-- millimeter (10mm = 1cm), also available in MathML
 mm x = cm (x / 10)
 
--- didot point (1157dd = 1238pt)
+-- didot point (1157dd = 1238pt), not available in MathML
 dd x = pt (1238 / 1157 * x)
 -- 1dd = 1238 / 1157 * 65536sp = 70124.08643042351sp
 
--- cicero (1cc = 12dd)
+-- cicero (1cc = 12dd), not available in MathML
 cc x = dd (12 * x)
 -- 1cc = 841489.0371650822sp
 
 -- relative dimension: em, ex
+
+-- only available in MathML: px, %
 
 newtype MuDimen = DimenWithScaledMu { asScaledMu :: Integer } deriving (Eq,Ord,Show)
 

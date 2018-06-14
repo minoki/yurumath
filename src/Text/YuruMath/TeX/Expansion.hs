@@ -469,7 +469,7 @@ readUnsignedDecimalFraction c
       case toCommonValue v of
         Just (Character c CCOther) | isDigit c -> do
                                        readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
-        _ -> unreadETokens 0 [t] >> return (fromInteger intPart * 10^(negate expPart :: Int))
+        _ -> unreadETokens 0 [t] >> return (intPart % 10^(expPart :: Int))
 
 class DimenRead f where
   doUnit :: (MonadTeXState s m, MonadError String m) => (Rational -> m a) -> Rational -> m (f a)
@@ -517,7 +517,7 @@ readDimensionF = do
     Just (Character '\'' CCOther) -> (fromInteger <$> readUnsignedOctal) >>= doUnit readDimenUnit
     Just (Character '"' CCOther) -> (fromInteger <$> readUnsignedHex) >>= doUnit readDimenUnit
     Just (Character '`' CCOther) -> (fromInteger <$> readCharacterCode) >>= doUnit readDimenUnit
-    Just (Character c CCOther) | isDigit c || c == '.' || c == '.' ->
+    Just (Character c CCOther) | isDigit c || c == '.' || c == ',' ->
                                  readUnsignedDecimalFraction c >>= doUnit readDimenUnit
     _ -> case getQuantity v of
            QInteger getInteger -> (fromInteger <$> getInteger) >>= doUnit readDimenUnit
@@ -537,25 +537,27 @@ readDimensionF = do
         QGlue getGlue -> (scaleByRational factor . glueSpace) <$> getGlue
         _ -> do unreadETokens 0 [t]
                 true <- readKeyword "true"
+                let physicalUnits = [("pt",pt)
+                                    ,("pc",pc)
+                                    ,("in",inch)
+                                    ,("bp",bp)
+                                    ,("cm",cm)
+                                    ,("mm",mm)
+                                    ,("dd",dd)
+                                    ,("cc",cc)
+                                    ,("sp",sp)
+                                    ]
+                    relativeUnits = [("em",\x -> pt (10 * x))  -- Assume 1em = 10pt
+                                    ,("ex",\x -> pt (4.3 * x)) -- Assume 1ex = 4.3pt
+                                    ]
                 -- if true, read <physical unit>
                 -- otherwise, read "em" | "ex" | <physical unit>
-                kw <- readOneOfKeywords $ if true
-                                          then ["pt","pc","in","bp","cm","mm","dd","cc","sp"]
-                                          else ["em","ex","pt","pc","in","bp","cm","mm","dd","cc","sp"]
+                kw <- readOneOfKeywordsV $ if true
+                                           then physicalUnits
+                                           else physicalUnits ++ relativeUnits
                 readOneOptionalSpace
                 case kw of
-                  Just "em" -> return $ pt (10 * factor)
-                  Just "ex" -> return $ pt (4.3 * factor)
-                  Just "pt" -> return $ pt factor
-                  Just "pc" -> return $ pc factor
-                  Just "in" -> return $ inch factor
-                  Just "bp" -> return $ bp factor
-                  Just "cm" -> return $ cm factor
-                  Just "mm" -> return $ mm factor
-                  Just "dd" -> return $ dd factor
-                  Just "cc" -> return $ cc factor
-                  Just "sp" -> return $ sp factor
-                  Just _ -> error "Internal error (non-exhaustive patterm match...why?)"
+                  Just unit -> return $ unit factor
                   Nothing -> throwError "Illegal unit of measure"
 
 readDimension :: (MonadTeXState s m, MonadError String m) => m Dimen

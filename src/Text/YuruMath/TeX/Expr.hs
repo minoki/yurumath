@@ -5,8 +5,8 @@
 module Text.YuruMath.TeX.Expr (ExprCommand,exprCommands) where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
+import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Expansion
-import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -24,6 +24,18 @@ data ExprCommand = Enumexpr
                  | Emutoglue
                  | Egluetomu
                  deriving (Eq,Show)
+
+instance Meaning ExprCommand where
+  meaningString Enumexpr = controlSequence "numexpr"
+  meaningString Edimexpr = controlSequence "dimexpr"
+  meaningString Eglueexpr = controlSequence "glueexpr"
+  meaningString Emuexpr = controlSequence "muexpr"
+  meaningString Egluestretch = controlSequence "gluestretch"
+  meaningString Eglueshrink = controlSequence "glueshrink"
+  meaningString Egluestretchorder = controlSequence "gluestretchorder"
+  meaningString Eglueshrinkorder = controlSequence "glueshrinkorder"
+  meaningString Emutoglue = controlSequence "mutoglue"
+  meaningString Egluetomu = controlSequence "gluetomu"
 
 -- \numexpr's rounded division:
 -- * If x * y > 0, return (floor (x % y + 1 / 2)).

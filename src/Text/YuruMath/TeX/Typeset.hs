@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Text.YuruMath.TeX.Typeset where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Meaning
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Data.OpenUnion
@@ -42,6 +43,33 @@ data TypesetCommand
   | Tdiscretionary
   | TDiscretionaryHyphen -- \-
   deriving (Eq,Show)
+
+instance Meaning TypesetCommand where
+  meaningString Tspecial = controlSequence "special"
+  meaningString Tpenalty = controlSequence "penalty"
+  meaningString Tkern = controlSequence "kern"
+  meaningString Tunpenalty = controlSequence "unpenalty"
+  meaningString Tunkern = controlSequence "unkern"
+  meaningString Tunskip = controlSequence "unskip"
+  meaningString Tmark = controlSequence "mark"
+  meaningString Tinsert = controlSequence "insert"
+  meaningString Tvadjust = controlSequence "vadjust"
+  meaningString Thalign = controlSequence "halign"
+  meaningString Tindent = controlSequence "indent"
+  meaningString Tnoindent = controlSequence "noindent"
+  meaningString Tvrule = controlSequence "vrule"
+  meaningString Tchar = controlSequence "char"
+  meaningString Thskip = controlSequence "hskip"
+  meaningString Thfil = controlSequence "hfil"
+  meaningString Thfill = controlSequence "hfill"
+  meaningString Thss = controlSequence "hfss"
+  meaningString Thfilneg = controlSequence "hfilneg"
+  meaningString TControlSpace = controlSequence " "
+  meaningString Traise = controlSequence "raise"
+  meaningString Tlower = controlSequence "lower"
+  meaningString TItalicCorrection = controlSequence "/"
+  meaningString Tdiscretionary = controlSequence "discretionary"
+  meaningString TDiscretionaryHyphen = controlSequence "-"
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute TypesetCommand m where
   doExecute Tspecial      = throwError $ "You can't use \\special in this mode"

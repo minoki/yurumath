@@ -16,6 +16,7 @@ module Text.YuruMath.TeX.Math.Command
   ) where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
+import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
 import Text.YuruMath.TeX.Math.List
@@ -47,6 +48,16 @@ muskipParamSet muskip = readMuGlue >>= texAssign muskip
 newtype MathStyleSet = MathStyleSet MathStyle
                      deriving (Eq,Show)
 
+instance Meaning MathStyleSet where
+  meaningString (MathStyleSet DisplayStyle) = controlSequence "displaystyle"
+  meaningString (MathStyleSet CrampedDisplayStyle) = controlSequence "crampeddisplaystyle"
+  meaningString (MathStyleSet TextStyle) = controlSequence "textstyle"
+  meaningString (MathStyleSet CrampedTextStyle) = controlSequence "crampedtextstyle"
+  meaningString (MathStyleSet ScriptStyle) = controlSequence "scriptstyle"
+  meaningString (MathStyleSet CrampedScriptStyle) = controlSequence "crampedscriptstyle"
+  meaningString (MathStyleSet ScriptScriptStyle) = controlSequence "scriptscriptstyle"
+  meaningString (MathStyleSet CrampedScriptScriptStyle) = controlSequence "crampedscriptscriptstyle"
+
 instance (Monad m, MonadError String m) => DoExecute MathStyleSet m where
   doExecute (MathStyleSet s) = throwError "You can't use \\displaystyle in this mode" -- TODO: name
   getQuantity (MathStyleSet v) = QInteger $ return $ fromIntegral $ fromEnum v -- LuaTeX extension
@@ -56,6 +67,21 @@ instance (Monad m, MonadError String m) => DoExecute MathStyleSet m where
 --
 
 newtype MathAtomCommand = MathAtomCommand AtomType deriving (Eq,Show)
+
+instance Meaning MathAtomCommand where
+  meaningString (MathAtomCommand AOrd) = controlSequence "mathord"
+  meaningString (MathAtomCommand AOp) = controlSequence "mathop"
+  meaningString (MathAtomCommand ABin) = controlSequence "mathbin"
+  meaningString (MathAtomCommand ARel) = controlSequence "mathrel"
+  meaningString (MathAtomCommand AOpen) = controlSequence "mathopen"
+  meaningString (MathAtomCommand AClose) = controlSequence "mathclose"
+  meaningString (MathAtomCommand APunct) = controlSequence "mathpunct"
+  meaningString (MathAtomCommand AInner) = controlSequence "mathinner"
+  meaningString (MathAtomCommand AUnder) = controlSequence "underline"
+  meaningString (MathAtomCommand AOver) = controlSequence "overline"
+  meaningString (MathAtomCommand AAcc) = pure "<<accented atom>>"
+  meaningString (MathAtomCommand ARad) = pure "<<radical>>"
+  meaningString (MathAtomCommand AVcent) = pure "<<vcenter>>"
 
 instance (Monad m, MonadError String m) => DoExecute MathAtomCommand m where
   doExecute _ = throwError "You can't use \\mathord in this mode" -- TODO: name
@@ -67,6 +93,23 @@ instance (Monad m, MonadError String m) => DoExecute MathAtomCommand m where
 
 newtype MathVariantSet = MathVariantSet MathVariant deriving (Eq,Show)
 
+instance Meaning MathVariantSet where
+  meaningString (MathVariantSet MVNormal) = controlSequence "YuruMathSetNormal"
+  meaningString (MathVariantSet MVBold) = controlSequence "YuruMathSetBold"
+  meaningString (MathVariantSet MVItalic) = controlSequence "YuruMathSetItalic"
+  meaningString (MathVariantSet MVBoldItalic) = controlSequence "YuruMathSetBoldItalic"
+  meaningString (MathVariantSet MVDoubleStruck) = controlSequence "YuruMathSetDoubleStruck"
+  meaningString (MathVariantSet MVBoldFraktur) = controlSequence "YuruMathSetBoldFraktur"
+  meaningString (MathVariantSet MVScript) = controlSequence "YuruMathSetScript"
+  meaningString (MathVariantSet MVBoldScript) = controlSequence "YuruMathSetBoldScript"
+  meaningString (MathVariantSet MVFraktur) = controlSequence "YuruMathSetFraktur"
+  meaningString (MathVariantSet MVSansSerif) = controlSequence "YuruMathSetSansSerif"
+  meaningString (MathVariantSet MVBoldSansSerif) = controlSequence "YuruMathSetBoldSansSerif"
+  meaningString (MathVariantSet MVSansSerifItalic) = controlSequence "YuruMathSetSansSerifItalic"
+  meaningString (MathVariantSet MVSansSerifBoldItalic) = controlSequence "YuruMathSetSansSerifBoldItalic"
+  meaningString (MathVariantSet MVMonospace) = controlSequence "YuruMathSetMonospace"
+  meaningString (MathVariantSet MVFunctionName) = controlSequence "YuruMathSetFunctionName"
+
 instance (Monad m, MonadError String m) => DoExecute MathVariantSet m where
   doExecute _ = throwError "You can't set math variant in this mode"
   getQuantity _ = NotQuantity
@@ -76,6 +119,10 @@ instance (Monad m, MonadError String m) => DoExecute MathVariantSet m where
 --
 
 newtype MathSymbolModeSet = MathSymbolModeSet SymbolMode deriving (Eq,Show)
+
+instance Meaning MathSymbolModeSet where
+  meaningString (MathSymbolModeSet SMSymbol) = controlSequence "YuruMathSetSymbol"
+  meaningString (MathSymbolModeSet SMText) = controlSequence "YuruMathSetText"
 
 instance (Monad m, MonadError String m) => DoExecute MathSymbolModeSet m where
   doExecute _ = throwError "You can't set math symbol mode in this mode"
@@ -95,6 +142,9 @@ mathstyleCommand = do
   case value of
     Just style -> stringToEToken $ show $ fromEnum style -- 0..7
     Nothing -> stringToEToken "-1" -- not in math mode
+
+instance Meaning MathExpandable where
+  meaningString Mmathstyle = controlSequence "mathstyle"
 
 instance IsExpandable MathExpandable where
   isConditional _ = False
@@ -162,6 +212,55 @@ data MathCommands
   -- \Ustartmath, \Ustartdisplaymath: not really math commands...
 
   deriving (Eq,Show)
+
+instance Meaning MathCommands where
+  meaningString Mmathchar = controlSequence "mathchar"
+  meaningString Mmathaccent = controlSequence "mathaccent"
+  meaningString Mdelimiter = controlSequence "delimiter"
+  meaningString Mradical = controlSequence "radical"
+  meaningString Mdisplaylimits = controlSequence "displaylimits"
+  meaningString Mlimits = controlSequence "limits"
+  meaningString Mnolimits = controlSequence "nolimits"
+  meaningString Mmathchoice = controlSequence "mathchoice"
+  meaningString Mleft = controlSequence "left"
+  meaningString Mright = controlSequence "right"
+  meaningString Mover = controlSequence "over"
+  meaningString Matop = controlSequence "atop"
+  meaningString Mabove = controlSequence "above"
+  meaningString Moverwithdelims = controlSequence "overwithdelims"
+  meaningString Matopwithdelims = controlSequence "atopwithdelims"
+  meaningString Mabovewithdelims = controlSequence "abovewithdelims"
+  meaningString Mfam = controlSequence "fam"
+  meaningString Mthinmuskip = controlSequence "thinmuskip"
+  meaningString Mmedmuskip = controlSequence "medmuskip"
+  meaningString Mthickmuskip = controlSequence "thickmuskip"
+  meaningString Mmkern = controlSequence "mkern"
+  meaningString Mmskip = controlSequence "mskip"
+  meaningString Mnonscript = controlSequence "nonscript"
+  meaningString Mmiddle = controlSequence "middle"
+  meaningString MUmathchar = controlSequence "Umathchar"
+  meaningString MUmathcharnum = controlSequence "Umathcharnum"
+  meaningString MUmathaccent = controlSequence "Umathaccent"
+  meaningString MUdelimiter = controlSequence "Udelimiter"
+  meaningString MUradical = controlSequence "Uradical"
+  meaningString MUroot = controlSequence "Uroot"
+  meaningString MUoverdelimiter = controlSequence "Uoverdelimiter"
+  meaningString MUunderdelimiter = controlSequence "Uunderdelimiter"
+  meaningString MUdelimiterover = controlSequence "Udelimiterover"
+  meaningString MUdelimiterunder = controlSequence "Udelimiterunder"
+  meaningString MUhextensible = controlSequence "Uhextensible"
+  meaningString MUskewed = controlSequence "Uskewed"
+  meaningString MUskewedwithdelims = controlSequence "Uskewedwithdelims"
+  meaningString MUstack = controlSequence "Ustack"
+  meaningString MUsuperscript = controlSequence "Usuperscript"
+  meaningString MUsubscript = controlSequence "Usubscript"
+  meaningString MUnosuperscript = controlSequence "Unosuperscript"
+  meaningString MUnosubscript = controlSequence "Unosubscript"
+  meaningString MUleft = controlSequence "Uleft"
+  meaningString MUmiddle = controlSequence "Umiddle"
+  meaningString MUright = controlSequence "Uright"
+  meaningString MUstopmath = controlSequence "Ustopmath"
+  meaningString MUstopdisplaymath = controlSequence "Ustopdisplaymath"
 
 instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathCommands m where
   doExecute Mfam           = runLocal famSet

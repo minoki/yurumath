@@ -7,24 +7,21 @@
 {-# LANGUAGE GADTs #-}
 module Text.YuruMath.TeX.Execution where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Quantity
-import Text.YuruMath.TeX.Tokenizer
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
-import Data.Char
 import Data.Word
 import Data.Bits
 import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Semigroup
 import Control.Monad
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
 import Control.Lens.Lens (Lens')
 import Control.Lens.At (at)
 import Control.Lens.Iso (non)
-import Control.Lens.Getter (view,use,uses)
-import Control.Lens.Setter (assign,modifying,mapped,ASetter)
+import Control.Lens.Getter (use,uses)
+import Control.Lens.Setter (assign,mapped,ASetter)
 import Data.OpenUnion
 import TypeFun.Data.List (SubList,Elem)
 
@@ -528,6 +525,9 @@ data CommonExecutable = Eglobal
                       | Edivide
                       deriving (Eq,Show)
 
+instance Meaning CountReg where
+  meaningString (CountReg i) = (++) <$> controlSequence "count" <*> pure (show i)
+
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg m where
   doExecute (CountReg i)   = runLocal $ setCountReg i
   doGlobal (CountReg i)    = Just $ runGlobal $ setCountReg i
@@ -535,6 +535,9 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg
   doMultiply (CountReg i)  = Just $ runArithmetic $ multiplyInteger (countRegAt i)
   doDivide (CountReg i)    = Just $ runArithmetic $ divideInteger (countRegAt i)
   getQuantity (CountReg i) = QInteger $ use (localState . countRegAt i)
+
+instance Meaning DimenReg where
+  meaningString (DimenReg i) = (++) <$> controlSequence "dimen" <*> pure (show i)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute DimenReg m where
   doExecute (DimenReg i)   = runLocal $ setDimenReg i
@@ -544,6 +547,9 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute DimenReg
   doDivide (DimenReg i)    = Just $ runArithmetic $ divideQuantity (dimenRegAt i)
   getQuantity (DimenReg i) = QDimension $ use (localState . dimenRegAt i)
 
+instance Meaning SkipReg where
+  meaningString (SkipReg i) = (++) <$> controlSequence "skip" <*> pure (show i)
+
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute SkipReg m where
   doExecute (SkipReg i)   = runLocal $ setSkipReg i
   doGlobal (SkipReg i)    = Just $ runGlobal $ setSkipReg i
@@ -552,6 +558,9 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute SkipReg 
   doDivide (SkipReg i)    = Just $ runArithmetic $ divideQuantity (skipRegAt i)
   getQuantity (SkipReg i) = QGlue $ use (localState . skipRegAt i)
 
+instance Meaning MuskipReg where
+  meaningString (MuskipReg i) = (++) <$> controlSequence "muskip" <*> pure (show i)
+
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MuskipReg m where
   doExecute (MuskipReg i)   = runLocal $ setMuskipReg i
   doGlobal (MuskipReg i)    = Just $ runGlobal $ setMuskipReg i
@@ -559,6 +568,37 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MuskipRe
   doMultiply (MuskipReg i)  = Just $ runArithmetic $ multiplyQuantity (muskipRegAt i)
   doDivide (MuskipReg i)    = Just $ runArithmetic $ divideQuantity (muskipRegAt i)
   getQuantity (MuskipReg i) = QMuGlue $ use (localState . muskipRegAt i)
+
+instance Meaning CommonExecutable where
+  meaningString Eglobal = controlSequence "global"
+  meaningString Elet = controlSequence "let"
+  meaningString Efuturelet = controlSequence "futurelet"
+  meaningString Euppercase = controlSequence "uppercase"
+  meaningString Elowercase = controlSequence "lowercase"
+  meaningString Echardef = controlSequence "chardef"
+  meaningString Emathchardef = controlSequence "mathchardef"
+  meaningString EUmathchardef = controlSequence "Umathchardef"
+  meaningString EUmathcharnumdef = controlSequence "Umathcharnumdef"
+  meaningString Ecatcode = controlSequence "catcode"
+  meaningString Elccode = controlSequence "lccode"
+  meaningString Euccode = controlSequence "uccode"
+  meaningString Emathcode = controlSequence "mathcode"
+  meaningString Edelcode = controlSequence "delcode"
+  meaningString Ebegingroup = controlSequence "begingroup"
+  meaningString Eendgroup = controlSequence "endgroup"
+  meaningString Eendlinechar = controlSequence "endlinechar"
+  meaningString Eescapechar = controlSequence "escapechar"
+  meaningString Ecount = controlSequence "count"
+  meaningString Ecountdef = controlSequence "countdef"
+  meaningString Edimen = controlSequence "dimen"
+  meaningString Edimendef = controlSequence "dimendef"
+  meaningString Eskip = controlSequence "skip"
+  meaningString Eskipdef = controlSequence "skipdef"
+  meaningString Emuskip = controlSequence "muskip"
+  meaningString Emuskipdef = controlSequence "muskipdef"
+  meaningString Eadvance = controlSequence "advance"
+  meaningString Emultiply = controlSequence "multiply"
+  meaningString Edivide = controlSequence "divide"
 
 instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set, Elem DimenReg set, Elem SkipReg set, Elem MuskipReg set) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand

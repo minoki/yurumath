@@ -3,8 +3,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
-module Text.YuruMath.TeX.Primitive.Expandable where
+module Text.YuruMath.TeX.Primitive.Expandable
+  (expandableDefinitions
+  ,ConditionalMarkerCommand
+  ,CommonExpandable
+  ,CommonBoolean
+  ) where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Expansion
 import Data.Char
 import Data.Text (Text)
@@ -88,9 +94,11 @@ numberCommand = do
 theCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 theCommand = theString "\\the" >>= stringToEToken
 
-meaningCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => m [ExpansionToken]
 meaningCommand = do
-  throwError "\\meaning: not implemented yet"
+  e <- use (localState . escapechar)
+  value <- required nextEToken >>= meaning
+  stringToEToken (meaningWithEscapecharAsInt e value)
 
 romannumeralCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 romannumeralCommand = do
@@ -162,6 +170,11 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand Condition
   doExpand (ConditionalMarkerCommand Efi)   = fiCommand
   doExpand (ConditionalMarkerCommand Eor)   = orCommand
   evalBooleanConditional _ = Nothing
+
+instance Meaning ConditionalMarkerCommand where
+  meaningString (ConditionalMarkerCommand Eelse) = controlSequence "else"
+  meaningString (ConditionalMarkerCommand Efi) = controlSequence "fi"
+  meaningString (ConditionalMarkerCommand Eor) = controlSequence "or"
 
 doIfCase :: (MonadTeXState s m, MonadError String m) => Integer -> m ()
 doIfCase 0 = do
@@ -312,7 +325,7 @@ instance IsExpandable CommonExpandable where
   isIfCase e = e == Eifcase
   isConditionalMarker _ = Nothing
 
-instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand CommonExpandable m where
+instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => DoExpand CommonExpandable m where
   doExpand Eexpandafter = expandafterCommand
   doExpand Enoexpand = noexpandCommand
   doExpand Ecsname = csnameCommand
@@ -328,6 +341,22 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand CommonExp
   doExpand EUchar = ucharCommand
   doExpand Eifcase = ifcaseCommand
   evalBooleanConditional _ = Nothing
+
+instance Meaning CommonExpandable where
+  meaningString Eexpandafter = controlSequence "expandafter"
+  meaningString Enoexpand = controlSequence "noexpand"
+  meaningString Ecsname = controlSequence "csname"
+  meaningString Estring = controlSequence "string"
+  meaningString Enumber = controlSequence "number"
+  meaningString Eromannumeral = controlSequence "romannumeral"
+  meaningString Ethe = controlSequence "the"
+  meaningString Emeaning = controlSequence "meaning"
+  meaningString Eunless = controlSequence "unless"
+  meaningString Eunexpanded = controlSequence "unexpanded"
+  meaningString Ebegincsname = controlSequence "begincsname"
+  meaningString Ecsstring = controlSequence "csstring"
+  meaningString EUchar = controlSequence "Uchar"
+  meaningString Eifcase = controlSequence "ifcase"
 
 data CommonBoolean = Eiftrue
                    | Eiffalse
@@ -351,6 +380,22 @@ instance IsExpandable CommonBoolean where
   isConditional _ = True
   isIfCase _ = False
   isConditionalMarker _ = Nothing
+
+instance Meaning CommonBoolean where
+  meaningString Eiftrue = controlSequence "iftrue"
+  meaningString Eiffalse = controlSequence "iffalse"
+  meaningString Eif = controlSequence "if"
+  meaningString Eifcat = controlSequence "ifcat"
+  meaningString Eifx = controlSequence "ifx"
+  meaningString Eifnum = controlSequence "ifnum"
+  meaningString Eifdim = controlSequence "ifdim"
+  meaningString Eifodd = controlSequence "ifodd"
+  meaningString Eifhmode = controlSequence "ifhmode"
+  meaningString Eifvmode = controlSequence "ifvmode"
+  meaningString Eifmmode = controlSequence "ifmmode"
+  meaningString Eifinner = controlSequence "ifinner"
+  meaningString Eifdefined = controlSequence "ifdefined"
+  meaningString Eifcsname = controlSequence "ifcsname"
 
 evalCommonBoolean :: (MonadTeXState s m, MonadError String m) => CommonBoolean -> m Bool
 evalCommonBoolean Eiftrue = iftrueCommand

@@ -6,6 +6,7 @@
 module Text.YuruMath.TeX.Macro where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Expansion
+import Text.YuruMath.TeX.Meaning
 import Control.Monad
 import Control.Monad.Error.Class
 import Data.Char
@@ -355,6 +356,9 @@ doMacro m = do
       doReplace (x : xs) = (x :) <$> doReplace xs
   doReplace (macroReplacement m)
 
+instance Meaning Macro where
+  meaningString _ = pure "macro:-> <<meaning of macro: not implemented yet>>"
+
 instance IsExpandable Macro where
   isConditional _ = False
 
@@ -467,6 +471,18 @@ data MacroCommand = Mdef
                   | Mrenewcommand
                   | Mprovidecommand
                   deriving (Eq,Show)
+
+instance Meaning MacroCommand where
+  meaningString Mdef = controlSequence "def"
+  meaningString Medef = controlSequence "edef"
+  meaningString Mgdef = controlSequence "gdef"
+  meaningString Mxdef = controlSequence "xdef"
+  meaningString Mouter = controlSequence "outer"
+  meaningString Mlong = controlSequence "long"
+  meaningString Mprotected = controlSequence "protected"
+  meaningString Mnewcommand = controlSequence "newcommand"
+  meaningString Mrenewcommand = controlSequence "renewcommand"
+  meaningString Mprovidecommand = controlSequence "providecommand"
 
 instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadError String m, Monad m, Union vset ~ Value s, Show (Union vset)) => DoExecute MacroCommand m where
   doExecute Mdef       = defCommand "def" unprefixed

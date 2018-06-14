@@ -58,7 +58,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
                         ,mathDefinitions
                         ,m
                         ]
-      runMMDGlobal <$> readMathMaterial defaultMathMaterialContext
+      runMMDGlobal <$> readMathMaterial
 
 ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
   where

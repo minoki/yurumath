@@ -38,6 +38,7 @@ import Control.Lens.Tuple (_1,_2,_3,_4,_5)
 import Control.Lens.TH
 import Data.OpenUnion
 import TypeFun.Data.List (SubList,Delete,(:++:))
+import Data.Proxy
 
 data MathLocalState ecommand value = MathLocalState
                                      { _mCommonLocalState :: !(CommonLocalState ecommand value)
@@ -403,75 +404,66 @@ withMathStyle f m = do
   return x
 
 class (Functor f) => MathMaterialEnding f where
-  onEndOfInput :: MonadError String m => m MathList -> m (f MathList)
-  onRightBrace :: MonadError String m => m MathList -> m (f MathList)
-  onMiddleDelim :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
-  onRightDelim :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
-  onStopInlineMath :: MonadError String m => m MathList -> m (f MathList)
+  onEndOfInput      :: MonadError String m => m MathList -> m (f MathList)
+  onRightBrace      :: MonadError String m => m MathList -> m (f MathList)
+  onMiddleDelim     :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
+  onRightDelim      :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
+  onStopInlineMath  :: MonadError String m => m MathList -> m (f MathList)
   onStopDisplayMath :: MonadError String m => m MathList -> m (f MathList)
+  onGenFrac         :: MonadError String m => GenFrac -> m MathList -> m (f MathList)
+  expectedEnding    :: Proxy f -> String
+  onEndOfInput _      = throwError $ "Unexpected end of input: expected " ++ expectedEnding (Proxy :: Proxy f)
+  onRightBrace _      = throwError $ "Unexpected `}': expected " ++ expectedEnding (Proxy :: Proxy f)
+  onMiddleDelim _ _ _ = throwError $ "Unexpected \\middle: expected " ++ expectedEnding (Proxy :: Proxy f)
+  onRightDelim _ _ _  = throwError $ "Unexpected \\right: expected " ++ expectedEnding (Proxy :: Proxy f)
+  onStopInlineMath _  = throwError $ "Unexpected `$': expected " ++ expectedEnding (Proxy :: Proxy f)
+  onStopDisplayMath _ = throwError $ "Unexpected `$$': expected " ++ expectedEnding (Proxy :: Proxy f)
+  onGenFrac _ _       = throwError "Fraction must be preceded by \\Ustack"
 
 newtype MMDGlobal a = MMDGlobal { runMMDGlobal :: a } deriving (Functor)
 instance MathMaterialEnding MMDGlobal where
   onEndOfInput m = MMDGlobal <$> m
-  onRightBrace _ = throwError "Unexpected `}': expected end of input"
-  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected end of input"
-  onRightDelim _ _ _ = throwError "Unexpected \\right: expected end of input"
-  onStopInlineMath _ = throwError "Unexpected `$': expected end of input"
-  onStopDisplayMath _ = throwError "Unexpected `$$': expected end of input"
+  expectedEnding _ = "end of input"
 
 newtype MMDBrace a = MMDBrace { runMMDBrace :: a } deriving (Functor)
 instance MathMaterialEnding MMDBrace where
-  onEndOfInput _ = throwError "Unexpected end of input: expected `}'"
   onRightBrace m = MMDBrace <$> m
-  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected `}'"
-  onRightDelim _ _ _ = throwError "Unexpected \\right: expected `}'"
-  onStopInlineMath _ = throwError "Unexpected `$': expected `}'"
-  onStopDisplayMath _ = throwError "Unexpected `$$': expected `}'"
+  expectedEnding _ = "`}'"
 
 data MMDLeftRight a = MMDRight !DelimiterOptions !DelimiterCode a
                     | MMDMiddle !DelimiterOptions !DelimiterCode a
                     deriving (Functor)
 instance MathMaterialEnding MMDLeftRight where
-  onEndOfInput _ = throwError "Unexpected end of input: expected \\right"
-  onRightBrace _ = throwError "Unexpected `}': expected \\right"
   onMiddleDelim opt delim m = MMDMiddle opt delim <$> m
   onRightDelim opt delim m = MMDRight opt delim <$> m
-  onStopInlineMath _ = throwError "Unexpected `$': expected \\right"
-  onStopDisplayMath _ = throwError "Unexpected `$$': expected \\right"
+  expectedEnding _ = "\\right"
 
 newtype MMDInline a = MMDInline { runInlineMath :: a } deriving (Functor)
 instance MathMaterialEnding MMDInline where
-  onEndOfInput _ = throwError "Unexpected end of input: expected `$'"
-  onRightBrace _ = throwError "Unexpected `}': expected `$'"
-  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected `$'"
-  onRightDelim _ _ _ = throwError "Unexpected \\right: expected `$'"
   onStopInlineMath m = MMDInline <$> m
-  onStopDisplayMath _ = throwError "Unexpected \\Ustopdisplaymath: expected `$'"
+  expectedEnding _ = "`$'"
 
 newtype MMDDisplay a = MMDDisplay { runDisplayMath :: a } deriving (Functor)
 instance MathMaterialEnding MMDDisplay where
-  onEndOfInput _ = throwError "Unexpected end of input: expected `$$'"
-  onRightBrace _ = throwError "Unexpected `}': expected `$$'"
-  onMiddleDelim _ _ _ = throwError "Unexpected \\middle: expected `$$'"
-  onRightDelim _ _ _ = throwError "Unexpected \\right: expected `$$'"
-  onStopInlineMath _ = throwError "Unexpected \\Ustopmath: expected `$$'"
   onStopDisplayMath m = MMDDisplay <$> m
+  expectedEnding _ = "`$$'"
 
-data MathPosition = NotInFraction
-                  | FractionNumerator -- after \Ustack
-                  | FractionDenominator -- after \over-like commands
-                  deriving (Eq)
+data MMDNumerator a = MMDNumerator !GenFrac a deriving (Functor)
+instance MathMaterialEnding MMDNumerator where
+  onGenFrac gf numerator = MMDNumerator gf <$> numerator
+  onRightBrace _ = throwError "No fraction after \\Ustack"
+  expectedEnding _ = "a generalized fraction command (like \\over)"
 
-newtype MathMaterialContext = MathMaterialContext { mmcPosition :: MathPosition
-                                                  }
+newtype MMDDenominator a = MMDDenominator { runMMDDenominator :: a } deriving (Functor)
+instance MathMaterialEnding MMDDenominator where
+  onRightBrace m = MMDDenominator <$> m
+  onGenFrac _ _ = throwError "Ambiguous: you need another { and }"
+  expectedEnding _ = "`}'"
 
-defaultMathMaterialContext :: MathMaterialContext
-defaultMathMaterialContext = MathMaterialContext { mmcPosition = NotInFraction
-                                                 }
-
-readMathMaterial :: forall f localstate set m. (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => MathMaterialContext -> m (f MathList)
-readMathMaterial !ctx = loop []
+readMathMaterial :: forall f localstate set m. (MathMaterialEnding f, MonadMathState localstate set m, MonadError String m) => m (f MathList)
+readMathMaterial = loop []
   where
+    loop :: MathList -> m (f MathList)
     loop revList = do
       t <- readMathToken
       let doAtom atom = loop (IAtom atom : revList)
@@ -513,7 +505,7 @@ readMathMaterial !ctx = loop []
           -- { <math mode material> }
           MTLBrace -> do
             enterGroup ScopeByBrace
-            content <- runMMDBrace <$> withMathStyle id (readMathMaterial (ctx { mmcPosition = NotInFraction })) -- MMDBrace
+            content <- runMMDBrace <$> withMathStyle id readMathMaterial
             case content of
               [item@(IAtom (AccAtom {}))] -> loop (item : revList) -- single Acc atom
               _ -> doAtom (mkAtom AOrd (MFSubList content))
@@ -570,18 +562,15 @@ readMathMaterial !ctx = loop []
 
           -- \displaystyle, \textstyle, etc
           MTSetStyle newStyle -> do
-            -- Remove this check to allow \mathchoice and \mathstyle to be different
-            if mmcPosition ctx == FractionNumerator
-              then throwError "Numerator of a fraction must be surrounded by { and }"
-              else do assign currentMathStyle newStyle
-                      loop (IStyleChange newStyle : revList)
+            assign currentMathStyle newStyle
+            loop (IStyleChange newStyle : revList)
 
           -- \left<delim> <math mode material> (\middle<delim><math mode material>)* \right<delim>
           -- or \Uleft<Uleft-like options><delim> ...
           MTLeft leftOptions leftDelim -> do
             let readUntilRight revContentList = do
                   enterGroup ScopeByLeftRight
-                  result <- withMathStyle id $ readMathMaterial (ctx { mmcPosition = NotInFraction }) -- MMDLeftRight
+                  result <- withMathStyle id readMathMaterial -- :: m (MMDLeftRight _)
                   case result of
                     MMDMiddle middleOptions delim content -> do
                       readUntilRight ([IBoundary BoundaryMiddle middleOptions delim] : content : revContentList)
@@ -601,26 +590,16 @@ readMathMaterial !ctx = loop []
             return (reverse revList)
 
           -- <generalized fraction command>
-          MTGenFrac gf
-            | mmcPosition ctx == FractionDenominator ->
-                throwError "Ambiguous: you need another { and }"
-
-            -- Remove this check to allow classic \over-like commands
-            | mmcPosition ctx /= FractionNumerator ->
-                throwError "Fraction must be preceded by \\Ustack"
-
-            | otherwise -> do
-                let numerator = reverse revList
-                result <- withMathStyle makeCramped $ readMathMaterial (ctx { mmcPosition = FractionDenominator })
-                return ((\denominator -> [IGenFrac gf numerator denominator]) <$> result)
+          MTGenFrac gf -> onGenFrac gf $ do
+            -- do not leave a scope
+            return (reverse revList)
 
           -- \Ustack { <math mode material> <generalized fraction command> <math mode material> }
           MTUstack -> do
             readLBrace
-            content <- runMMDBrace <$> withMathStyle smallerStyle (readMathMaterial (ctx { mmcPosition = FractionNumerator }))
-            case content of
-              [IGenFrac _ _ _] -> doAtom (mkAtom AOrd (MFSubList content))
-              _ -> throwError "No fraction after \\Ustack"
+            MMDNumerator gf numerator <- withMathStyle smallerStyle readMathMaterial
+            denominator <- runMMDDenominator <$> withMathStyle denominatorStyle readMathMaterial
+            doAtom (mkAtom AOrd (MFSubList [IGenFrac gf numerator denominator]))
 
           -- \mathchoice<general text><general text><general text><general text>
           MTChoice -> do
@@ -630,11 +609,11 @@ readMathMaterial !ctx = loop []
                   | makeCramped s == makeCramped currentStyle = do
                       -- we are in the 'right' branch
                       readLBrace
-                      runMMDBrace <$> readMathMaterial defaultMathMaterialContext
+                      runMMDBrace <$> readMathMaterial
                   | otherwise = do
                       -- we are not in the 'right' branch
                       readLBrace
-                      runMMDBrace <$> withMathStyle (const $ makeCrampedIf (isCramped currentStyle) s) (readMathMaterial defaultMathMaterialContext)
+                      runMMDBrace <$> withMathStyle (const $ makeCrampedIf (isCramped currentStyle) s) readMathMaterial
             d  <- doChoiceBranch DisplayStyle
             t  <- doChoiceBranch TextStyle
             s  <- doChoiceBranch ScriptStyle
@@ -700,7 +679,7 @@ readMathField = do
         makeMathSymbol mathclass (delimiterFamilySmall del) (delimiterSlotSmall del)
       MTLBrace -> do
         enterGroup ScopeByBrace
-        content <- runMMDBrace <$> readMathMaterial defaultMathMaterialContext
+        content <- runMMDBrace <$> readMathMaterial
         return $ case content of
           [IAtom (OrdAtom { atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
           _ -> MFSubList content

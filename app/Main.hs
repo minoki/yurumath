@@ -35,7 +35,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
                         ,latexDefinitions
                         ,m
                         ]
-      runMMDGlobal <$> readMathMaterial defaultMathMaterialContext
+      runMMDGlobal <$> readMathMaterial
 
 main :: IO ()
 main = do

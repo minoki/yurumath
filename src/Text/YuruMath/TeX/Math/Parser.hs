@@ -25,6 +25,7 @@ import Data.Monoid (mempty,Any(..),First(..))
 import Control.Monad.Except
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (set,assign)
+import Control.Lens.Iso (non)
 import Control.Lens.Tuple (_1,_2,_3,_4,_5)
 import Data.OpenUnion
 import TypeFun.Data.List (Delete)
@@ -349,10 +350,10 @@ readDelimiterOptions = do
 
 withMathStyle :: (MonadTeXState state m, IsMathState state) => (MathStyle -> MathStyle) -> m a -> m a
 withMathStyle f m = do
-  oldStyle <- use currentMathStyle
-  assign currentMathStyle (f oldStyle)
+  oldStyle <- use (currentMathStyle . non (error "Internal error: currentMathStyle is Nothing"))
+  assign currentMathStyle (Just (f oldStyle))
   x <- m
-  assign currentMathStyle oldStyle
+  assign currentMathStyle (Just oldStyle)
   return x
 
 class (Functor f) => MathMaterialEnding f where
@@ -514,7 +515,7 @@ readMathMaterial = loop []
 
           -- \displaystyle, \textstyle, etc
           MTSetStyle newStyle -> do
-            assign currentMathStyle newStyle
+            assign currentMathStyle (Just newStyle)
             loop (IStyleChange newStyle : revList)
 
           -- \left<delim> <math mode material> (\middle<delim><math mode material>)* \right<delim>
@@ -555,7 +556,7 @@ readMathMaterial = loop []
 
           -- \mathchoice<general text><general text><general text><general text>
           MTChoice -> do
-            currentStyle <- use currentMathStyle
+            currentStyle <- use (currentMathStyle . non (error "Internal error: currentMathStyle is Nothing"))
             let -- doChoiceBranch :: MathStyle -> m MathList
                 doChoiceBranch !s
                   | makeCramped s == makeCramped currentStyle = do

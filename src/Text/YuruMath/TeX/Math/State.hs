@@ -19,7 +19,7 @@ class (IsLocalState localstate) => IsMathLocalState localstate where
   currentSymbolMode :: Lens' localstate SymbolMode
 
 class (IsState state, IsMathLocalState (LocalState state)) => IsMathState state where
-  currentMathStyle :: Lens' state MathStyle
+  currentMathStyle :: Lens' state (Maybe MathStyle)
 
 data MathLocalState ecommand value
   = MathLocalState
@@ -35,7 +35,7 @@ data MathLocalState ecommand value
 data MathState localstate
   = MathState
     { _mCommonState :: !(CommonState localstate)
-    , _currentMathStyle :: !MathStyle -- math style is not affected by \begingroup..\endgroup
+    , _currentMathStyle :: !(Maybe MathStyle) -- math style is not affected by \begingroup..\endgroup
     }
 
 initialLocalMathState :: MathLocalState e v
@@ -49,7 +49,7 @@ initialLocalMathState
 initialMathState :: Bool -> CommonState localstate -> MathState localstate
 initialMathState !isDisplay !commonState
   = MathState { _mCommonState = commonState { _mode = if isDisplay then DisplayMathMode else MathMode }
-              , _currentMathStyle = if isDisplay then DisplayStyle else TextStyle
+              , _currentMathStyle = Just $ if isDisplay then DisplayStyle else TextStyle
               }
 
 instance (IsExpandable ecommand, IsValue value) => IsLocalState (MathLocalState ecommand value) where

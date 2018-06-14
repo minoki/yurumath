@@ -91,8 +91,10 @@ data MathExpandable = Mmathstyle -- LuaTeX extension
 -- LuaTeX extension: \mathstyle
 mathstyleCommand :: (MonadTeXState state m, MonadError String m, IsMathState state) => m [ExpansionToken]
 mathstyleCommand = do
-  style <- use currentMathStyle
-  stringToEToken $ show $ fromEnum style -- 0..7
+  value <- use currentMathStyle
+  case value of
+    Just style -> stringToEToken $ show $ fromEnum style -- 0..7
+    Nothing -> stringToEToken "-1" -- not in math mode
 
 instance IsExpandable MathExpandable where
   isConditional _ = False

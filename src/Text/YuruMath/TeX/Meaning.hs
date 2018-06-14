@@ -12,9 +12,12 @@ module Text.YuruMath.TeX.Meaning
   ,meaningWithCustomEscapechar
   ,meaningWithEscapecharAsInt
   ,meaningWithoutEscapechar
+  ,can'tUseThisCommandInCurrentMode
   ) where
 import Text.YuruMath.TeX.Types hiding (_escapechar)
 import Text.YuruMath.TeX.State
+import Control.Monad.Except (MonadError,throwError)
+import Control.Lens.Getter (use)
 import Numeric
 import Data.Char
 import Data.OpenUnion
@@ -38,6 +41,20 @@ meaningWithEscapecharAsInt c value = meaningString value (MeaningContext c)
 
 meaningWithoutEscapechar :: (Meaning a) => a -> String
 meaningWithoutEscapechar value = meaningString value (MeaningContext (-1))
+
+can'tUseThisCommandInCurrentMode :: (Meaning a, MonadTeXState s m, MonadError String m) => a -> m b
+can'tUseThisCommandInCurrentMode value = do
+  ec <- use (localState . escapechar)
+  m <- use mode
+  let name = meaningWithEscapecharAsInt ec value
+      modeStr = case m of
+        HorizontalMode -> "horizontal mode"
+        RestrictedHorizontalMode -> "restricted horizontal mode"
+        VerticalMode -> "vertical mode"
+        InternalVerticalMode -> "internal vertical mode"
+        MathMode -> "math mode"
+        DisplayMathMode -> "display math mode"
+  throwError $ "You can't use `" ++ name ++ "' in " ++ modeStr
 
 controlSequence :: String -> MeaningContext -> String
 controlSequence name ctx

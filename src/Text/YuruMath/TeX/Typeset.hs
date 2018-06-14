@@ -72,31 +72,7 @@ instance Meaning TypesetCommand where
   meaningString TDiscretionaryHyphen = controlSequence "-"
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute TypesetCommand m where
-  doExecute Tspecial      = throwError $ "You can't use \\special in this mode"
-  doExecute Tpenalty      = throwError $ "You can't use \\penalty in this mode"
-  doExecute Tkern         = throwError $ "You can't use \\kern in this mode"
-  doExecute Tunpenalty    = throwError $ "You can't use \\unpenalty in this mode"
-  doExecute Tunkern       = throwError $ "You can't use \\unkern in this mode"
-  doExecute Tunskip       = throwError $ "You can't use \\unskip in this mode"
-  doExecute Tmark         = throwError $ "You can't use \\mark in this mode"
-  doExecute Tinsert       = throwError $ "You can't use \\insert in this mode"
-  doExecute Tvadjust      = throwError $ "You can't use \\vadjust in this mode"
-  doExecute Thalign       = throwError $ "You can't use \\halign in this mode"
-  doExecute Tindent       = throwError $ "You can't use \\indent in this mode"
-  doExecute Tnoindent     = throwError $ "You can't use \\noindent in this mode"
-  doExecute Tvrule        = throwError $ "You can't use \\vrule in this mode"
-  doExecute Tchar         = throwError $ "You can't use \\char in this mode"
-  doExecute Thskip        = throwError $ "You can't use \\hskip in this mode"
-  doExecute Thfil         = throwError $ "You can't use \\hfil in this mode"
-  doExecute Thfill        = throwError $ "You can't use \\hfill in this mode"
-  doExecute Thss          = throwError $ "You can't use \\hss in this mode"
-  doExecute Thfilneg      = throwError $ "You can't use \\hfilneg in this mode"
-  doExecute TControlSpace = throwError $ "You can't use <control sequence> in this mode"
-  doExecute Traise        = throwError $ "You can't use \\raise in this mode"
-  doExecute Tlower        = throwError $ "You can't use \\lower in this mode"
-  doExecute TItalicCorrection    = throwError $ "You can't use \\/ in this mode"
-  doExecute Tdiscretionary       = throwError $ "You can't use \\discretionary in this mode"
-  doExecute TDiscretionaryHyphen = throwError $ "You can't use \\- in this mode"
+  doExecute = can'tUseThisCommandInCurrentMode
   doGlobal _ = Nothing
   getQuantity _ = NotQuantity
 

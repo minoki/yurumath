@@ -58,8 +58,8 @@ instance Meaning MathStyleSet where
   meaningString (MathStyleSet ScriptScriptStyle) = controlSequence "scriptscriptstyle"
   meaningString (MathStyleSet CrampedScriptScriptStyle) = controlSequence "crampedscriptscriptstyle"
 
-instance (Monad m, MonadError String m) => DoExecute MathStyleSet m where
-  doExecute (MathStyleSet s) = throwError "You can't use \\displaystyle in this mode" -- TODO: name
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MathStyleSet m where
+  doExecute = can'tUseThisCommandInCurrentMode
   getQuantity (MathStyleSet v) = QInteger $ return $ fromIntegral $ fromEnum v -- LuaTeX extension
 
 --
@@ -83,8 +83,8 @@ instance Meaning MathAtomCommand where
   meaningString (MathAtomCommand ARad) = pure "<<radical>>"
   meaningString (MathAtomCommand AVcent) = pure "<<vcenter>>"
 
-instance (Monad m, MonadError String m) => DoExecute MathAtomCommand m where
-  doExecute _ = throwError "You can't use \\mathord in this mode" -- TODO: name
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MathAtomCommand m where
+  doExecute = can'tUseThisCommandInCurrentMode
   getQuantity _ = NotQuantity
 
 --
@@ -267,7 +267,7 @@ instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state
   doExecute Mthinmuskip    = runLocal (muskipParamSet thinmuskip)
   doExecute Mmedmuskip     = runLocal (muskipParamSet medmuskip)
   doExecute Mthickmuskip   = runLocal (muskipParamSet thickmuskip)
-  doExecute x              = throwError $ "You can't use " ++ show x ++ " in non-math mode"
+  doExecute x              = can'tUseThisCommandInCurrentMode x
   doGlobal Mfam            = Just $ runGlobal famSet
   doGlobal Mthinmuskip     = Just $ runGlobal (muskipParamSet thinmuskip)
   doGlobal Mmedmuskip      = Just $ runGlobal (muskipParamSet medmuskip)

@@ -129,16 +129,7 @@ gluetomu :: Glue Dimen -> Glue MuDimen
 gluetomu = fmap (DimenWithScaledMu . asScaledPoints)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute ExprCommand m where
-  doExecute Enumexpr  = throwError "You can't use `\\numexpr' in this mode."
-  doExecute Edimexpr  = throwError "You can't use `\\dimexpr' in this mode."
-  doExecute Eglueexpr = throwError "You can't use `\\glueexpr' in this mode."
-  doExecute Emuexpr   = throwError "You can't use `\\muexpr' in this mode."
-  doExecute Egluestretch      = throwError "You can't use `\\gluestretch' in this mode."
-  doExecute Eglueshrink       = throwError "You can't use `\\glueshrink' in this mode."
-  doExecute Egluestretchorder = throwError "You can't use `\\gluestretchorder' in this mode."
-  doExecute Eglueshrinkorder  = throwError "You can't use `\\glueshrinkorder' in this mode."
-  doExecute Emutoglue         = throwError "You can't use `\\mutoglue' in this mode."
-  doExecute Egluetomu         = throwError "You can't use `\\gluetomu' in this mode."
+  doExecute = can'tUseThisCommandInCurrentMode
   getQuantity Enumexpr  = QInteger   (parseExpression "\\numexpr" 0)
   getQuantity Edimexpr  = QDimension (parseExpression "\\dimexpr" 0)
   getQuantity Eglueexpr = QGlue      (parseExpression "\\glueexpr" 0)

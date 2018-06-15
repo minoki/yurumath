@@ -17,14 +17,15 @@ import Control.Monad.Except
 import Control.Lens.Setter (modifying)
 import Data.OpenUnion
 import TypeFun.Data.List ((:++:))
+import Data.Void
 
 type MathExpandableT = Union (ExpandablePrimitiveList :++: MathExpandableList)
 type MathValue = Union (NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList)
 type MathLocalState' = MathLocalState MathExpandableT MathValue
-runMathList :: Bool -> String -> Either String (MathList ())
+runMathList :: Bool -> String -> Either String (MathList Void)
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialStateWithLocalState initialLocalMathState input)
   where
-    action :: StateT (MathState MathLocalState') (Except String) (MathList ())
+    action :: StateT (MathState MathLocalState') (Except String) (MathList Void)
     action = do
       modifying (localState . controlSeqDef)
         $ \m -> mconcat [primitiveDefinitions

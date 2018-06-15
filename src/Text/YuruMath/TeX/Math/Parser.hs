@@ -30,6 +30,7 @@ import Control.Lens.Tuple (_1,_2,_3,_4,_5)
 import Data.OpenUnion
 import TypeFun.Data.List (Delete)
 import Data.Proxy
+import Data.Void
 
 data MathToken m where
   MTChar       :: !Char -> MathToken m -- letter, other, \char or \chardef-ed
@@ -59,6 +60,7 @@ data MathToken m where
   MTKern       :: !MathKern -> MathToken m
   MTUnKern     :: MathToken m
   MTUnSkip     :: MathToken m
+  MTBox        :: !Bool -> !BoxCommand -> MathToken m
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
@@ -67,8 +69,8 @@ type MonadMathState state set m
   = ( MonadTeXState state m
     , IsMathState state
     , Value state ~ Union set
-    , DoExecute (Union (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))) m
-    , Show (Union (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))))
+    , DoExecute (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))))) m
+    , Show (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))))
     )
 
 readMathToken :: forall m state set. (MonadMathState state set m, MonadError String m) => m (Maybe (MathToken m))
@@ -86,6 +88,7 @@ readMathToken = do
                   @> (\(v :: MathVariantSet)  -> Just <$> doMathVariantSet v)
                   @> (\(v :: MathSymbolModeSet) -> Just <$> doMathSymbolModeSet v)
                   @> (\(v :: TypesetCommand)  -> Just <$> doTypesetCommand v)
+                  @> (\(v :: BoxCommand)      -> Just <$> doBoxCommand v)
                   @> (\v                      -> return $ Just $ MTOther v) -- other assignments, etc
     doCommonValue :: CommonValue -> m (Maybe (MathToken m))
     doCommonValue v = case v of
@@ -300,6 +303,9 @@ readMathToken = do
       -- \mskip<muglue>
       Mmskip           -> (MTGlue . MGMSkip) <$> readMuGlue
 
+      -- \vcenter<box specification>{<vertical mode material>}
+      Mvcenter -> return $ MTBox True Bvbox
+
       -- assignments
       Mfam         -> return $ MTOther Mfam
       Mthinmuskip  -> return $ MTOther Mthinmuskip
@@ -313,6 +319,7 @@ readMathToken = do
       MUhextensible    -> throwError "\\Uhextensible: not implemented yet"
       MUnosuperscript  -> throwError "\\Unosuperscript: not implemented yet"
       MUnosubscript    -> throwError "\\Unosubscript: not implemented yet"
+    doBoxCommand box = return $ MTBox False box
 
 readDelimiter :: (MonadMathState state set m, MonadError String m) => m DelimiterCode
 readDelimiter = do
@@ -413,7 +420,7 @@ instance MathMaterialEnding MMDDenominator where
   onGenFrac _ _ = throwError "Ambiguous: you need another { and }"
   expectedEnding _ = "`}'"
 
-readMathMaterial :: forall f state set m a. (MathMaterialEnding f, MonadMathState state set m, MonadError String m) => m (f (MathList a))
+readMathMaterial :: forall f state set m a. (MathMaterialEnding f, MonadMathState state set m, MonadError String m, BoxReader a m) => m (f (MathList a))
 readMathMaterial = loop []
   where
     loop :: MathList a -> m (f (MathList a))
@@ -503,7 +510,7 @@ readMathMaterial = loop []
 
           -- \Uroot<...><math field><math field>
           MTRoot code -> do
-            degree <- withMathStyle (const ScriptScriptStyle) readMathField
+            degree <- withMathStyle (const ScriptScriptStyle) readMathField :: m (MathField Void) -- not implemented yet
             content <- withMathStyle makeCramped readMathField
             doAtom (mkAtom ARad content)
 
@@ -602,6 +609,10 @@ readMathMaterial = loop []
               IKern _ : revList' -> loop revList'
               _ -> loop revList
 
+          MTBox isVCenter boxCommand -> do
+            box <- readBox boxCommand
+            doAtom (mkAtom (if isVCenter then AOrd else AVcent) (MFBox box))
+
           -- assignments, etc
           MTOther v -> do
             doExecute v
@@ -617,7 +628,7 @@ readLBrace = do
 
 -- <math symbol> ::= <character> | <math character>
 -- <math field> ::= <math symbol> | {<math mode material>}
-readMathField :: (MonadMathState state set m, MonadError String m) => m (MathField a)
+readMathField :: (MonadMathState state set m, MonadError String m, BoxReader a m) => m (MathField a)
 readMathField = do
   t <- readMathToken
   case t of

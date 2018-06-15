@@ -10,6 +10,8 @@ import Data.Text (Text)
 import Data.OpenUnion
 import TypeFun.Data.List (Elem)
 import Control.Monad.Except
+import Data.Monoid ((<>))
+import Data.Void
 
 -- Commands that are available in multiple modes
 data TypesetCommand
@@ -76,8 +78,37 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute TypesetC
   doGlobal _ = Nothing
   getQuantity _ = NotQuantity
 
-typesetCommands :: (Elem TypesetCommand vset) => Map.Map Text (Union vset)
-typesetCommands = fmap liftUnion $ Map.fromList
+data BoxCommand = Bbox
+                | Bcopy
+                | Blastbox
+                | Bvsplit
+                | Bhbox
+                | Bvbox
+                | Bvtop
+                deriving (Eq,Show)
+
+instance Meaning BoxCommand where
+  meaningString Bbox = controlSequence "box"
+  meaningString Bcopy = controlSequence "copy"
+  meaningString Blastbox = controlSequence "lastbox"
+  meaningString Bvsplit = controlSequence "vsplit"
+  meaningString Bhbox = controlSequence "hbox"
+  meaningString Bvbox = controlSequence "vbox"
+  meaningString Bvtop = controlSequence "vtop"
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute BoxCommand m where
+  doExecute _ = throwError "box commands are not implemented yet"
+  doGlobal _ = Nothing
+  getQuantity _ = NotQuantity
+
+class BoxReader box m where
+  readBox :: BoxCommand -> m box
+
+instance (MonadError String m) => BoxReader Void m where
+  readBox _ = throwError "box commands are not supported"
+
+typesetCommands :: (Elem TypesetCommand vset, Elem BoxCommand vset) => Map.Map Text (Union vset)
+typesetCommands = (fmap liftUnion $ Map.fromList
   [("special",      Tspecial)
   ,("penalty",      Tpenalty)
   ,("kern",         Tkern)
@@ -103,4 +134,11 @@ typesetCommands = fmap liftUnion $ Map.fromList
   ,("/",            TItalicCorrection)
   ,("discretionary",Tdiscretionary)
   ,("-",            TDiscretionaryHyphen)
-  ]
+  ]) <> (fmap liftUnion $ Map.fromList
+  [("box", Bbox)
+  ,("copy", Bcopy)
+  ,("lastbox", Blastbox)
+  ,("hbox", Bhbox)
+  ,("vbox", Bvbox)
+  ,("vtop", Bvtop)
+  ])

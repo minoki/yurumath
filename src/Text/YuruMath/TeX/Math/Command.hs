@@ -181,6 +181,7 @@ data MathCommands
   | Mmkern
   | Mmskip
   | Mnonscript
+  | Mvcenter
 
     -- e-TeX extension:
   | Mmiddle
@@ -237,6 +238,7 @@ instance Meaning MathCommands where
   meaningString Mmkern = controlSequence "mkern"
   meaningString Mmskip = controlSequence "mskip"
   meaningString Mnonscript = controlSequence "nonscript"
+  meaningString Mvcenter = controlSequence "vcenter"
   meaningString Mmiddle = controlSequence "middle"
   meaningString MUmathchar = controlSequence "Umathchar"
   meaningString MUmathcharnum = controlSequence "Umathcharnum"
@@ -339,6 +341,7 @@ mathDefinitions = Map.fromList
   ,("mkern",        liftUnion Mmkern)
   ,("mskip",        liftUnion Mmskip)
   ,("nonscript",    liftUnion Mnonscript)
+  ,("vcenter",      liftUnion Mvcenter)
 
   -- e-TeX extension:
   ,("middle",       liftUnion Mmiddle)

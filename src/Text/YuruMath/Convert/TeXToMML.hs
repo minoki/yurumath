@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Text.YuruMath.Convert.TeXToMML where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State (delimiterSlotSmall)
@@ -11,10 +12,10 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Semigroup ((<>))
 
-toMML :: MathStyle -> MathList -> [MathML]
+toMML :: forall a. MathStyle -> MathList a -> [MathML]
 toMML = doList
   where
-    doList :: MathStyle -> MathList -> [MathML]
+    doList :: MathStyle -> MathList a -> [MathML]
     doList !style [] = []
     doList style (IAtom atom : xs) = doAtom style atom : doList style xs
     doList _ (IStyleChange style : xs) = doList style xs -- TODO: Emit <mstyle> with scriptlevel and displaystyle attributes
@@ -34,7 +35,7 @@ toMML = doList
     doList style (IKern {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
     doList style (IBoundary _ _options delim : xs) = doDelimiter delim ++ doList style xs
     doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
-    doAtom :: MathStyle -> Atom -> MathML
+    doAtom :: MathStyle -> Atom a -> MathML
     doAtom style (atom@OpAtom { atomLimits = DisplayLimits })
       = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "true" $ toMathML content
               | otherwise = doNucleus style (atomType atom) (atomNucleus atom)
@@ -66,7 +67,7 @@ toMML = doList
              (Just xs, Nothing) -> msub $ n <> (fromList xs)
              (Nothing, Just xs) -> msup $ n <> (fromList xs)
              (Just xs, Just ys) -> msubsup $ n <> (fromList xs) <> (fromList ys)
-    doNucleus :: MathStyle -> AtomType -> MathField -> MathML
+    doNucleus :: MathStyle -> AtomType -> MathField a -> MathML
     doNucleus !style !atomType MFEmpty = mrow mempty
     doNucleus style AOrd (MFSymbol { symbolVariant = v, symbolContent = content })
       = makeMathIdentifier v content -- TODO: Handle numeric literal (<mn>)
@@ -79,7 +80,7 @@ toMML = doList
     doNucleus style atomType (MFSubList xs) = fromList $ doList style xs
     doNucleus style atomType _ = mrow mempty -- not supported yet
       -- movable limits
-    doField :: MathStyle -> MathField -> Maybe [MathML]
+    doField :: MathStyle -> MathField a -> Maybe [MathML]
     doField !style MFEmpty = Nothing
     doField style (MFSymbol { symbolVariant = v, symbolContent = content })
       = Just [makeMathIdentifier v content] -- TODO: Handle numeric literal (<mn>)

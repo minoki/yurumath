@@ -357,13 +357,13 @@ withMathStyle f m = do
   return x
 
 class (Functor f) => MathMaterialEnding f where
-  onEndOfInput      :: MonadError String m => m MathList -> m (f MathList)
-  onRightBrace      :: MonadError String m => m MathList -> m (f MathList)
-  onMiddleDelim     :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
-  onRightDelim      :: MonadError String m => DelimiterOptions -> DelimiterCode -> m MathList -> m (f MathList)
-  onStopInlineMath  :: MonadError String m => m MathList -> m (f MathList)
-  onStopDisplayMath :: MonadError String m => m MathList -> m (f MathList)
-  onGenFrac         :: MonadError String m => GenFrac -> m MathList -> m (f MathList)
+  onEndOfInput      :: MonadError String m => m (MathList a) -> m (f (MathList a))
+  onRightBrace      :: MonadError String m => m (MathList a) -> m (f (MathList a))
+  onMiddleDelim     :: MonadError String m => DelimiterOptions -> DelimiterCode -> m (MathList a) -> m (f (MathList a))
+  onRightDelim      :: MonadError String m => DelimiterOptions -> DelimiterCode -> m (MathList a) -> m (f (MathList a))
+  onStopInlineMath  :: MonadError String m => m (MathList a) -> m (f (MathList a))
+  onStopDisplayMath :: MonadError String m => m (MathList a) -> m (f (MathList a))
+  onGenFrac         :: MonadError String m => GenFrac -> m (MathList a) -> m (f (MathList a))
   expectedEnding    :: Proxy f -> String
   onEndOfInput _      = throwError $ "Unexpected end of input: expected " ++ expectedEnding (Proxy :: Proxy f)
   onRightBrace _      = throwError $ "Unexpected `}': expected " ++ expectedEnding (Proxy :: Proxy f)
@@ -413,10 +413,10 @@ instance MathMaterialEnding MMDDenominator where
   onGenFrac _ _ = throwError "Ambiguous: you need another { and }"
   expectedEnding _ = "`}'"
 
-readMathMaterial :: forall f state set m. (MathMaterialEnding f, MonadMathState state set m, MonadError String m) => m (f MathList)
+readMathMaterial :: forall f state set m a. (MathMaterialEnding f, MonadMathState state set m, MonadError String m) => m (f (MathList a))
 readMathMaterial = loop []
   where
-    loop :: MathList -> m (f MathList)
+    loop :: MathList a -> m (f (MathList a))
     loop revList = do
       t <- readMathToken
       let doAtom atom = loop (IAtom atom : revList)
@@ -479,7 +479,7 @@ readMathMaterial = loop []
           MTSup -> do
             x <- withMathStyle superscriptStyle readMathField
             modifyLastAtom $ \atom ->
-              if atomSuperscript atom == MFEmpty
+              if isEmptyField (atomSuperscript atom)
               then return (atom { atomSuperscript = x })
               else throwError "Double superscript"
 
@@ -487,7 +487,7 @@ readMathMaterial = loop []
           MTSub -> do
             x <- withMathStyle subscriptStyle readMathField
             modifyLastAtom $ \atom ->
-              if atomSubscript atom == MFEmpty
+              if isEmptyField (atomSubscript atom)
               then return (atom { atomSubscript = x })
               else throwError "Double subscript"
 
@@ -557,7 +557,7 @@ readMathMaterial = loop []
           -- \mathchoice<general text><general text><general text><general text>
           MTChoice -> do
             currentStyle <- use (currentMathStyle . non (error "Internal error: currentMathStyle is Nothing"))
-            let -- doChoiceBranch :: MathStyle -> m MathList
+            let -- doChoiceBranch :: MathStyle -> m (MathList a)
                 doChoiceBranch !s
                   | makeCramped s == makeCramped currentStyle = do
                       -- we are in the 'right' branch
@@ -617,7 +617,7 @@ readLBrace = do
 
 -- <math symbol> ::= <character> | <math character>
 -- <math field> ::= <math symbol> | {<math mode material>}
-readMathField :: (MonadMathState state set m, MonadError String m) => m MathField
+readMathField :: (MonadMathState state set m, MonadError String m) => m (MathField a)
 readMathField = do
   t <- readMathToken
   case t of
@@ -638,7 +638,7 @@ readMathField = do
           _ -> MFSubList content
       _ -> throwError $ "Unexpected " ++ show t ++ "; expected a symbol or `{'"
 
-makeMathSymbol :: (MonadTeXState state m, IsMathState state) => MathClass -> Word8 -> Char -> m MathField
+makeMathSymbol :: (MonadTeXState state m, IsMathState state) => MathClass -> Word8 -> Char -> m (MathField a)
 makeMathSymbol MathVar !fam !slot = do
   famP <- use (localState . famParam)
   v <- use (localState . currentVariant)

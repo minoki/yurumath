@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 module Text.YuruMath.TeX.Math.List
   (module Text.YuruMath.TeX.Math.Style
   ,AtomType(..)
@@ -6,6 +7,7 @@ module Text.YuruMath.TeX.Math.List
   ,MathVariant(..)
   ,SymbolMode(..)
   ,MathField(..)
+  ,isEmptyField
   ,BinForm(..)
   ,Atom(..)
   ,atomType
@@ -26,7 +28,6 @@ module Text.YuruMath.TeX.Math.List
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Math.Style
-import Data.Word
 import Data.Text (Text)
 
 data AtomType = AOrd   -- ordinary
@@ -82,82 +83,86 @@ data SymbolMode = SMSymbol
                 | SMText
                 deriving (Eq,Show)
 
-data MathField = MFEmpty
-               | MFSymbol { symbolFamily  :: !Word
-                          , symbolVariant :: !MathVariant
-                          , symbolMode    :: !SymbolMode
-                          , symbolContent :: !Text
-                          }
-               | MFBox
-               | MFSubList MathList
-               deriving (Eq,Show)
+data MathField a = MFEmpty
+                 | MFSymbol { symbolFamily  :: !Word
+                            , symbolVariant :: !MathVariant
+                            , symbolMode    :: !SymbolMode
+                            , symbolContent :: !Text
+                            }
+                 | MFBox a
+                 | MFSubList (MathList a)
+                 deriving (Eq,Show,Functor)
+
+isEmptyField :: MathField a -> Bool
+isEmptyField MFEmpty = True
+isEmptyField _ = False
 
 data BinForm = BinInfix
              | BinPrefix
              | BinPostfix
              deriving (Eq,Show)
 
-data Atom = OrdAtom   { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-          | OpAtom    { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      , atomLimits      :: !LimitsSpec -- specific to Op atom
-                      }
-          | BinAtom   { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      , atomBinForm     :: !BinForm   -- specific to Bin atom
-                      }
-          | RelAtom   { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-          | OpenAtom  { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
-                      }
-          | CloseAtom { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
-                      }
-          | PunctAtom { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-          | InnerAtom { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-          | OverAtom  { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-          | UnderAtom { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-          | AccAtom   { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      , atomAccentCharacter :: !MathCode -- specific to Acc atom
-                      }
-          | RadAtom   { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      , atomDelimiter   :: !DelimiterCode -- specific to Rad atom
-                      }
-          | VcentAtom { atomNucleus     :: !MathField
-                      , atomSuperscript :: !MathField
-                      , atomSubscript   :: !MathField
-                      }
-            deriving (Eq,Show)
+data Atom a = OrdAtom   { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            | OpAtom    { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomLimits      :: !LimitsSpec -- specific to Op atom
+                        }
+            | BinAtom   { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomBinForm     :: !BinForm   -- specific to Bin atom
+                        }
+            | RelAtom   { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            | OpenAtom  { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
+                        }
+            | CloseAtom { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
+                        }
+            | PunctAtom { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            | InnerAtom { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            | OverAtom  { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            | UnderAtom { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            | AccAtom   { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomAccentCharacter :: !MathCode -- specific to Acc atom
+                        }
+            | RadAtom   { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomDelimiter   :: !DelimiterCode -- specific to Rad atom
+                        }
+            | VcentAtom { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        }
+            deriving (Eq,Show,Functor)
 
-atomType :: Atom -> AtomType
+atomType :: Atom a -> AtomType
 atomType (OrdAtom   {}) = AOrd
 atomType (OpAtom    {}) = AOp
 atomType (BinAtom   {}) = ABin
@@ -172,13 +177,13 @@ atomType (AccAtom   {}) = AAcc
 atomType (RadAtom   {}) = ARad
 atomType (VcentAtom {}) = AVcent
 
-emptyAtom :: Atom
+emptyAtom :: Atom a
 emptyAtom = OrdAtom { atomNucleus     = MFEmpty
                     , atomSuperscript = MFEmpty
                     , atomSubscript   = MFEmpty
                     }
 
-mkAtom :: AtomType -> MathField -> Atom
+mkAtom :: AtomType -> MathField a -> Atom a
 mkAtom AOrd   !nucleus = OrdAtom   { atomNucleus     = nucleus
                                    , atomSuperscript = MFEmpty
                                    , atomSubscript   = MFEmpty
@@ -238,7 +243,7 @@ mkAtom AVcent !nucleus = VcentAtom { atomNucleus     = nucleus
                                    , atomSubscript   = MFEmpty
                                    }
 
-markAtomAsDelimiter :: Atom -> Atom
+markAtomAsDelimiter :: Atom a -> Atom a
 markAtomAsDelimiter atom@(OpenAtom {}) = atom { atomIsDelimiter = True }
 markAtomAsDelimiter atom@(CloseAtom {}) = atom { atomIsDelimiter = True }
 markAtomAsDelimiter atom = atom
@@ -273,16 +278,16 @@ data MathKern = MKKern !Dimen
               deriving (Eq,Show)
 
 -- See The TeXbook, Chapter 17
-data MathItem = IAtom !Atom
-              | IHorizontalMaterial -- a rule or discretionary or penalty or "whatsit"
-              | IVerticalMaterial -- \mark or \insert or \vadjust
-              | IGlue !MathGlue -- \hskip or \mskip or \nonscript
-              | IKern !MathKern -- \kern or \mkern
-              | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
-              | IGenFrac !GenFrac MathList MathList -- \above, \over, etc
-              | IBoundary !BoundaryType !DelimiterOptions !DelimiterCode -- \left, \middle, or \right
-              | IChoice MathList MathList MathList MathList -- \mathchoice
-              deriving (Eq,Show)
+data MathItem a = IAtom !(Atom a)
+                | IHorizontalMaterial -- a rule or discretionary or penalty or "whatsit"
+                | IVerticalMaterial -- \mark or \insert or \vadjust
+                | IGlue !MathGlue -- \hskip or \mskip or \nonscript
+                | IKern !MathKern -- \kern or \mkern
+                | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
+                | IGenFrac !GenFrac (MathList a) (MathList a) -- \above, \over, etc
+                | IBoundary !BoundaryType !DelimiterOptions !DelimiterCode -- \left, \middle, or \right
+                | IChoice (MathList a) (MathList a) (MathList a) (MathList a) -- \mathchoice
+                deriving (Eq,Show,Functor)
 
 -- Options for \Uleft: "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>
 data DelimiterOptions = DelimiterOptions
@@ -297,4 +302,4 @@ data DelimiterOptions = DelimiterOptions
 defaultDelimiterOptions :: DelimiterOptions
 defaultDelimiterOptions = DelimiterOptions Nothing Nothing False Nothing Nothing
 
-type MathList = [MathItem]
+type MathList a = [MathItem a]

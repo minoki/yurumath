@@ -21,10 +21,10 @@ import TypeFun.Data.List ((:++:))
 type MathExpandableT = Union (ExpandablePrimitiveList :++: MathExpandableList)
 type MathValue = Union (NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList)
 type MathLocalState' = MathLocalState MathExpandableT MathValue
-runMathList :: Bool -> String -> Either String MathList
+runMathList :: Bool -> String -> Either String (MathList ())
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialStateWithLocalState initialLocalMathState input)
   where
-    action :: StateT (MathState MathLocalState') (Except String) MathList
+    action :: StateT (MathState MathLocalState') (Except String) (MathList ())
     action = do
       modifying (localState . controlSeqDef)
         $ \m -> mconcat [primitiveDefinitions

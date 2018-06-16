@@ -7,6 +7,7 @@ module Text.YuruMath.TeX.Math.Style
  ,subscriptStyle
  ,smallerStyle
  ,denominatorStyle
+ ,rootDegreeStyle
  ,isScriptOrSmaller
  ) where
 
@@ -66,6 +67,11 @@ smallerStyle scriptscriptstyle = scriptscriptstyle
 -- denominator
 denominatorStyle :: MathStyle -> MathStyle
 denominatorStyle = makeCramped . smallerStyle
+
+-- \Uroot
+rootDegreeStyle :: MathStyle -> MathStyle
+rootDegreeStyle style | isCramped style = CrampedScriptScriptStyle
+                      | otherwise = ScriptScriptStyle
 
 -- Used by \nonscript
 isScriptOrSmaller :: MathStyle -> Bool

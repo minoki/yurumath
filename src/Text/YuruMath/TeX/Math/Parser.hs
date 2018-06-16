@@ -30,7 +30,6 @@ import Control.Lens.Tuple (_1,_2,_3,_4,_5)
 import Data.OpenUnion
 import TypeFun.Data.List (Delete)
 import Data.Proxy
-import Data.Void
 
 data MathToken m where
   MTChar       :: !Char -> MathToken m -- letter, other, \char or \chardef-ed
@@ -501,18 +500,18 @@ readMathMaterial = loop []
           -- \mathaccent<15-bit number><math field> or \Umathaccent<...><math field>
           MTAccent code -> do
             content <- withMathStyle makeCramped readMathField
-            doAtom (mkAtom AAcc content)
+            doAtom (mkAtom AAcc content) { atomAccentCharacter = code }
 
           -- \radical<27-bit number><math field> or \Uradical<...><math field>
           MTRadical code -> do
             content <- withMathStyle makeCramped readMathField
-            doAtom (mkAtom ARad content)
+            doAtom (mkAtom ARad content) { atomDelimiter = code }
 
           -- \Uroot<...><math field><math field>
           MTRoot code -> do
-            degree <- withMathStyle (const ScriptScriptStyle) readMathField :: m (MathField Void) -- not implemented yet
+            degree <- withMathStyle rootDegreeStyle readMathField -- SS or SS'
             content <- withMathStyle makeCramped readMathField
-            doAtom (mkAtom ARad content)
+            doAtom (mkAtom ARoot content) { atomDelimiter = code, atomRootDegree = degree }
 
           -- \limits, \nolimits, \displaylimits
           MTLimitsSpec spec -> do

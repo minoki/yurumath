@@ -35,38 +35,60 @@ toMML = doList
     doList style (IKern {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
     doList style (IBoundary _ _options delim : xs) = doDelimiter delim ++ doList style xs
     doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
+
     doAtom :: MathStyle -> Atom a -> MathML
     doAtom style (atom@OpAtom { atomLimits = DisplayLimits })
-      = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "true" $ toMathML content
-              | otherwise = doNucleus style (atomType atom) (atomNucleus atom)
-            sub = doField (subscriptStyle style) (atomSubscript atom)
-            sup = doField (superscriptStyle style) (atomSuperscript atom)
-        in case (sub,sup) of
-             (Nothing, Nothing) -> n
-             (Just xs, Nothing) -> munder $ n <> (fromList xs)
-             (Nothing, Just xs) -> mover $ n <> (fromList xs)
-             (Just xs, Just ys) -> munderover $ n <> (fromList xs) <> (fromList ys)
+      | style == DisplayStyle || style == CrampedDisplayStyle
+      = addUnderOver style atom
+        $ case atomNucleus atom of
+            MFSymbol { symbolVariant = _, symbolContent = content } -> mo ! A.movablelimits "true" $ toMathML content
+            _ -> doNucleus style (atomType atom) (atomNucleus atom)
+
     doAtom style (atom@OpAtom { atomLimits = Limits })
-      = let n | MFSymbol { symbolVariant = _, symbolContent = content } <- atomNucleus atom = mo ! A.movablelimits "false" $ toMathML content
-              | otherwise = doNucleus style (atomType atom) (atomNucleus atom)
-            sub = doField (subscriptStyle style) (atomSubscript atom)
-            sup = doField (superscriptStyle style) (atomSuperscript atom)
-        in case (sub,sup) of
-             (Nothing, Nothing) -> n
-             (Just xs, Nothing) -> munder $ n <> (fromList xs)
-             (Nothing, Just xs) -> mover $ n <> (fromList xs)
-             (Just xs, Just ys) -> munderover $ n <> (fromList xs) <> (fromList ys)
-    -- doAtom style (atom@RadAtom {}) = _
+      = addUnderOver style atom
+        $ case atomNucleus atom of
+            MFSymbol { symbolVariant = _, symbolContent = content } -> mo ! A.movablelimits "false" $ toMathML content
+            _ -> doNucleus style (atomType atom) (atomNucleus atom)
+
+    doAtom style (atom@RadAtom {})
+      = addSubSup style atom
+        $ msqrt $ doNucleus (makeCramped style) ARad (atomNucleus atom)
+
+    doAtom style (atom@RootAtom {})
+      = addSubSup style atom
+        $ mroot
+        $ doNucleus (makeCramped style) ARoot (atomNucleus atom)
+        <> index
+      where index = case doField (rootDegreeStyle style) (atomRootDegree atom) of
+                      Nothing -> mrow mempty
+                      Just xs -> fromList xs
+
     -- doAtom style (atom@AccAtom {}) = _
+
     doAtom style atom
-      = let n = doNucleus (nucleusStyle (atomType atom) style) (atomType atom) (atomNucleus atom)
-            sub = doField (subscriptStyle style) (atomSubscript atom)
+      = addSubSup style atom
+        $ doNucleus (nucleusStyle (atomType atom) style) (atomType atom) (atomNucleus atom)
+
+    addSubSup :: MathStyle -> Atom a -> MathML -> MathML
+    addSubSup !style !atom nucleus
+      = let sub = doField (subscriptStyle style) (atomSubscript atom)
             sup = doField (superscriptStyle style) (atomSuperscript atom)
         in case (sub,sup) of
-             (Nothing, Nothing) -> n
-             (Just xs, Nothing) -> msub $ n <> (fromList xs)
-             (Nothing, Just xs) -> msup $ n <> (fromList xs)
-             (Just xs, Just ys) -> msubsup $ n <> (fromList xs) <> (fromList ys)
+             (Nothing, Nothing) -> nucleus
+             (Just xs, Nothing) -> msub $ nucleus <> fromList xs
+             (Nothing, Just xs) -> msup $ nucleus <> fromList xs
+             (Just xs, Just ys) -> msubsup $ nucleus <> fromList xs <> fromList ys
+
+    addUnderOver :: MathStyle -> Atom a -> MathML -> MathML
+    addUnderOver !style !atom nucleus
+      = let sub = doField (subscriptStyle style) (atomSubscript atom)
+            sup = doField (superscriptStyle style) (atomSuperscript atom)
+        in case (sub,sup) of
+             (Nothing, Nothing) -> nucleus
+             (Just xs, Nothing) -> munder $ nucleus <> fromList xs
+             (Nothing, Just xs) -> mover $ nucleus <> fromList xs
+             (Just xs, Just ys) -> munderover $ nucleus <> fromList xs <> fromList ys
+
     doNucleus :: MathStyle -> AtomType -> MathField a -> MathML
     doNucleus !style !atomType MFEmpty = mrow mempty
     doNucleus style AOrd (MFSymbol { symbolVariant = v, symbolContent = content })
@@ -75,17 +97,19 @@ toMML = doList
       | atomType `elem` [AOp,ABin,ARel,AOpen,AClose,APunct]
       = mo $ toMathML content
     doNucleus style atomType (MFSymbol { symbolVariant = v, symbolContent = content })
-      -- atomType == AInner,AOver,AUnder,AAcc,ARad,AVcent
+      -- atomType == AInner,AOver,AUnder,AAcc,ARad,AVcent,ARoot
       = mo $ toMathML content
+
     doNucleus style atomType (MFSubList xs) = fromList $ doList style xs
     doNucleus style atomType _ = mrow mempty -- not supported yet
-      -- movable limits
+
     doField :: MathStyle -> MathField a -> Maybe [MathML]
     doField !style MFEmpty = Nothing
     doField style (MFSymbol { symbolVariant = v, symbolContent = content })
       = Just [makeMathIdentifier v content] -- TODO: Handle numeric literal (<mn>)
     doField style (MFBox {}) = Nothing -- ignored for now
     doField style (MFSubList xs) = Just $ doList style xs
+
     doDelimiter (DelimiterCode 0) = []
     doDelimiter delim = [mo {- stretchy="true" -} $ toMathML (delimiterSlotSmall delim)] -- expected size?
 

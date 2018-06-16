@@ -20,6 +20,32 @@ stripGlueOrKern (IGlue _ : xs) = xs
 stripGlueOrKern (IKern _ : xs) = xs
 stripGlueOrKern xs = xs
 
+doEachFieldWithStyle :: (MathStyle -> MathField a -> MathField a) -> MathStyle -> Atom a -> Atom a
+doEachFieldWithStyle doField !style !atom@(RootAtom {})
+  = atom { atomNucleus     = doField (makeCramped style)      (atomNucleus atom)
+         , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
+         , atomSubscript   = doField (subscriptStyle style)   (atomSubscript atom)
+         , atomRootDegree  = doField (rootDegreeStyle style)  (atomRootDegree atom)
+         }
+doEachFieldWithStyle doField !style !atom
+  = atom { atomNucleus     = doField (nucleusStyle (atomType atom) style) (atomNucleus atom)
+         , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
+         , atomSubscript   = doField (subscriptStyle style)   (atomSubscript atom)
+         }
+
+doEachField :: (MathField a -> MathField a) -> Atom a -> Atom a
+doEachField doField !atom@(RootAtom {})
+  = atom { atomNucleus     = doField (atomNucleus atom)
+         , atomSuperscript = doField (atomSuperscript atom)
+         , atomSubscript   = doField (atomSubscript atom)
+         , atomRootDegree  = doField (atomRootDegree atom)
+         }
+doEachField doField !atom
+  = atom { atomNucleus     = doField (atomNucleus atom)
+         , atomSuperscript = doField (atomSuperscript atom)
+         , atomSubscript   = doField (atomSubscript atom)
+         }
+
 doNonScript :: forall a. MathStyle -> MathList a -> MathList a
 doNonScript = doList
   where
@@ -32,11 +58,10 @@ doNonScript = doList
     doList !_ (i@(IStyleChange style) : xs) = i : doList style xs
     doList !style (IGenFrac gf num den : xs) = IGenFrac gf (doList (smallerStyle style) num) (doList (denominatorStyle style) den) : doList style xs
     doList !style (x : xs) = x : doList style xs
+
     doAtom :: MathStyle -> Atom a -> Atom a
-    doAtom !style !atom = atom { atomNucleus = doField (nucleusStyle (atomType atom) style) (atomNucleus atom)
-                               , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
-                               , atomSubscript = doField (subscriptStyle style) (atomSubscript atom)
-                               }
+    doAtom = doEachFieldWithStyle doField
+
     doField :: MathStyle -> MathField a -> MathField a
     doField !style f@(MFBox {}) = f -- TODO
     doField !style (MFSubList xs) = MFSubList (doList style xs)
@@ -52,11 +77,10 @@ determineChoice = doList
     doList !style (IGenFrac gf num den : xs) = IGenFrac gf (doList (smallerStyle style) num) (doList (denominatorStyle style) den) : doList style xs
     doList !style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
     doList !style (x : xs) = x : doList style xs
+
     doAtom :: MathStyle -> Atom a -> Atom a
-    doAtom !style !atom = atom { atomNucleus = doField (nucleusStyle (atomType atom) style) (atomNucleus atom)
-                               , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
-                               , atomSubscript = doField (subscriptStyle style) (atomSubscript atom)
-                               }
+    doAtom = doEachFieldWithStyle doField
+
     doField :: MathStyle -> MathField a -> MathField a
     doField !style f@(MFBox {}) = f -- TODO
     doField !style (MFSubList xs) = MFSubList (doList style xs)
@@ -87,11 +111,10 @@ determineBinForm = doList Nothing
     doList _ (IAtom atom : xs) = IAtom (doAtom atom) : doList (Just (atomType atom)) xs
     doList _ (IGenFrac gf num den : xs) = IGenFrac gf (doList Nothing num) (doList Nothing den) : doList (Just AInner) xs
     doList prevAtomType (x : xs) = x : doList prevAtomType xs -- keep IStyleChange for now
+
     doAtom :: Atom a -> Atom a
-    doAtom !atom = atom { atomNucleus = doField (atomNucleus atom)
-                        , atomSuperscript = doField (atomSuperscript atom)
-                        , atomSubscript = doField (atomSubscript atom)
-                        }
+    doAtom = doEachField doField
+
     doField :: MathField a -> MathField a
     doField f@(MFBox {}) = f -- TODO
     doField (MFSubList xs) = MFSubList (doList Nothing xs)
@@ -125,10 +148,7 @@ pairOpenClose xs = doList xs
       = first (x :) $ findClosing xs
 
     doAtom :: Atom a -> Atom a
-    doAtom atom = atom { atomNucleus = doField (atomNucleus atom)
-                       , atomSuperscript = doField (atomSuperscript atom)
-                       , atomSubscript = doField (atomSubscript atom)
-                       }
+    doAtom = doEachField doField
 
     doField :: MathField a -> MathField a
     doField (MFSubList xs) = MFSubList (doList xs)
@@ -157,11 +177,10 @@ textSymbol = doList
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs
+
     doAtom :: Atom a -> Atom a
-    doAtom !atom = atom { atomNucleus = doField (atomNucleus atom)
-                        , atomSuperscript = doField (atomSuperscript atom)
-                        , atomSubscript = doField (atomSubscript atom)
-                        }
+    doAtom = doEachField doField
+
     doField :: MathField a -> MathField a
     doField f@(MFBox {}) = f -- TODO
     doField (MFSubList xs) = MFSubList (doList xs)

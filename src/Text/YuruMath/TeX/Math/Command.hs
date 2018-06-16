@@ -82,6 +82,7 @@ instance Meaning MathAtomCommand where
   meaningString (MathAtomCommand AAcc) = pure "<<accented atom>>"
   meaningString (MathAtomCommand ARad) = pure "<<radical>>"
   meaningString (MathAtomCommand AVcent) = pure "<<vcenter>>"
+  meaningString (MathAtomCommand ARoot) = pure "<<root>>"
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MathAtomCommand m where
   doExecute = can'tUseThisCommandInCurrentMode

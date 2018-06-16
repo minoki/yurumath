@@ -43,6 +43,7 @@ data AtomType = AOrd   -- ordinary
               | AAcc   -- accented
               | ARad   -- radical
               | AVcent -- vcenter
+              | ARoot  -- root
               deriving (Eq,Show)
 
 mathclassToAtomType :: MathClass -> AtomType
@@ -60,6 +61,7 @@ nucleusStyle :: AtomType -> MathStyle -> MathStyle
 nucleusStyle AOver = makeCramped
 nucleusStyle AAcc = makeCramped
 nucleusStyle ARad = makeCramped
+nucleusStyle ARoot = makeCramped
 nucleusStyle _ = id
 
 data MathVariant = MVNormal
@@ -160,6 +162,12 @@ data Atom a = OrdAtom   { atomNucleus     :: !(MathField a)
                         , atomSuperscript :: !(MathField a)
                         , atomSubscript   :: !(MathField a)
                         }
+            | RootAtom  { atomNucleus     :: !(MathField a)
+                        , atomSuperscript :: !(MathField a)
+                        , atomSubscript   :: !(MathField a)
+                        , atomDelimiter   :: !DelimiterCode -- specific to Root atom
+                        , atomRootDegree  :: !(MathField a) -- specific to Root atom
+                        }
             deriving (Eq,Show,Functor)
 
 atomType :: Atom a -> AtomType
@@ -176,6 +184,7 @@ atomType (UnderAtom {}) = AUnder
 atomType (AccAtom   {}) = AAcc
 atomType (RadAtom   {}) = ARad
 atomType (VcentAtom {}) = AVcent
+atomType (RootAtom  {}) = ARoot
 
 emptyAtom :: Atom a
 emptyAtom = OrdAtom { atomNucleus     = MFEmpty
@@ -241,6 +250,12 @@ mkAtom ARad   !nucleus = RadAtom   { atomNucleus     = nucleus
 mkAtom AVcent !nucleus = VcentAtom { atomNucleus     = nucleus
                                    , atomSuperscript = MFEmpty
                                    , atomSubscript   = MFEmpty
+                                   }
+mkAtom ARoot  !nucleus = RootAtom  { atomNucleus     = nucleus
+                                   , atomSuperscript = MFEmpty
+                                   , atomSubscript   = MFEmpty
+                                   , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom
+                                   , atomRootDegree  = MFEmpty -- specific to Root atom
                                    }
 
 markAtomAsDelimiter :: Atom a -> Atom a

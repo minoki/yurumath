@@ -443,14 +443,18 @@ readMathMaterial = loop []
           -- <character>
           MTChar c -> do
             mc <- mathCodeOf c
-            delcode <- delimiterCodeOf c
-            let mathclass = mathcharClass mc
-                atomType = mathclassToAtomType mathclass
-            sym <- makeMathSymbol mathclass (mathcharFamily mc) (mathcharSlot mc)
-            let atom = mkAtom atomType sym
-            doAtom $ if delcode /= DelimiterCode (-1)
-                     then markAtomAsDelimiter atom
-                     else atom
+            if mc == MathCode 0x8000
+              then do -- math active
+                      unreadETokens 0 [ETCommandName False (NActiveChar c)] -- TODO: prevent infinite loop
+                      loop revList
+              else do delcode <- delimiterCodeOf c
+                      let mathclass = mathcharClass mc
+                          atomType = mathclassToAtomType mathclass
+                      sym <- makeMathSymbol mathclass (mathcharFamily mc) (mathcharSlot mc)
+                      let atom = mkAtom atomType sym
+                      doAtom $ if delcode /= DelimiterCode (-1)
+                               then markAtomAsDelimiter atom
+                               else atom
 
           -- <math symbol>
           MTMathChar mc -> do -- \mathchar or \mathchardef-ed
@@ -642,7 +646,11 @@ readMathField = do
     Just t -> case t of
       MTChar c -> do
         mc <- mathCodeOf c
-        makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
+        if mc == MathCode 0x8000
+          then do -- math active
+                  unreadETokens 0 [ETCommandName False (NActiveChar c)] -- TODO: prevent infinite loop
+                  readMathField
+          else makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed
         makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTDelimiter mathclass del -> do -- \delimiter

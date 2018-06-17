@@ -189,6 +189,16 @@ latexDefinitions = Map.fromList
   ,("mathscr", Left $ liftUnion $ protected $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSetText\\YuruMathSetScript#1}") -- robust
   ,("operatorname", Left $ liftUnion $ protected $ mkSimpleMacroWithString [optionalStar (tokenizeStaticString "") (tokenizeStaticString "\\nolimits"), shortParam] "\\mathop{\\YuruMathSetText\\YuruMathSetFunctionName#2}#1") -- robust
 
+  -- \def\big#1{{\hbox{$\left#1\vbox to8.5\p@{}\right.\n@space$}}} -- \p@ is a \dimen set to 1pt
+  -- \def\Big#1{{\hbox{$\left#1\vbox to11.5\p@{}\right.\n@space$}}}
+  -- \def\bigg#1{{\hbox{$\left#1\vbox to14.5\p@{}\right.\n@space$}}}
+  -- \def\Bigg#1{{\hbox{$\left#1\vbox to17.5\p@{}\right.\n@space$}}}
+  -- \def\n@space{\nulldelimiterspace\z@ \m@th} -- \m@th is defined in ltplain.dtx as \mathsurrond\z@
+  ,("big", Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSizedDelimiter 10pt #1}")
+  ,("Big", Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSizedDelimiter 16pt #1}")
+  ,("bigg", Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSizedDelimiter 22pt #1}")
+  ,("Bigg", Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "{\\YuruMathSizedDelimiter 28pt #1}")
+
   -- ltmath
   ,("log",   operatorname "log"    NoLimits)
   ,("lg",    operatorname "lg"     NoLimits)

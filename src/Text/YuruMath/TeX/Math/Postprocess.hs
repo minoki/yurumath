@@ -1,8 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Text.YuruMath.TeX.Math.Postprocess where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Math.List
-import Data.Bifunctor
 import Data.Semigroup ((<>))
 
 doChoice :: MathStyle -> MathList a -> MathList a -> MathList a -> MathList a -> MathList a
@@ -120,6 +120,61 @@ determineBinForm = doList Nothing
     doField (MFSubList xs) = MFSubList (doList Nothing xs)
     doField field = field
 
+data ClosingParen a = FoundNoMatch (MathList a)
+                    | FoundClosing (MathList a) (Atom a) (MathList a)
+
+onFirstList :: (MathList a -> MathList a) -> ClosingParen a -> ClosingParen a
+onFirstList f (FoundNoMatch xs) = FoundNoMatch (f xs)
+onFirstList f (FoundClosing xs a ys) = FoundClosing (f xs) a ys
+
+-- match \bigl .. \bigr, \Bigl .. \Bigr, etc
+pairSizedOpenClose :: forall a. MathList a -> MathList a
+pairSizedOpenClose xs = doList xs
+  where
+    doList :: MathList a -> MathList a
+    doList [] = []
+    doList (IAtom atom@(OpenAtom { atomNucleus = MFSubList [ISizedDelimiter dimen delim] }) : xs)
+      = case findClosing dimen xs of
+          FoundNoMatch rest -> {- no closing paren found -} IAtom (doAtom atom) : doList rest
+          FoundClosing content closing rest -> mkImplicitGroup (doAtom atom) content closing : doList rest
+    doList (IAtom atom@(CloseAtom { atomNucleus = MFSubList [ISizedDelimiter dimen delim] }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
+    doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
+    doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
+    doList (x : xs) = x : doList xs
+
+    findClosing :: Dimen -> MathList a -> ClosingParen a
+    findClosing dimen [] = FoundNoMatch []
+    findClosing dimen (IAtom atom@(OpenAtom { atomNucleus = MFSubList [ISizedDelimiter dimen2 delim] }) : xs)
+      = case findClosing dimen2 xs of
+          FoundNoMatch rest -> {- no closing paren found -} FoundNoMatch (IAtom (doAtom atom) : rest)
+          FoundClosing content closing rest -> onFirstList (mkImplicitGroup (doAtom atom) content closing :) (findClosing dimen rest)
+    findClosing dimen (IAtom atom@(CloseAtom { atomNucleus = MFSubList [ISizedDelimiter dimen' delim] }) : xs)
+      | dimen == dimen'
+      = FoundClosing [] (doAtom atom) xs
+    findClosing dimen (IAtom atom : xs)
+      = onFirstList (IAtom (doAtom atom) :) $ findClosing dimen xs
+    findClosing dimen (x : xs)
+      = onFirstList (x :) $ findClosing dimen xs
+
+    doAtom :: Atom a -> Atom a
+    doAtom = doEachField doField
+
+    doField :: MathField a -> MathField a
+    doField (MFSubList xs) = MFSubList (doList xs)
+    doField field = field
+
+    mkImplicitGroup :: Atom a -> MathList a -> Atom a -> MathItem a
+    mkImplicitGroup opening content closing
+      = IAtom (mkAtom AOrd (MFSubList [IAtom opening
+                                      ,IAtom (mkAtom AOrd (MFSubList content))
+                                      ,IAtom closing'
+                                      ])) { atomSuperscript = atomSuperscript closing
+                                          , atomSubscript = atomSubscript closing
+                                          }
+      where closing' = closing { atomSuperscript = MFEmpty
+                               , atomSubscript = MFEmpty
+                               }
+
 pairOpenClose :: forall a. MathList a -> MathList a
 pairOpenClose xs = doList xs
   where
@@ -127,25 +182,25 @@ pairOpenClose xs = doList xs
     doList [] = []
     doList (IAtom atom@(OpenAtom { atomIsDelimiter = True }) : xs)
       = case findClosing xs of
-          (content,Nothing) -> {- no closing paren found -} IAtom (doAtom atom) : content
-          (content,Just (closing,rest)) -> mkImplicitGroup (doAtom atom) content closing : doList rest
+          FoundNoMatch content -> {- no closing paren found -} IAtom (doAtom atom) : content
+          FoundClosing content closing rest -> mkImplicitGroup (doAtom atom) content closing : doList rest
     doList (IAtom atom@(CloseAtom { atomIsDelimiter = True }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs
 
-    findClosing :: MathList a -> (MathList a,Maybe (Atom a,MathList a))
-    findClosing [] = ([],Nothing)
+    findClosing :: MathList a -> ClosingParen a
+    findClosing [] = FoundNoMatch []
     findClosing (IAtom atom@(OpenAtom { atomIsDelimiter = True }) : xs)
       = case findClosing xs of
-          (content,Nothing) -> {- no closing paren found -} (IAtom (doAtom atom) : content, Nothing)
-          (content,Just (closing,rest)) -> first (mkImplicitGroup (doAtom atom) content closing :) $ findClosing rest
+          FoundNoMatch content -> {- no closing paren found -} FoundNoMatch (IAtom (doAtom atom) : content)
+          FoundClosing content closing rest -> onFirstList (mkImplicitGroup (doAtom atom) content closing :) $ findClosing rest
     findClosing (IAtom atom@(CloseAtom { atomIsDelimiter = True }) : xs)
-      = ([],Just (doAtom atom,xs))
+      = FoundClosing [] (doAtom atom) xs
     findClosing (IAtom atom : xs)
-      = first (IAtom (doAtom atom) :) $ findClosing xs
+      = onFirstList (IAtom (doAtom atom) :) $ findClosing xs
     findClosing (x : xs)
-      = first (x :) $ findClosing xs
+      = onFirstList (x :) $ findClosing xs
 
     doAtom :: Atom a -> Atom a
     doAtom = doEachField doField
@@ -185,5 +240,3 @@ textSymbol = doList
     doField f@(MFBox {}) = f -- TODO
     doField (MFSubList xs) = MFSubList (doList xs)
     doField field = field
-
--- TODO: Handle generalized fraction with delims

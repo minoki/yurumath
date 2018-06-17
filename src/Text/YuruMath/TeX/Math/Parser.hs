@@ -60,6 +60,7 @@ data MathToken m where
   MTUnKern     :: MathToken m
   MTUnSkip     :: MathToken m
   MTBox        :: !Bool -> !BoxCommand -> MathToken m
+  MTSizedDelimiter :: !Dimen -> !DelimiterCode -> MathToken m
   MTOther      :: (DoExecute v m, Show v) => v -> MathToken m
 
 deriving instance Show (MathToken m)
@@ -234,6 +235,9 @@ readMathToken = do
       MUleft           -> MTLeft   <$> readDelimiterOptions <*> readDelimiter
       MUmiddle         -> MTMiddle <$> readDelimiterOptions <*> readDelimiter
       MUright          -> MTRight  <$> readDelimiterOptions <*> readDelimiter
+
+      -- \YuruMathSizedDelimiter<dimen><delim>
+      MYuruMathSizedDelimiter -> MTSizedDelimiter <$> readDimension <*> readDelimiter
 
       -- \over, \atop
       Mover    -> return $ MTGenFrac $ WithoutDelims GFOver
@@ -547,6 +551,9 @@ readMathMaterial = loop []
           MTRight options delim -> onRightDelim options delim $ do
             leaveGroup ScopeByLeftRight
             return (reverse revList)
+
+          MTSizedDelimiter dimen delim -> do
+            loop (ISizedDelimiter dimen delim : revList)
 
           -- <generalized fraction command>
           MTGenFrac gf -> onGenFrac gf $ do

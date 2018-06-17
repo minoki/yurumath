@@ -301,6 +301,7 @@ data MathItem a = IAtom !(Atom a)
                 | IStyleChange !MathStyle -- \displaystyle, \textstyle, etc
                 | IGenFrac !GenFrac (MathList a) (MathList a) -- \above, \over, etc
                 | IBoundary !BoundaryType !DelimiterOptions !DelimiterCode -- \left, \middle, or \right
+                | ISizedDelimiter !Dimen !DelimiterCode -- \big, \Big, \bigg, \Bigg
                 | IChoice (MathList a) (MathList a) (MathList a) (MathList a) -- \mathchoice
                 deriving (Eq,Show,Functor)
 

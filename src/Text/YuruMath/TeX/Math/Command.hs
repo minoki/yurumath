@@ -213,6 +213,8 @@ data MathCommands
   | MUstopdisplaymath
   -- \Ustartmath, \Ustartdisplaymath: not really math commands...
 
+  | MYuruMathSizedDelimiter -- for \big, \Big, \bigg, \Bigg
+
   deriving (Eq,Show)
 
 instance Meaning MathCommands where
@@ -264,6 +266,7 @@ instance Meaning MathCommands where
   meaningString MUright = controlSequence "Uright"
   meaningString MUstopmath = controlSequence "Ustopmath"
   meaningString MUstopdisplaymath = controlSequence "Ustopdisplaymath"
+  meaningString MYuruMathSizedDelimiter = controlSequence "YuruMathSizedDelimiter"
 
 instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathCommands m where
   doExecute Mfam           = runLocal famSet
@@ -383,6 +386,7 @@ mathDefinitions = Map.fromList
   ,("crampedscriptstyle",      liftUnion (MathStyleSet CrampedScriptStyle))
   ,("crampedscriptscriptstyle",liftUnion (MathStyleSet CrampedScriptScriptStyle))
 
+  ,("YuruMathSizedDelimiter",        liftUnion MYuruMathSizedDelimiter)
   ,("YuruMathSetNormal",             liftUnion (MathVariantSet MVNormal))
   ,("YuruMathSetBold",               liftUnion (MathVariantSet MVBold))
   ,("YuruMathSetItalic",             liftUnion (MathVariantSet MVItalic))

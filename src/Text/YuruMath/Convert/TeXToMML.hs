@@ -7,7 +7,6 @@ import Text.YuruMath.TeX.Math.List
 import Text.YuruMath.TeX.Math.Postprocess
 import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A
-import Text.Blaze
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Semigroup ((<>))
@@ -34,6 +33,7 @@ toMML = doList
     doList style (IGlue {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
     doList style (IKern {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
     doList style (IBoundary _ _options delim : xs) = doDelimiter delim ++ doList style xs
+    doList style (ISizedDelimiter dimen delim : xs) = doSizedDelimiter dimen delim ++ doList style xs
     doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
 
     doAtom :: MathStyle -> Atom a -> MathML
@@ -112,6 +112,9 @@ toMML = doList
 
     doDelimiter (DelimiterCode 0) = []
     doDelimiter delim = [mo {- stretchy="true" -} $ toMathML (delimiterSlotSmall delim)] -- expected size?
+
+    doSizedDelimiter dimen (DelimiterCode 0) = []
+    doSizedDelimiter dimen delim = [mo ! A.maxsize (toValue $ showDimension dimen) ! A.minsize (toValue $ showDimension dimen) $ toMathML (delimiterSlotSmall delim)]
 
 fromList :: [MathML] -> MathML
 fromList [x] = x

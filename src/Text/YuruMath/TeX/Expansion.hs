@@ -12,6 +12,7 @@ import Data.Ratio
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 import Control.Monad
+import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign,modifying)
@@ -24,7 +25,7 @@ fromEToken :: ExpansionToken -> TeXToken
 fromEToken (ETCommandName { etName = name }) = TTCommandName name -- etNoexpand is ignored
 fromEToken (ETCharacter { etChar = c, etCatCode = cc }) = TTCharacter c cc
 
-nextEToken :: (MonadTeXState s m, MonadError String m) => m (Maybe ExpansionToken)
+nextEToken :: (MonadState s m, IsState s, MonadError String m) => m (Maybe ExpansionToken)
 nextEToken = do
   pending <- use esPendingTokenList
   case pending of
@@ -34,7 +35,7 @@ nextEToken = do
       assign esPendingTokenList ts
       return (Just t)
 
-unreadETokens' :: (MonadTeXState s m, MonadError String m) => [ExpansionToken] -> m ()
+unreadETokens' :: (MonadState s m, IsState s, MonadError String m) => [ExpansionToken] -> m ()
 unreadETokens' ts = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
@@ -42,7 +43,7 @@ unreadETokens' ts = do
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (ts ++ ts')
 
-unreadETokens :: (MonadTeXState s m, MonadError String m) => Int -> [ExpansionToken] -> m ()
+unreadETokens :: (MonadState s m, IsState s, MonadError String m) => Int -> [ExpansionToken] -> m ()
 unreadETokens !depth ts = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
@@ -51,7 +52,7 @@ unreadETokens !depth ts = do
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (map (\t -> t { etDepth = depth }) ts ++ ts')
 
-unreadEToken :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m ()
+unreadEToken :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m ()
 unreadEToken t = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
@@ -60,7 +61,7 @@ unreadEToken t = do
   when (length ts' + 1 > limit) $ throwError "token list too long"
   assign esPendingTokenList (t : ts')
 
-readUntilEndGroupE :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [ExpansionToken]
+readUntilEndGroupE :: (MonadState s m, IsState s, MonadError String m) => ParamLong -> m [ExpansionToken]
 readUntilEndGroupE !long = loop (0 :: Int) []
   where
     loop !depth revTokens = do
@@ -76,11 +77,11 @@ readUntilEndGroupE !long = loop (0 :: Int) []
           | long == ShortParam -> throwError "Paragraph ended before argument was compelete"
         Just t -> loop depth (t : revTokens)
 
-readUntilEndGroup :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
+readUntilEndGroup :: (MonadState s m, IsState s, MonadError String m) => ParamLong -> m [TeXToken]
 readUntilEndGroup !long = map fromEToken <$> readUntilEndGroupE long
 
 -- reads undelimited macro argument
-readArgument :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
+readArgument :: (MonadState s m, IsState s, MonadError String m) => ParamLong -> m [TeXToken]
 readArgument !long = do
   t <- nextEToken
   case t of
@@ -93,7 +94,7 @@ readArgument !long = do
     Just t -> return [fromEToken t]
 
 -- reads a control sequence or an active character
-readCommandName :: (MonadTeXState s m, MonadError String m) => m CommandName
+readCommandName :: (MonadState s m, IsState s, MonadError String m) => m CommandName
 readCommandName = do
   t <- required nextEToken
   case t of
@@ -790,7 +791,7 @@ expandBooleanConditional c = do
     doBooleanConditional b
     return []
 
-meaningWithoutExpansion :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
+meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
 meaningWithoutExpansion t = do
   case t of
     ETCommandName { etNoexpand = True, etName = name } -> return (Right (injectCommonValue $ Unexpanded name))

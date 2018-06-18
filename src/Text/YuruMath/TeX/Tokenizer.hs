@@ -6,7 +6,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Bits (xor)
 import Data.Char
-import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
@@ -36,7 +35,7 @@ latexInternalTokenizerContext = TokenizerContext
 
 type TokenizerM a = ReaderT TokenizerContext (StateT TokenizerState (Except String)) a
 
-runTokenizer :: (MonadTeXState s m, MonadError String m) => TokenizerM a -> m a
+runTokenizer :: (MonadState s m, IsState s, MonadError String m) => TokenizerM a -> m a
 runTokenizer m = do
   ccmap <- use (localState . catcodeMap)
   elc <- use (localState . endlinechar)
@@ -63,7 +62,7 @@ tokenizeString context input = runExcept (evalStateT (runReaderT doAll context) 
                  Nothing -> return []
                  Just t -> (t :) <$> doAll
 
-nextToken :: (MonadTeXState s m, MonadError String m) => m (Maybe TeXToken)
+nextToken :: (MonadState s m, IsState s, MonadError String m) => m (Maybe TeXToken)
 nextToken = runTokenizer doNextTokenM
 
 doNextTokenM :: TokenizerM (Maybe TeXToken)

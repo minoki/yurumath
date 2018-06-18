@@ -129,10 +129,10 @@ readMathToken = do
 
       -- \hskip<glue>, \hfil, \hfill, \hss, \hfilneg
       Thskip        -> (MTGlue . MGHSkip) <$> readGlue
-      Thfil         -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS 65536 0, glueShrink = zeroQ }
-      Thfill        -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS 65536 1, glueShrink = zeroQ }
-      Thss          -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS 65536 0, glueShrink = InfiniteSS 1 0 }
-      Thfilneg      -> return $ MTGlue $ MGHSkip $ Glue { glueSpace = zeroQ, glueStretch = InfiniteSS (-65536) 0, glueShrink = zeroQ }
+      Thfil         -> return $ MTGlue $ MGHSkip $ zeroQ `plus` fil 1
+      Thfill        -> return $ MTGlue $ MGHSkip $ zeroQ `plus` fill 1
+      Thss          -> return $ MTGlue $ MGHSkip $ zeroQ `plus` fil 1 `minus` fil 1
+      Thfilneg      -> return $ MTGlue $ MGHSkip $ zeroQ `plus` fil (-1)
 
       -- \noindent: has no effect in math modes
       Tnoindent     -> return $ MTOther Relax

@@ -101,6 +101,20 @@ data Glue dimen = Glue { glueSpace   :: !dimen
                        }
                   deriving (Eq,Show,Functor)
 
+fil, fill, filll :: Rational -> StretchShrink dimen
+fil x = InfiniteSS (truncate (65536 * x)) 0
+fill x = InfiniteSS (truncate (65536 * x)) 1
+filll x = InfiniteSS (truncate (65536 * x)) 2
+
+dimenToGlue :: (Quantity dimen) => dimen -> Glue dimen
+dimenToGlue dimen = Glue { glueSpace = dimen, glueStretch = zeroQ, glueShrink = zeroQ }
+
+infixl 6 `plus`, `minus`
+
+plus, minus :: (Quantity dimen) => Glue dimen -> StretchShrink dimen -> Glue dimen
+plus g ss = g <+> Glue { glueSpace = zeroQ, glueStretch = ss, glueShrink = zeroQ }
+minus g ss = g <+> Glue { glueSpace = zeroQ, glueStretch = zeroQ, glueShrink = ss }
+
 instance (Quantity dimen) => Quantity (StretchShrink dimen) where
   FixedSS x <+> FixedSS y = FixedSS (x <+> y)
   FixedSS _ <+> y@(InfiniteSS _ _) = y

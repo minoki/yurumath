@@ -445,7 +445,7 @@ readMathMaterial = loop []
             mc <- mathCodeOf c
             if mc == MathCode 0x8000
               then do -- math active
-                      unreadEToken (ETCommandName { etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
+                      unreadEToken (ETCommandName { etDepth = 0, etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
                       loop revList
               else do delcode <- delimiterCodeOf c
                       let mathclass = mathcharClass mc
@@ -640,7 +640,7 @@ readMathField = do
         mc <- mathCodeOf c
         if mc == MathCode 0x8000
           then do -- math active
-                  unreadEToken (ETCommandName { etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
+                  unreadEToken (ETCommandName { etDepth = 0, etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
                   readMathField
           else makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed

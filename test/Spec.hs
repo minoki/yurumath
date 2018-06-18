@@ -229,6 +229,18 @@ arithtest1 = TestCase $ assertEqual "Arithmetic" expected (runMathList True "\\c
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 0 MVItalic SMSymbol . T.singleton) "200000000000"
 
+looptest1 = TestCase $ assertEqual "Prevent Infinite Loop" expected (runMathList True "\\newcommand\\loop\\loop \\loop")
+  where
+    expected = Left "recursion too deep"
+
+looptest2 = TestCase $ assertEqual "Prevent Infinite Loop" expected (runMathList True "\\newcommand\\loop{\\loop\\loop\\loop} \\loop")
+  where
+    expected = Left "token list too long"
+
+looptest3 = TestCase $ assertEqual "Prevent Infinite Loop" expected (runMathList True "\\newcommand\\loop{\\uppercase{\\loop}} \\loop")
+  where
+    expected = Left "recursion too deep"
+
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1
                  ,TestLabel "Expansion 2" etest2
@@ -244,6 +256,9 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Math 3" mtest3
                  ,TestLabel "Math 4" mtest4
                  ,TestLabel "Arithmetic 1" arithtest1
+                 ,TestLabel "Loop 1" looptest1
+                 ,TestLabel "Loop 2" looptest2
+                 ,TestLabel "Loop 3" looptest3
                  ]
 
 main = runTestTT tests

@@ -101,27 +101,29 @@ futureletCommand = do
   name <- readCommandName
   t1 <- required nextEToken
   t2 <- required nextEToken
-  unreadETokens 0 [t1,t2]
+  unreadETokens' [t1,t2]
   v <- meaningWithoutExpansion t2
   texAssign (definitionAt name) v
 
 uppercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 uppercaseCommand = do
-  text <- readGeneralText
+  text <- readGeneralTextE
   toUpper <- ucCodeFn
-  let makeUpper (TTCharacter c cc) | d <- toUpper c, d /= '\0' = TTCharacter d cc
-      makeUpper t = t
-  let text' = map makeUpper text
-  unreadETokens 0 (map toEToken text')
+  let makeUpper et@(ETCharacter { etChar = c }) | d <- toUpper c, d /= '\0' = et { etChar = d }
+      makeUpper et@(ETCommandName { etName = NActiveChar c }) | d <- toUpper c, d /= '\0' = et { etNoexpand = False, etName = NActiveChar d }
+      makeUpper et@(ETCommandName { etNoexpand = True }) = et { etNoexpand = False }
+      makeUpper et = et
+  unreadETokens' (map makeUpper text)
 
 lowercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 lowercaseCommand = do
-  text <- readGeneralText
+  text <- readGeneralTextE
   toLower <- lcCodeFn
-  let makeLower (TTCharacter c cc) | d <- toLower c, d /= '\0' = TTCharacter d cc
-      makeLower t = t
-  let text' = map makeLower text
-  unreadETokens 0 (map toEToken text')
+  let makeLower et@(ETCharacter { etChar = c }) | d <- toLower c, d /= '\0' = et { etChar = d }
+      makeLower et@(ETCommandName { etName = NActiveChar c }) | d <- toLower c, d /= '\0' = et { etNoexpand = False, etName = NActiveChar d }
+      makeLower et@(ETCommandName { etNoexpand = True }) = et { etNoexpand = False }
+      makeLower et = et
+  unreadETokens' (map makeLower text)
 
 -- \chardef<control sequence><equals><number>
 chardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)

@@ -17,8 +17,8 @@ import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign,modifying)
 
 toEToken :: TeXToken -> ExpansionToken
-toEToken (TTCommandName name) = ETCommandName { etNoexpand = False, etName = name }
-toEToken (TTCharacter c cc) = ETCharacter { etChar = c, etCatCode = cc }
+toEToken (TTCommandName name) = ETCommandName { etDepth = 0, etNoexpand = False, etName = name }
+toEToken (TTCharacter c cc) = ETCharacter { etDepth = 0, etChar = c, etCatCode = cc }
 
 fromEToken :: ExpansionToken -> TeXToken
 fromEToken (ETCommandName { etName = name }) = TTCommandName name -- etNoexpand is ignored
@@ -30,19 +30,17 @@ nextEToken = do
   case pending of
     [] -> do t <- Tok.nextToken
              return (toEToken <$> t)
-    (_,t):ts -> do
-      assign esPendingTokenList ts
-      return (Just t)
-
-nextETokenWithDepth :: (MonadTeXState s m, MonadError String m) => m (Maybe (Int,ExpansionToken))
-nextETokenWithDepth = do
-  pending <- use esPendingTokenList
-  case pending of
-    [] -> do t <- Tok.nextToken
-             return (((,) 0 . toEToken) <$> t)
     t:ts -> do
       assign esPendingTokenList ts
       return (Just t)
+
+unreadETokens' :: (MonadTeXState s m, MonadError String m) => [ExpansionToken] -> m ()
+unreadETokens' ts = do
+  limit <- use esMaxPendingToken
+  ts' <- use esPendingTokenList
+  maxDepth <- use esMaxDepth
+  when (length ts' + length ts > limit) $ throwError "token list too long"
+  assign esPendingTokenList (ts ++ ts')
 
 unreadETokens :: (MonadTeXState s m, MonadError String m) => Int -> [ExpansionToken] -> m ()
 unreadETokens !depth ts = do
@@ -51,17 +49,17 @@ unreadETokens !depth ts = do
   maxDepth <- use esMaxDepth
   when (depth >= maxDepth) $ throwError "recursion too deep"
   when (length ts' + length ts > limit) $ throwError "token list too long"
-  assign esPendingTokenList (map ((,) depth) ts ++ ts')
+  assign esPendingTokenList (map (\t -> t { etDepth = depth }) ts ++ ts')
 
 unreadEToken :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m ()
 unreadEToken t = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
   when (length ts' + 1 > limit) $ throwError "token list too long"
-  assign esPendingTokenList ((0,t) : ts')
+  assign esPendingTokenList (t : ts')
 
-readUntilEndGroup :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
-readUntilEndGroup !long = loop (0 :: Int) []
+readUntilEndGroupE :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [ExpansionToken]
+readUntilEndGroupE !long = loop (0 :: Int) []
   where
     loop !depth revTokens = do
       t <- nextEToken
@@ -69,12 +67,15 @@ readUntilEndGroup !long = loop (0 :: Int) []
         Nothing -> throwError "unexpected end of input when reading an argument"
         Just t@(ETCharacter { etCatCode = CCEndGroup })
           | depth == 0 -> return (reverse revTokens)
-          | otherwise -> loop (depth - 1) (fromEToken t : revTokens)
+          | otherwise -> loop (depth - 1) (t : revTokens)
         Just t@(ETCharacter { etCatCode = CCBeginGroup })
-          -> loop (depth + 1) (fromEToken t : revTokens)
+          -> loop (depth + 1) (t : revTokens)
         Just (ETCommandName { etName = NControlSeq "par" })
           | long == ShortParam -> throwError "Paragraph ended before argument was compelete"
-        Just t -> loop depth (fromEToken t : revTokens)
+        Just t -> loop depth (t : revTokens)
+
+readUntilEndGroup :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
+readUntilEndGroup !long = map fromEToken <$> readUntilEndGroupE long
 
 -- reads undelimited macro argument
 readArgument :: (MonadTeXState s m, MonadError String m) => ParamLong -> m [TeXToken]
@@ -122,11 +123,11 @@ readOptionalSpaces = do
 
 readEquals :: (MonadTeXState s m, MonadError String m) => m ()
 readEquals = do
-  t <- nextETokenWithDepth
+  t <- nextEToken
   case t of
-    Just (_,ETCharacter { etCatCode = CCSpace }) -> readOptionalSpaces -- consumed
-    Just (_,ETCharacter { etChar = '=', etCatCode = CCOther }) -> return () -- consumed
-    Just (d,t) -> unreadETokens d [t] -- not consumed
+    Just (ETCharacter { etCatCode = CCSpace }) -> readOptionalSpaces -- consumed
+    Just (ETCharacter { etChar = '=', etCatCode = CCOther }) -> return () -- consumed
+    Just t -> unreadEToken t -- not consumed
     Nothing -> return ()
 
 -- read a number between 0.."10FFFF excluding "D800.."DFFF, and convert it to a Char
@@ -145,17 +146,17 @@ readKeyword xs = do
   where
     loop [] = return True
     loop (x:xs) = do
-      t <- nextETokenWithDepth
+      t <- nextEToken
       case t of
-        Just (d,t@(ETCharacter { etChar = c }))
+        Just t@(ETCharacter { etChar = c })
           | x == c || x == toLower c -> do
               r <- loop xs
               if r
                 then return True
-                else do unreadETokens d [t]
+                else do unreadEToken t
                         return False
-        Just (d,t) -> do unreadETokens d [t]
-                         return False
+        Just t -> do unreadEToken t
+                     return False
         Nothing -> return False
 
 readOneOfKeywords :: (MonadTeXState s m, MonadError String m) => [String] -> m (Maybe String)
@@ -170,16 +171,16 @@ readOneOfKeywordsV keywords = do
     loop [] = return Nothing
     loop keywords | Just v <- lookup "" keywords = return (Just v)
     loop keywords = do
-      t <- nextETokenWithDepth
+      t <- nextEToken
       case t of
-        Just (d,t@(ETCharacter { etChar = c })) -> do
+        Just t@(ETCharacter { etChar = c }) -> do
           k <- loop [(xs,v) | (x:xs,v) <- keywords, x == c || x == toLower c]
           case k of
             Just _ -> return k
-            Nothing -> do unreadETokens d [t]
+            Nothing -> do unreadEToken t
                           return Nothing
-        Just (d,t) -> do unreadETokens d [t]
-                         return Nothing
+        Just t -> do unreadEToken t
+                     return Nothing
         Nothing -> return Nothing
 
 readKeywordArguments :: (MonadTeXState s m, MonadError String m, Monoid n) => [(String,m n)] -> m n
@@ -209,7 +210,8 @@ expandOnce et = return [et]
 -- used by number reading, \if and \ifcat argument, general text
 evalToken :: (MonadTeXState s m, MonadError String m) => m (ExpansionToken,Value s)
 evalToken = do
-  (d,t) <- required nextETokenWithDepth
+  t <- required nextEToken
+  let d = etDepth t
   case t of
     ETCommandName { etNoexpand = False, etName = name } -> do
       m <- use (localState . definitionAt name)
@@ -219,7 +221,7 @@ evalToken = do
           case cs of
             CondTest:_ -> do
               unreadETokens d [t]
-              return (ETCommandName { etNoexpand = False, etName = NControlSeq "relax" }, injectCommonValue $ Relax)
+              return (ETCommandName { etDepth = d, etNoexpand = False, etName = NControlSeq "relax" }, injectCommonValue $ Relax)
             _ -> do
               r <- doExpand e
               unreadETokens (d+1) r
@@ -236,9 +238,9 @@ evalToken = do
 
 maybeEvalToken :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
 maybeEvalToken = do
-  et <- nextETokenWithDepth
+  et <- nextEToken
   case et of
-    Just (d,t) ->
+    Just t ->
       case t of
         ETCommandName { etNoexpand = False, etName = name } -> do
           m <- use (localState . definitionAt name)
@@ -247,13 +249,16 @@ maybeEvalToken = do
                        cs <- use conditionals
                        case cs of
                          CondTest:_ -> do
+                           let d = etDepth t
                            unreadETokens d [t]
-                           return $ Just (ETCommandName { etNoexpand = False, etName = NControlSeq "relax" }, injectCommonValue $ Relax)
+                           return $ Just (ETCommandName { etDepth = 0, etNoexpand = False, etName = NControlSeq "relax" }, injectCommonValue $ Relax)
                          _ -> do
                            r <- doExpand e
+                           let d = etDepth t
                            unreadETokens (d+1) r
                            maybeEvalToken
             Left e -> do
+              let d = etDepth t
               r <- doExpand e
               unreadETokens (d+1) r
               maybeEvalToken
@@ -266,15 +271,16 @@ maybeEvalToken = do
 
 evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (Value s))
 evalToValue = do
-  et <- nextETokenWithDepth
+  et <- nextEToken
   case et of
-    Just (d,t) -> do
+    Just t -> do
       case t of
         ETCommandName { etNoexpand = False, etName = name } -> do
           m <- use (localState . definitionAt name)
           case m of
             Left e -> do
               r <- doExpand e
+              let d = etDepth t
               unreadETokens (d+1) r
               evalToValue
             Right v -> return (Just v)
@@ -302,8 +308,8 @@ readUntilEndcsname revName = do
 
 stringToEToken :: (MonadTeXState s m, MonadError String m) => String -> m [ExpansionToken]
 stringToEToken [] = return []
-stringToEToken (' ':xs) = (ETCharacter { etChar = ' ', etCatCode = CCSpace } :) <$> stringToEToken xs
-stringToEToken (x:xs) = (ETCharacter { etChar = x, etCatCode = CCOther } :) <$> stringToEToken xs
+stringToEToken (' ':xs) = (ETCharacter { etDepth = 0, etChar = ' ', etCatCode = CCSpace } :) <$> stringToEToken xs
+stringToEToken (x:xs) = (ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther } :) <$> stringToEToken xs
 
 -- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int
@@ -796,6 +802,15 @@ readGeneralText = do
     Just (Character _ CCSpace) -> readGeneralText -- optional spaces: ignored
     Just (Character _ CCBeginGroup) -> readUntilEndGroup LongParam
     Just Relax -> readGeneralText -- relax: ignored
+    _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
+
+readGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+readGeneralTextE = do
+  (t,v) <- evalToken
+  case toCommonValue v of
+    Just (Character _ CCSpace) -> readGeneralTextE -- optional spaces: ignored
+    Just (Character _ CCBeginGroup) -> readUntilEndGroupE LongParam
+    Just Relax -> readGeneralTextE -- relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
 readLBrace :: (MonadTeXState s m, MonadError String m) => m ()

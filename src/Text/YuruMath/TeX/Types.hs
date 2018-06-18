@@ -50,8 +50,16 @@ data TeXToken = TTCommandName !CommandName
               | TTCharacter !Char !CatCode -- not CCEscape, CCEndLine, CCIgnored, CCActive, CCComment, CCInvalid
               deriving (Eq,Show)
 
-data ExpansionToken = ETCommandName { etNoexpand :: !Bool, etName :: !CommandName }
-                    | ETCharacter { etChar :: !Char, etCatCode :: !CatCode } -- non-active character
+data ExpansionToken = ETCommandName
+                      { etDepth :: !Int
+                      , etNoexpand :: !Bool
+                      , etName :: !CommandName
+                      }
+                    | ETCharacter -- non-active character
+                      { etDepth :: !Int
+                      , etChar :: !Char
+                      , etCatCode :: !CatCode
+                      }
                       deriving (Show)
 
 -- Better name?
@@ -212,7 +220,7 @@ data CommonState localstate
     { _tokenizerState     :: !TokenizerState
     , _esMaxDepth         :: !Int
     , _esMaxPendingToken  :: !Int
-    , _esPendingTokenList :: [(Int,ExpansionToken)]
+    , _esPendingTokenList :: [ExpansionToken]
     , _localStates        :: [localstate] -- must be non-empty
     , _mode               :: !Mode
     , _conditionals       :: [ConditionalKind]
@@ -277,7 +285,7 @@ tokenizerState     = commonState . lens _tokenizerState     (\s v -> s { _tokeni
 -- expansion processor
 esMaxDepth         :: (IsState state) => Lens' state Int -- read-only?
 esMaxPendingToken  :: (IsState state) => Lens' state Int -- read-only?
-esPendingTokenList :: (IsState state) => Lens' state [(Int,ExpansionToken)]
+esPendingTokenList :: (IsState state) => Lens' state [ExpansionToken]
 conditionals       :: (IsState state) => Lens' state [ConditionalKind]
 esMaxDepth         = commonState . lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
 esMaxPendingToken  = commonState . lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })

@@ -124,13 +124,14 @@ readOptionalSpaces = do
                | otherwise -> unreadEToken t
     Nothing -> return ()
 
+-- <equals> ::= <optional spaces> | <optional spaces>'='12
 readEquals :: (MonadTeXState s m, MonadError String m) => m ()
 readEquals = do
-  t <- nextEToken
+  t <- maybeEvalToken
   case t of
-    Just (ETCharacter { etCatCode = CCSpace }) -> readOptionalSpaces -- consumed
-    Just (ETCharacter { etChar = '=', etCatCode = CCOther }) -> return () -- consumed
-    Just t -> unreadEToken t -- not consumed
+    Just (ETCharacter { etChar = '=', etCatCode = CCOther },_) -> return () -- consumed
+    Just (t,v) | isImplicitSpace v -> readEquals -- consumed
+               | otherwise -> unreadEToken t -- not consumed
     Nothing -> return ()
 
 -- read a number between 0.."10FFFF excluding "D800.."DFFF, and convert it to a Char

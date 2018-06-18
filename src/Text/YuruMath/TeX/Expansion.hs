@@ -284,15 +284,21 @@ stringToEToken [] = return []
 stringToEToken (' ':xs) = (ETCharacter { etChar = ' ', etCatCode = CCSpace } :) <$> stringToEToken xs
 stringToEToken (x:xs) = (ETCharacter { etChar = x, etCatCode = CCOther } :) <$> stringToEToken xs
 
+-- explicit space or implicit space
+isImplicitSpace :: IsValue v => v -> Bool
+isImplicitSpace v = case toCommonValue v of
+  Just (Character _ CCSpace) -> True
+  _ -> False
+
 -- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
   (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character _ CCSpace) -> readOptionalSigns s -- space: ignored
-    Just (Character '+' CCOther) -> readOptionalSigns s
-    Just (Character '-' CCOther) -> readOptionalSigns (-s)
-    _ -> unreadETokens 0 [t] >> return s
+  case t of
+    ETCharacter { etChar = '+', etCatCode = CCOther } -> readOptionalSigns s
+    ETCharacter { etChar = '-', etCatCode = CCOther } -> readOptionalSigns (-s)
+    _ | isImplicitSpace v -> readOptionalSigns s -- space: ignored
+      | otherwise -> unreadETokens 0 [t] >> return s
 
 readUnsignedDecimalInteger :: forall s m. (MonadTeXState s m, MonadError String m) => Char -> m Integer
 readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
@@ -300,57 +306,59 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
     readRest :: Integer -> m Integer
     readRest !x = do
       (t,v) <- evalToken
-      case toCommonValue v of
-        Just (Character c CCOther) | isDigit c -> do
-                                       readRest (10 * x + fromIntegral (digitToInt c))
-        Just (Character _ CCSpace) -> return x -- consumed
-        _ -> unreadETokens 0 [t] >> return x
+      case t of
+        ETCharacter { etChar = c, etCatCode = CCOther }
+          | isDigit c -> readRest (10 * x + fromIntegral (digitToInt c))
+        _ | isImplicitSpace v -> return x -- space: consumed
+          | otherwise -> unreadETokens 0 [t] >> return x
 
 readUnsignedOctal :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedOctal = do
   (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character c CCOther) | isOctDigit c -> do
-                                   readRest (fromIntegral (digitToInt c))
+  case t of
+    ETCharacter { etChar = c, etCatCode = CCOther }
+      | isOctDigit c -> readRest (fromIntegral (digitToInt c))
     _ -> throwError $ "unexpected token while reading octal: " ++ show t
   where
     readRest :: Integer -> m Integer
     readRest !x = do
       (t,v) <- evalToken
-      case toCommonValue v of
-        Just (Character c CCOther) | isOctDigit c -> do
-                                       readRest (8 * x + fromIntegral (digitToInt c))
-        Just (Character _ CCSpace) -> return x -- consumed
-        _ -> unreadETokens 0 [t] >> return x
+      case t of
+        ETCharacter { etChar = c, etCatCode = CCOther }
+          | isOctDigit c -> readRest (8 * x + fromIntegral (digitToInt c))
+        _ | isImplicitSpace v -> return x -- consumed
+          | otherwise -> unreadETokens 0 [t] >> return x
 
 readUnsignedHex :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedHex = do
   (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character c CCOther) | isUpperHexDigit c -> do
-                                   readRest (fromIntegral (digitToInt c))
-    Just (Character c CCLetter) | isHexDigit c && isAsciiUpper c -> do
-                             readRest (fromIntegral (digitToInt c))
+  case t of
+    ETCharacter { etChar = c, etCatCode = CCOther }
+      | isUpperHexDigit c -> readRest (fromIntegral (digitToInt c))
+    ETCharacter { etChar = c, etCatCode = CCLetter }
+      | isHexDigit c && isAsciiUpper c ->
+          readRest (fromIntegral (digitToInt c))
     _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
   where
     readRest :: Integer -> m Integer
     readRest !x = do
       (t,v) <- evalToken
-      case toCommonValue v of
-        Just (Character c CCOther) | isUpperHexDigit c -> do
-                                       readRest (16 * x + fromIntegral (digitToInt c))
-        Just (Character c CCLetter) | isHexDigit c && isAsciiUpper c -> do
-                                        readRest (16 * x + fromIntegral (digitToInt c))
-        Just (Character _ CCSpace) -> return x -- consumed
-        _ -> unreadETokens 0 [t] >> return x
+      case t of
+        ETCharacter { etChar = c, etCatCode = CCOther }
+          | isUpperHexDigit c -> readRest (16 * x + fromIntegral (digitToInt c))
+        ETCharacter { etChar = c, etCatCode = CCLetter }
+          | isHexDigit c && isAsciiUpper c ->
+              readRest (16 * x + fromIntegral (digitToInt c))
+        _ | isImplicitSpace v -> return x -- consumed
+          | otherwise -> unreadETokens 0 [t] >> return x
     isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
 readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
 readOneOptionalSpace = do
   (u,v) <- evalToken
-  case toCommonValue v of
-    Just (Character _ CCSpace) -> return () -- consumed
-    _ -> unreadETokens 0 [u]
+  if isImplicitSpace v
+    then return () -- consumed
+    else unreadETokens 0 [u]
 
 readCharacterCode :: (MonadTeXState s m, MonadError String m) => m Integer
 readCharacterCode = do
@@ -375,11 +383,11 @@ readNumber :: (MonadTeXState s m, MonadError String m) => m Integer
 readNumber = do
   sign <- readOptionalSigns 1
   (t,v) <- evalToken
-  (fromIntegral sign *) <$> case toCommonValue v of
-    Just (Character '\'' CCOther) -> readUnsignedOctal
-    Just (Character '"' CCOther) -> readUnsignedHex
-    Just (Character '`' CCOther) -> readCharacterCode
-    Just (Character c CCOther) | isDigit c -> readUnsignedDecimalInteger c
+  (fromIntegral sign *) <$> case t of
+    ETCharacter { etChar = '\'', etCatCode = CCOther } -> readUnsignedOctal
+    ETCharacter { etChar = '"', etCatCode = CCOther } -> readUnsignedHex
+    ETCharacter { etChar = '`', etCatCode = CCOther } -> readCharacterCode
+    ETCharacter { etChar = c, etCatCode = CCOther } | isDigit c -> readUnsignedDecimalInteger c
     _ -> case getQuantity v of
            QInteger getInteger -> getInteger
            QDimension getDimension -> asScaledPoints <$> getDimension
@@ -394,18 +402,18 @@ readUnsignedDecimalFraction c
     readIntegerPart :: Integer -> m Rational
     readIntegerPart !x = do
       (t,v) <- evalToken
-      case toCommonValue v of
-        Just (Character '.' CCOther) -> readFractionPart x 0
-        Just (Character ',' CCOther) -> readFractionPart x 0
-        Just (Character c CCOther) | isDigit c -> do
-                                       readIntegerPart (10 * x + fromIntegral (digitToInt c))
+      case t of
+        ETCharacter { etChar = '.', etCatCode = CCOther } -> readFractionPart x 0
+        ETCharacter { etChar = ',', etCatCode = CCOther } -> readFractionPart x 0
+        ETCharacter { etChar = c, etCatCode = CCOther }
+          | isDigit c -> readIntegerPart (10 * x + fromIntegral (digitToInt c))
         _ -> unreadETokens 0 [t] >> return (fromInteger x)
     readFractionPart :: Integer -> Int -> m Rational
     readFractionPart !intPart !expPart = do
       (t,v) <- evalToken
-      case toCommonValue v of
-        Just (Character c CCOther) | isDigit c -> do
-                                       readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
+      case t of
+        ETCharacter { etChar = c, etCatCode = CCOther }
+          | isDigit c -> readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
         _ -> unreadETokens 0 [t] >> return (intPart % 10^expPart)
 
 class DimenRead f where
@@ -450,12 +458,16 @@ readDimensionF = do
                 | otherwise = negateDim
   -- read <internal dimen> or <factor> or <internal glue>
   (t,v) <- evalToken
-  applySign <$> case toCommonValue v of
-    Just (Character '\'' CCOther) -> (fromInteger <$> readUnsignedOctal) >>= doUnit readDimenUnit
-    Just (Character '"' CCOther) -> (fromInteger <$> readUnsignedHex) >>= doUnit readDimenUnit
-    Just (Character '`' CCOther) -> (fromInteger <$> readCharacterCode) >>= doUnit readDimenUnit
-    Just (Character c CCOther) | isDigit c || c == '.' || c == ',' ->
-                                 readUnsignedDecimalFraction c >>= doUnit readDimenUnit
+  applySign <$> case t of
+    ETCharacter { etChar = '\'', etCatCode = CCOther } ->
+      (fromInteger <$> readUnsignedOctal) >>= doUnit readDimenUnit
+    ETCharacter { etChar = '"', etCatCode = CCOther } ->
+      (fromInteger <$> readUnsignedHex) >>= doUnit readDimenUnit
+    ETCharacter { etChar = '`', etCatCode = CCOther } ->
+      (fromInteger <$> readCharacterCode) >>= doUnit readDimenUnit
+    ETCharacter { etChar = c, etCatCode = CCOther }
+      | isDigit c || c == '.' || c == ',' ->
+          readUnsignedDecimalFraction c >>= doUnit readDimenUnit
     _ -> case getQuantity v of
            QInteger getInteger -> (fromInteger <$> getInteger) >>= doUnit readDimenUnit
            QDimension getDimen -> fixedDimen <$> getDimen
@@ -513,11 +525,16 @@ readMuDimensionF = do
                 | otherwise = negateDim
   -- read <factor> or <internal muglue>
   (t,v) <- evalToken
-  applySign <$> case toCommonValue v of
-    Just (Character '\'' CCOther) -> (fromInteger <$> readUnsignedOctal) >>= doUnit readMuUnit
-    Just (Character '"' CCOther) -> (fromInteger <$> readUnsignedHex) >>= doUnit readMuUnit
-    Just (Character '`' CCOther) -> (fromInteger <$> readCharacterCode) >>= doUnit readMuUnit
-    Just (Character c CCOther) | isDigit c || c == '.' || c == '.' -> (readUnsignedDecimalFraction c) >>= doUnit readMuUnit
+  applySign <$> case t of
+    ETCharacter { etChar = '\'', etCatCode = CCOther } ->
+      (fromInteger <$> readUnsignedOctal) >>= doUnit readMuUnit
+    ETCharacter { etChar = '"', etCatCode = CCOther } ->
+      (fromInteger <$> readUnsignedHex) >>= doUnit readMuUnit
+    ETCharacter { etChar = '`', etCatCode = CCOther } ->
+      (fromInteger <$> readCharacterCode) >>= doUnit readMuUnit
+    ETCharacter { etChar = c, etCatCode = CCOther }
+      | isDigit c || c == '.' || c == '.' ->
+        (readUnsignedDecimalFraction c) >>= doUnit readMuUnit
     _ -> case getQuantity v of
            QInteger getInteger -> (fromInteger <$> getInteger) >>= doUnit readMuUnit
            QMuGlue getMuGlue -> (fixedDimen . glueSpace) <$> getMuGlue

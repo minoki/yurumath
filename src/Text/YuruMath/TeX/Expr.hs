@@ -72,16 +72,20 @@ parseExpression name !level = parseTerm >>= readAddOp
       et <- maybeEvalToken
       case et of
         Just (t,v) ->
-          case toCommonValue v of
-            Just (Character _ CCSpace) -> readAddOp acc
-            Just (Character '+' CCOther) -> do y <- parseTerm
-                                               readAddOp (acc <+> y)
-            Just (Character '-' CCOther) -> do y <- parseTerm
-                                               readAddOp (acc <-> y)
-            Just Relax | level == 0 -> return acc -- end of input
-                       | otherwise -> throwError $ name ++ ": Unexpected \\relax"
-            Just (Character ')' CCOther) | level > 0 -> return acc -- end of input
-            _ -> unreadETokens 0 [t] >> return acc -- end of factor
+          case t of
+            ETCharacter { etChar = '+', etCatCode = CCOther } -> do
+              y <- parseTerm
+              readAddOp (acc <+> y)
+            ETCharacter { etChar = '-', etCatCode = CCOther } -> do
+              y <- parseTerm
+              readAddOp (acc <-> y)
+            ETCharacter { etChar = ')', etCatCode = CCOther}
+              | level > 0 -> return acc -- end of input
+            _ -> case toCommonValue v of
+              Just (Character _ CCSpace) -> readAddOp acc
+              Just Relax | level == 0 -> return acc -- end of input
+                         | otherwise -> throwError $ name ++ ": Unexpected \\relax"
+              _ -> unreadETokens 0 [t] >> return acc -- end of factor
         Nothing -> return acc
 
     parseTerm = parseFactor >>= readMulOp
@@ -91,32 +95,36 @@ parseExpression name !level = parseTerm >>= readAddOp
       et <- maybeEvalToken
       case et of
         Just (t,v) ->
-          case toCommonValue v of
-            Just (Character _ CCSpace) -> readMulOp acc
-            Just (Character '*' CCOther) -> do y <- parseIntegerFactor name level
-                                               readMulOp (scaleAsInteger (* y) acc)
-            Just (Character '/' CCOther) -> do y <- parseIntegerFactor name level
-                                               if y == 0
-                                                 then throwError $ name ++ ": Divide by zero"
-                                                 else readMulOp (scaleAsInteger (`etexDiv` y) acc)
-            _ -> unreadETokens 0 [t] >> return acc -- end of factor
+          case t of
+            ETCharacter { etChar = '*', etCatCode = CCOther } -> do
+              y <- parseIntegerFactor name level
+              readMulOp (scaleAsInteger (* y) acc)
+            ETCharacter { etChar = '/', etCatCode = CCOther } -> do
+              y <- parseIntegerFactor name level
+              if y == 0
+                then throwError $ name ++ ": Divide by zero"
+                else readMulOp (scaleAsInteger (`etexDiv` y) acc)
+            _ | isImplicitSpace v -> readMulOp acc
+              | otherwise -> unreadETokens 0 [t] >> return acc -- end of factor
         Nothing -> return acc
 
     parseFactor :: m q
     parseFactor = do
       (t,v) <- evalToken
-      case toCommonValue v of
-        Just (Character '(' CCOther) -> parseExpression name (level + 1)
-        Just (Character _ CCSpace) -> parseFactor
-        _ -> unreadETokens 0 [t] >> readQuantity
+      case t of
+        ETCharacter { etChar = '(', etCatCode = CCOther } ->
+          parseExpression name (level + 1)
+        _ | isImplicitSpace v -> parseFactor
+          | otherwise -> unreadETokens 0 [t] >> readQuantity
 
 parseIntegerFactor :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
 parseIntegerFactor name !level = do
   (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character '(' CCOther) -> parseExpression name (level + 1)
-    Just (Character _ CCSpace) -> parseIntegerFactor name level
-    _ -> unreadETokens 0 [t] >> readNumber
+  case t of
+    ETCharacter { etChar = '(', etCatCode = CCOther } ->
+      parseExpression name (level + 1)
+    _ | isImplicitSpace v -> parseIntegerFactor name level
+      | otherwise -> unreadETokens 0 [t] >> readNumber
 
 ssToDimen :: StretchShrink Dimen -> Dimen
 ssToDimen (FixedSS dimen) = dimen

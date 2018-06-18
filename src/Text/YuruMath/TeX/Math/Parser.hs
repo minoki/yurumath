@@ -172,10 +172,10 @@ readMathToken = do
 
       -- \Umathcharnum<signed 32-bit integer>
       MUmathcharnum -> do
-        x <- readInt32
-        let slot = 0x1FFFFF .&. (fromIntegral x :: Word32)
+        x <- int32ToWord32 <$> readInt32
+        let slot = 0x1FFFFF .&. x
         if isUnicodeScalarValue slot
-          then return $ MTMathChar (UMathCode x)
+          then return $ MTMathChar (UMathCode (word32ToInt32 x))
           else throwError "\\Umathcharnum: Invalid math code"
 
       -- \delimiter<27-bit integer>

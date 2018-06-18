@@ -394,6 +394,34 @@ readNumber = do
            QGlue getGlue -> (asScaledPoints . glueSpace) <$> getGlue
            _ -> throwError $ "Unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
 
+readGeneralInt :: (MonadTeXState s m, MonadError String m, IntegralB i) => m i
+readGeneralInt = do
+  x <- readNumber
+  case maybeFromInteger x of
+    Just x -> return x
+    Nothing
+      | x < -2^(31::Int) || 2^(31::Int) <= x ->
+        throwError "Number too big"
+      | otherwise ->
+        -- maybe another message? (like "Out of range")
+        throwError "Number too big"
+
+readInt32 :: (MonadTeXState s m, MonadError String m) => m Int32
+readInt32 = do
+  x <- readNumber
+  case maybeFromInteger x of
+    Just x -> return x
+    Nothing -> throwError "Number too big"
+
+readIntBetween :: (MonadTeXState s m, MonadError String m) => Int -> Int -> m Int
+readIntBetween lo hi = do
+  x <- readNumber
+  if fromIntegral lo <= x && x <= fromIntegral hi
+    then return (fromInteger x)
+    else if x < -2^(31::Int) || 2^(31::Int) <= x
+         then throwError "Number too big"
+         else throwError "Out of range"
+
 readUnsignedDecimalFraction :: forall s m. (MonadTeXState s m, MonadError String m) => Char -> m Rational
 readUnsignedDecimalFraction c
   | c == '.' || c == ',' = readFractionPart 0 0
@@ -615,20 +643,6 @@ instance QuantityRead (Glue Dimen) where
 
 instance QuantityRead (Glue MuDimen) where
   readQuantity = readMuGlue
-
-readInt32 :: (MonadTeXState s m, MonadError String m) => m Int32
-readInt32 = do
-  x <- readNumber
-  if x < -2^(31::Int) || 2^(31::Int) <= x
-    then throwError "Number too big"
-    else return (fromInteger x)
-
-readIntBetween :: (MonadTeXState s m, MonadError String m) => Int -> Int -> m Int
-readIntBetween lo hi = do
-  x <- readNumber
-  if fromIntegral lo <= x && x <= fromIntegral hi
-    then return (fromIntegral x)
-    else throwError "Out of range"
 
 -- \the, \showthe
 theString :: (MonadTeXState s m, MonadError String m) => String -> m String

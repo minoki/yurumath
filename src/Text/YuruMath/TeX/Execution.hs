@@ -11,7 +11,6 @@ import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
-import Data.Word
 import Data.Bits
 import Data.Text (Text)
 import Control.Monad
@@ -161,14 +160,13 @@ umathcharnumdefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignm
 umathcharnumdefCommand = do
   name <- readCommandName
   readEquals
-  value <- readInt32
-  let valueu = fromIntegral value :: Word32
-      -- mathclass = 0x7 .&. (valueu `shiftR` 21)
-      -- fam = 0xFF .&. (valueu `shiftR` 24)
-      code = 0x1FFFFF .&. valueu
+  value <- int32ToWord32 <$> readInt32
+  let -- mathclass = 0x7 .&. (value `shiftR` 21)
+      -- fam = 0xFF .&. (value `shiftR` 24)
+      code = 0x1FFFFF .&. value
   unless (isUnicodeScalarValue code)
     $ throwError "\\Umathcharnumdef: Invalid math code"
-  let w = injectCommonValue $ DefinedMathCharacter $ UMathCode value
+  let w = injectCommonValue $ DefinedMathCharacter $ UMathCode (word32ToInt32 value)
   texAssign (definitionAt name) (Right w)
 
 -- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
@@ -267,7 +265,7 @@ udelcodenumSet = do
   value <- readInt32
   unless (0 <= value && value < 2^(29::Int))
     $ throwError "\\Udelcodenum: Invalid delimiter code"
-  let valueu = fromIntegral value :: Word32
+  let valueu = int32ToWord32 value
       -- fam = 0xFF .&. (valueu `shiftR` 21)
       code = 0x1FFFFF .&. valueu
   unless (isUnicodeScalarValue code)
@@ -422,21 +420,13 @@ divideCommand !global = do
                  n global
     Nothing -> throwError $ "You can't use " ++ show et ++ " after \\divide"
 
-advanceInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
+advanceInteger :: (MonadTeXState s m, MonadError String m, IntegralB i) => Lens' (LocalState s) i -> m (Assignment s)
 advanceInteger l = do
   value <- use (localState . l)
   arg <- readNumber
-  let !value' = value + arg
-  texAssign l value'
-
-advanceInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
-advanceInt l = do
-  value <- use (localState . l)
-  arg <- readNumber
-  let !value' = fromIntegral value + arg
-  if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
-    then throwError "Arithmetic overflow"
-    else texAssign l (fromInteger value')
+  case maybeFromInteger (fromIntegral value + arg) of
+    Just value' -> texAssign l (fromInteger value')
+    Nothing -> throwError "Arithmetic overflow"
 
 advanceQuantity :: (MonadTeXState s m, MonadError String m, QuantityRead q) => Lens' (LocalState s) q -> m (Assignment s)
 advanceQuantity l = do
@@ -444,21 +434,13 @@ advanceQuantity l = do
   arg <- readQuantity
   texAssign l (value <+> arg)
 
-multiplyInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
+multiplyInteger :: (MonadTeXState s m, MonadError String m, IntegralB i) => Lens' (LocalState s) i -> m (Assignment s)
 multiplyInteger l = do
   value <- use (localState . l)
   arg <- readNumber
-  let !value' = value * arg
-  texAssign l value'
-
-multiplyInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
-multiplyInt l = do
-  value <- use (localState . l)
-  arg <- readNumber
-  let !value' = fromIntegral value * arg
-  if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
-    then throwError "Arithmetic overflow"
-    else texAssign l (fromInteger value')
+  case maybeFromInteger (fromIntegral value * arg) of
+    Just value' -> texAssign l (fromInteger value')
+    Nothing -> throwError "Arithmetic overflow"
 
 multiplyQuantity :: (MonadTeXState s m, MonadError String m, Quantity q) => Lens' (LocalState s) q -> m (Assignment s)
 multiplyQuantity l = do
@@ -466,25 +448,15 @@ multiplyQuantity l = do
   arg <- readNumber
   texAssign l (scaleAsInteger (* arg) value)
 
-divideInteger :: (MonadTeXState s m, MonadError String m) => Lens' (LocalState s) Integer -> m (Assignment s)
+divideInteger :: (MonadTeXState s m, MonadError String m, IntegralB i) => Lens' (LocalState s) i -> m (Assignment s)
 divideInteger l = do
   value <- use (localState . l)
   arg <- readNumber
   if arg == 0
     then throwError "Divide by zero" -- TeX says "Arithmetic overflow."
-    else texAssign l (value `quot` arg)
-
-divideInt :: (MonadTeXState s m, MonadError String m, Integral i, Bounded i) => Lens' (LocalState s) i -> m (Assignment s)
-divideInt l = do
-  value <- use (localState . l)
-  arg <- readNumber
-  if arg == 0
-    then throwError "Divide by zero" -- TeX says "Arithmetic overflow."
-    else do
-    let !value' = fromIntegral value `quot` arg
-    if value' < fromIntegral (minBound `asTypeOf` value) || fromIntegral (maxBound `asTypeOf` value) < value'
-      then throwError "Arithmetic overflow"
-      else texAssign l (fromInteger value')
+    else case maybeFromInteger (fromIntegral value `quot` arg) of
+           Just value' -> texAssign l (fromInteger value')
+           Nothing -> throwError "Arithmetic overflow"
 
 divideQuantity :: (MonadTeXState s m, MonadError String m, Quantity q) => Lens' (LocalState s) q -> m (Assignment s)
 divideQuantity l = do
@@ -656,22 +628,22 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   doGlobal Emultiply        = Just $ multiplyCommand True
   doGlobal Edivide          = Just $ divideCommand True
   doGlobal _                = Nothing
-  doAdvance Eendlinechar    = Just $ runArithmetic $ advanceInt endlinechar
-  doAdvance Eescapechar     = Just $ runArithmetic $ advanceInt escapechar
+  doAdvance Eendlinechar    = Just $ runArithmetic $ advanceInteger endlinechar
+  doAdvance Eescapechar     = Just $ runArithmetic $ advanceInteger escapechar
   doAdvance Ecount          = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceInteger $ countRegAt index)
   doAdvance Edimen          = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ dimenRegAt index)
   doAdvance Eskip           = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ skipRegAt index)
   doAdvance Emuskip         = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ muskipRegAt index)
   doAdvance _               = Nothing
-  doMultiply Eendlinechar   = Just $ runArithmetic $ multiplyInt endlinechar
-  doMultiply Eescapechar    = Just $ runArithmetic $ multiplyInt escapechar
+  doMultiply Eendlinechar   = Just $ runArithmetic $ multiplyInteger endlinechar
+  doMultiply Eescapechar    = Just $ runArithmetic $ multiplyInteger escapechar
   doMultiply Ecount         = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyInteger $ countRegAt index)
   doMultiply Edimen         = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ dimenRegAt index)
   doMultiply Eskip          = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ skipRegAt index)
   doMultiply Emuskip        = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ muskipRegAt index)
   doMultiply _              = Nothing
-  doDivide Eendlinechar     = Just $ runArithmetic $ divideInt endlinechar
-  doDivide Eescapechar      = Just $ runArithmetic $ divideInt escapechar
+  doDivide Eendlinechar     = Just $ runArithmetic $ divideInteger endlinechar
+  doDivide Eescapechar      = Just $ runArithmetic $ divideInteger escapechar
   doDivide Ecount           = Just $ readRegIndex >>= (\index -> runArithmetic $ divideInteger $ countRegAt index)
   doDivide Edimen           = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ dimenRegAt index)
   doDivide Eskip            = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ skipRegAt index)

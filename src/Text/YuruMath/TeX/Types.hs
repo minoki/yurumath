@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Text.YuruMath.TeX.Types where
 import Data.Int
 import Data.Word
@@ -389,3 +390,23 @@ instance IsLocalState localstate => IsState (CommonState localstate) where
 -- TODO: Better place?
 isUnicodeScalarValue :: (Integral a) => a -> Bool
 isUnicodeScalarValue x = 0 <= x && x <= 0x10FFFF && not (0xD800 <= x && x <= 0xDFFF)
+
+-- Integral with or without bounds
+class (Integral a) => IntegralB a where
+  maybeFromInteger :: Integer -> Maybe a
+  default maybeFromInteger :: (Bounded a) => Integer -> Maybe a
+  maybeFromInteger x
+    | fromIntegral (minBound :: a) <= x && x <= fromIntegral (maxBound :: a) = Just (fromIntegral x)
+    | otherwise = Nothing
+
+instance IntegralB Integer where maybeFromInteger = Just
+instance IntegralB Int
+instance IntegralB Int32
+instance IntegralB Word
+instance IntegralB Word32
+
+int32ToWord32 :: Int32 -> Word32
+int32ToWord32 = fromIntegral
+
+word32ToInt32 :: Word32 -> Int32
+word32ToInt32 = fromIntegral

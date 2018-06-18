@@ -91,12 +91,26 @@ readCommandName = do
     _ -> throwError $ "unexpected character token: " ++ show t
          -- or, "Missing control sequence inserted"
 
+-- explicit space or implicit space
+isImplicitSpace :: IsValue v => v -> Bool
+isImplicitSpace v = case toCommonValue v of
+  Just (Character _ CCSpace) -> True
+  _ -> False
+
+readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
+readOneOptionalSpace = do
+  et <- maybeEvalToken
+  case et of
+    Just (t,v) | isImplicitSpace v -> return () -- consumed
+               | otherwise -> unreadETokens 0 [t]
+    Nothing -> return ()
+
 readOptionalSpaces :: (MonadTeXState s m, MonadError String m) => m ()
 readOptionalSpaces = do
-  t <- nextETokenWithDepth
-  case t of
-    Just (_,ETCharacter { etCatCode = CCSpace }) -> readOptionalSpaces -- consumed
-    Just (d,t) -> unreadETokens d [t] -- not consumed
+  et <- maybeEvalToken
+  case et of
+    Just (t,v) | isImplicitSpace v -> readOptionalSpaces -- consumed
+               | otherwise -> unreadETokens 0 [t]
     Nothing -> return ()
 
 readEquals :: (MonadTeXState s m, MonadError String m) => m ()
@@ -284,12 +298,6 @@ stringToEToken [] = return []
 stringToEToken (' ':xs) = (ETCharacter { etChar = ' ', etCatCode = CCSpace } :) <$> stringToEToken xs
 stringToEToken (x:xs) = (ETCharacter { etChar = x, etCatCode = CCOther } :) <$> stringToEToken xs
 
--- explicit space or implicit space
-isImplicitSpace :: IsValue v => v -> Bool
-isImplicitSpace v = case toCommonValue v of
-  Just (Character _ CCSpace) -> True
-  _ -> False
-
 -- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
@@ -352,13 +360,6 @@ readUnsignedHex = do
         _ | isImplicitSpace v -> return x -- consumed
           | otherwise -> unreadETokens 0 [t] >> return x
     isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
-
-readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
-readOneOptionalSpace = do
-  (u,v) <- evalToken
-  if isImplicitSpace v
-    then return () -- consumed
-    else unreadETokens 0 [u]
 
 readCharacterCode :: (MonadTeXState s m, MonadError String m) => m Integer
 readCharacterCode = do

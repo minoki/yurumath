@@ -140,7 +140,7 @@ data MathExpandable = Mmathstyle -- LuaTeX extension
 mathstyleCommand :: (MonadTeXState state m, MonadError String m, IsMathState state) => m [ExpansionToken]
 mathstyleCommand = do
   value <- use currentMathStyle
-  case value of
+  return $ case value of
     Just style -> stringToEToken $ show $ fromEnum style -- 0..7
     Nothing -> stringToEToken "-1" -- not in math mode
 

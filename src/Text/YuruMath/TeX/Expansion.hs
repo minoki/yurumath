@@ -310,10 +310,10 @@ readUntilEndcsname revName = do
       ETCommandName { etName = name } -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
       ETCharacter { etChar = c } -> readUntilEndcsname (c:revName) -- non-active character
 
-stringToEToken :: (MonadTeXState s m, MonadError String m) => String -> m [ExpansionToken]
-stringToEToken [] = return []
-stringToEToken (' ':xs) = (ETCharacter { etDepth = 0, etChar = ' ', etCatCode = CCSpace } :) <$> stringToEToken xs
-stringToEToken (x:xs) = (ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther } :) <$> stringToEToken xs
+stringToEToken :: String -> [ExpansionToken]
+stringToEToken = map charToEToken
+  where charToEToken ' ' = ETCharacter { etDepth = 0, etChar = ' ', etCatCode = CCSpace }
+        charToEToken x   = ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther }
 
 -- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int

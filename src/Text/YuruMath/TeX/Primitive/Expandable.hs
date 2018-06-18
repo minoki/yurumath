@@ -66,19 +66,19 @@ stringCommand = do
   case t of
     ETCommandName { etName = NControlSeq name } -> do
       ech <- use (localState . escapechar)
-      if isUnicodeScalarValue ech
-      then stringToEToken (chr ech : T.unpack name)
-      else stringToEToken (T.unpack name)
+      return $ if isUnicodeScalarValue ech
+               then stringToEToken (chr ech : T.unpack name)
+               else stringToEToken (T.unpack name)
     ETCommandName { etName = NActiveChar c } ->
-      stringToEToken [c]
+      return $ stringToEToken [c]
     ETCharacter { etChar = c } ->
-      stringToEToken [c]
+      return $ stringToEToken [c]
 
 -- LuaTeX extension: \csstring
 csstringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 csstringCommand = do
   t <- required nextEToken
-  case t of
+  return $ case t of
     ETCommandName { etName = NControlSeq name } ->
       stringToEToken (T.unpack name)
     ETCommandName { etName = NActiveChar c } ->
@@ -88,26 +88,21 @@ csstringCommand = do
 
 numberCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 numberCommand = do
-  x <- readNumber
-  stringToEToken (show x)
+  stringToEToken . show <$> readNumber
 
 theCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-theCommand = theString "\\the" >>= stringToEToken
+theCommand = stringToEToken <$> theString "\\the"
 
 meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => m [ExpansionToken]
 meaningCommand = do
   e <- use (localState . escapechar)
   value <- required nextEToken >>= meaningWithoutExpansion
-  stringToEToken (meaningWithEscapecharAsInt e value)
+  return $ stringToEToken (meaningWithEscapecharAsInt e value)
 
 romannumeralCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 romannumeralCommand = do
-  x <- readNumber
-  if x < 0
-    then return []
-    else if x > fromIntegral (maxBound :: Int)
-         then throwError "\\romannumeral: too large"
-         else stringToEToken (showRomannumeral (fromIntegral x))
+  -- Should guard against big input?
+  stringToEToken . showRomannumeral <$> readGeneralInt
 
 elseCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 elseCommand = do

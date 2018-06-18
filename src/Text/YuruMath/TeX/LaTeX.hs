@@ -3,7 +3,7 @@
 {-# LANGUAGE DataKinds #-}
 module Text.YuruMath.TeX.LaTeX where
 import Text.YuruMath.TeX.Types
-import Text.YuruMath.TeX.Tokenizer
+import qualified Text.YuruMath.TeX.Tokenizer as Tok (tokenizeString,latexInternalTokenizerContext)
 import Text.YuruMath.TeX.Macro
 import Text.YuruMath.TeX.State
 import Data.Text (Text)
@@ -12,7 +12,7 @@ import Data.OpenUnion
 import qualified Data.Map.Strict as Map
 
 tokenizeStaticString :: String -> [TeXToken]
-tokenizeStaticString s = case tokenizeString latexInternalTokenizerContext s of
+tokenizeStaticString s = case Tok.tokenizeString Tok.latexInternalTokenizerContext s of
   Left err -> error $ "Token error in static string: " ++ err
   Right x -> x
 

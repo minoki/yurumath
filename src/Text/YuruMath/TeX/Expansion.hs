@@ -4,7 +4,7 @@
 module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
-import Text.YuruMath.TeX.Tokenizer
+import qualified Text.YuruMath.TeX.Tokenizer as Tok (nextToken)
 import Text.YuruMath.TeX.State
 import Data.Int
 import Data.Char
@@ -28,7 +28,7 @@ nextEToken :: (MonadTeXState s m, MonadError String m) => m (Maybe ExpansionToke
 nextEToken = do
   pending <- use esPendingTokenList
   case pending of
-    [] -> do t <- nextToken
+    [] -> do t <- Tok.nextToken
              return (toEToken <$> t)
     (_,t):ts -> do
       assign esPendingTokenList ts
@@ -38,7 +38,7 @@ nextETokenWithDepth :: (MonadTeXState s m, MonadError String m) => m (Maybe (Int
 nextETokenWithDepth = do
   pending <- use esPendingTokenList
   case pending of
-    [] -> do t <- nextToken
+    [] -> do t <- Tok.nextToken
              return (((,) 0 . toEToken) <$> t)
     t:ts -> do
       assign esPendingTokenList ts

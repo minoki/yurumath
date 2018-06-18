@@ -6,7 +6,7 @@ import Test.HUnit
 import Data.Semigroup
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State
-import Text.YuruMath.TeX.Tokenizer
+import qualified Text.YuruMath.TeX.Tokenizer as Tok
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.Math
@@ -25,7 +25,7 @@ defineBuiltins = do
 
 tokenizeAll :: (MonadTeXState s m, MonadError String m, ValueSet s ~ '[CommonValue], ExpandableSet s ~ ExpandablePrimitiveList) => m [TeXToken]
 tokenizeAll = do
-  t <- nextToken
+  t <- Tok.nextToken
   case t of
     Nothing -> return []
     Just t -> (t:) <$> tokenizeAll

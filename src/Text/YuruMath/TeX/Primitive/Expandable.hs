@@ -97,7 +97,7 @@ theCommand = theString "\\the" >>= stringToEToken
 meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => m [ExpansionToken]
 meaningCommand = do
   e <- use (localState . escapechar)
-  value <- required nextEToken >>= meaning
+  value <- required nextEToken >>= meaningWithoutExpansion
   stringToEToken (meaningWithEscapecharAsInt e value)
 
 romannumeralCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
@@ -220,8 +220,8 @@ ifcatCommand = do
 
 ifxCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifxCommand = do
-  t1 <- required nextEToken >>= meaning
-  t2 <- required nextEToken >>= meaning
+  t1 <- required nextEToken >>= meaningWithoutExpansion
+  t2 <- required nextEToken >>= meaningWithoutExpansion
   return $ t1 == t2
 
 ifnumCommand :: (MonadTeXState s m, MonadError String m) => m Bool
@@ -266,7 +266,7 @@ ifinnerCommand = uses mode isInnerMode
 -- e-TeX extension: \ifdefined
 ifdefinedCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdefinedCommand = do
-  t <- required nextEToken >>= meaning
+  t <- required nextEToken >>= meaningWithoutExpansion
   case toCommonValue <$> t of
     Right (Just (Undefined _)) -> return False
     _ -> return True
@@ -282,7 +282,7 @@ ifcsnameCommand = do
 -- e-TeX extension: \unless
 unlessCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 unlessCommand = do
-  test <- required nextEToken >>= meaning
+  test <- required nextEToken >>= meaningWithoutExpansion
   case test of
     Left c | Just c <- evalBooleanConditional c -> expandBooleanConditional (not <$> c)
     _ -> throwError "\\unless must be followed by a boolean conditional command"

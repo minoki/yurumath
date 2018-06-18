@@ -92,11 +92,8 @@ letCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 letCommand = do
   name <- readCommandName
   readEquals
-  t <- required nextEToken
-  t <- case t of
-    ETCharacter _ CCSpace -> required nextEToken -- one optional space
-    _ -> return t
-  v <- meaning t
+  readOneOptionalSpace
+  v <- required nextEToken >>= meaningWithoutExpansion
   texAssign (definitionAt name) v
 
 futureletCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
@@ -105,7 +102,7 @@ futureletCommand = do
   t1 <- required nextEToken
   t2 <- required nextEToken
   unreadETokens 0 [t1,t2]
-  v <- meaning t2
+  v <- meaningWithoutExpansion t2
   texAssign (definitionAt name) v
 
 uppercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()

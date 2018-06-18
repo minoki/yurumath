@@ -775,8 +775,8 @@ expandBooleanConditional c = do
     doBooleanConditional b
     return []
 
-meaning :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
-meaning t = do
+meaningWithoutExpansion :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
+meaningWithoutExpansion t = do
   case t of
     ETCommandName { etNoexpand = True, etName = name } -> return (Right (injectCommonValue $ Unexpanded name))
     ETCommandName { etNoexpand = False, etName = name } -> use (localState . definitionAt name)

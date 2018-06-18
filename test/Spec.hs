@@ -38,7 +38,7 @@ expandAll = do
   t <- evalToValue
   case t of
     Nothing -> return []
-    Just v -> (v:) <$> expandAll
+    Just (_,v) -> (v:) <$> expandAll
 
 expandAllString :: String -> Either String [Value (CommonState (CommonLocalState ExpandablePrimitiveList NonExpandablePrimitiveList))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
@@ -237,7 +237,11 @@ looptest2 = TestCase $ assertEqual "Prevent Infinite Loop" expected (runMathList
   where
     expected = Left "token list too long"
 
-looptest3 = TestCase $ assertEqual "Prevent Infinite Loop" expected (runMathList True "\\newcommand\\loop{\\uppercase{\\loop}} \\loop")
+looptest3 = TestCase $ assertEqual "Prevent Infinite Loop (uppercase)" expected (runMathList True "\\newcommand\\loop{\\uppercase{\\loop}} \\loop")
+  where
+    expected = Left "recursion too deep"
+
+looptest4 = TestCase $ assertEqual "Prevent Infinite Loop (math active)" expected (runMathList True "\\newcommand\\foo{'}{\\catcode`\\'=13 \\global\\let'=\\foo} '")
   where
     expected = Left "recursion too deep"
 
@@ -259,6 +263,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Loop 1" looptest1
                  ,TestLabel "Loop 2" looptest2
                  ,TestLabel "Loop 3" looptest3
+                 ,TestLabel "Loop 4" looptest4
                  ]
 
 main = runTestTT tests

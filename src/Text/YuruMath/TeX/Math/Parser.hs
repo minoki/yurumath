@@ -73,44 +73,45 @@ type MonadMathState state set m
     , Show (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))))
     )
 
-readMathToken :: forall m state set. (MonadMathState state set m, MonadError String m) => m (Maybe (MathToken m))
+readMathToken :: forall m state set. (MonadMathState state set m, MonadError String m) => m (Maybe (ExpansionToken,MathToken m))
 readMathToken = do
   v <- evalToValue
   case v of
     Nothing -> return Nothing -- end of input
-    Just v -> doMathToken v
+    Just (et,v) -> doMathToken et v
   where
-    doMathToken :: Union set -> m (Maybe (MathToken m))
-    doMathToken = doCommonValue
-                  @> (\(v :: MathStyleSet)    -> Just <$> doMathStyleSet v)
-                  @> (\(v :: MathAtomCommand) -> Just <$> doMathAtom v)
-                  @> (\(v :: MathCommands)    -> Just <$> doOtherMathCommand v)
-                  @> (\(v :: MathVariantSet)  -> Just <$> doMathVariantSet v)
-                  @> (\(v :: MathSymbolModeSet) -> Just <$> doMathSymbolModeSet v)
-                  @> (\(v :: TypesetCommand)  -> Just <$> doTypesetCommand v)
-                  @> (\(v :: BoxCommand)      -> Just <$> doBoxCommand v)
-                  @> (\v                      -> return $ Just $ MTOther v) -- other assignments, etc
-    doCommonValue :: CommonValue -> m (Maybe (MathToken m))
-    doCommonValue v = case v of
-      Character c CCBeginGroup   -> return $ Just MTLBrace
-      Character c CCEndGroup     -> return $ Just MTRBrace
+    doMathToken :: ExpansionToken -> Union set -> m (Maybe (ExpansionToken,MathToken m))
+    doMathToken et = doCommonValue et
+                     @> (\(v :: MathStyleSet)    -> just <$> doMathStyleSet v)
+                     @> (\(v :: MathAtomCommand) -> just <$> doMathAtom v)
+                     @> (\(v :: MathCommands)    -> just <$> doOtherMathCommand v)
+                     @> (\(v :: MathVariantSet)  -> just <$> doMathVariantSet v)
+                     @> (\(v :: MathSymbolModeSet) -> just <$> doMathSymbolModeSet v)
+                     @> (\(v :: TypesetCommand)  -> just <$> doTypesetCommand v)
+                     @> (\(v :: BoxCommand)      -> just <$> doBoxCommand v)
+                     @> (\v                      -> return $ just $ MTOther v) -- other assignments, etc
+      where just v = Just (et,v)
+    doCommonValue :: ExpansionToken -> CommonValue -> m (Maybe (ExpansionToken,MathToken m))
+    doCommonValue et v = case v of
+      Character c CCBeginGroup   -> return $ Just (et,MTLBrace)
+      Character c CCEndGroup     -> return $ Just (et,MTRBrace)
       Character _ CCMathShift -> do
         m <- use mode
         if m == DisplayMathMode
-          then do et <- nextEToken -- without expansion
-                  case et of
-                    Just (ETCharacter { etCatCode = CCMathShift }) -> return $ Just MTStopDisplay
+          then do et' <- nextEToken -- without expansion
+                  case et' of
+                    Just (ETCharacter { etCatCode = CCMathShift }) -> return $ Just (et,MTStopDisplay)
                     _ -> throwError "Display math should end with $$."
-          else return $ Just MTStopInline
+          else return $ Just (et,MTStopInline)
       Character c CCAlignmentTab -> throwError "alignment tab: not implemented yet"
-      Character c CCSup          -> return $ Just MTSup
-      Character c CCSub          -> return $ Just MTSub
+      Character c CCSup          -> return $ Just (et,MTSup)
+      Character c CCSub          -> return $ Just (et,MTSub)
       Character c CCSpace        -> readMathToken -- do nothing
-      Character c CCLetter       -> return $ Just $ MTChar c -- TODO: process 'math active'
-      Character c CCOther        -> return $ Just $ MTChar c -- TODO: process 'math active'
+      Character c CCLetter       -> return $ Just (et,MTChar c)
+      Character c CCOther        -> return $ Just (et,MTChar c)
       Character _ cc             -> throwError $ "Unexpected " ++ show cc ++ " character" -- endline, param, ignored, active, comment, invalid
-      DefinedCharacter c         -> return $ Just $ MTChar c
-      DefinedMathCharacter c     -> return $ Just $ MTMathChar c
+      DefinedCharacter c         -> return $ Just (et,MTChar c)
+      DefinedMathCharacter c     -> return $ Just (et,MTMathChar c)
       v -> doExecute v >> readMathToken -- \relax, etc
     doMathStyleSet (MathStyleSet style) = return $ MTSetStyle style
     doMathAtom (MathAtomCommand atomType) = return $ MTAtomSpec atomType
@@ -329,11 +330,11 @@ readDelimiter = do
   t <- readMathToken
   case t of
     Nothing -> throwError "Missing delimiter: got end of input"
-    Just (MTChar c) -> do
+    Just (_,MTChar c) -> do
       delimiterCodeOf c
-    Just (MTDelimiter _ code) -> do
+    Just (_,MTDelimiter _ code) -> do
       return code
-    Just t -> throwError $ "Missing delimiter: got " ++ show t
+    Just (_,t) -> throwError $ "Missing delimiter: got " ++ show t
 
 -- <Uleft-like option> ::= "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>
 readDelimiterOptions :: (MonadTeXState s m, MonadError String m) => m DelimiterOptions
@@ -439,13 +440,13 @@ readMathMaterial = loop []
               loop (IAtom atom : revList)
       case t of
         Nothing -> onEndOfInput (return (reverse revList))
-        Just t -> case t of
+        Just (et,t) -> case t of
           -- <character>
           MTChar c -> do
             mc <- mathCodeOf c
             if mc == MathCode 0x8000
               then do -- math active
-                      unreadEToken (ETCommandName { etDepth = 0, etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
+                      unreadEToken (ETCommandName { etDepth = etDepth et + 1, etNoexpand = False, etName = NActiveChar c })
                       loop revList
               else do delcode <- delimiterCodeOf c
                       let mathclass = mathcharClass mc
@@ -635,12 +636,12 @@ readMathField = do
   t <- readMathToken
   case t of
     Nothing -> throwError "Unexpected end of input: expected a math field"
-    Just t -> case t of
+    Just (et,t) -> case t of
       MTChar c -> do
         mc <- mathCodeOf c
         if mc == MathCode 0x8000
           then do -- math active
-                  unreadEToken (ETCommandName { etDepth = 0, etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
+                  unreadEToken (ETCommandName { etDepth = etDepth et + 1, etNoexpand = False, etName = NActiveChar c })
                   readMathField
           else makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed

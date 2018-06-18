@@ -55,6 +55,8 @@ unreadEToken :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m 
 unreadEToken t = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
+  maxDepth <- use esMaxDepth
+  when (etDepth t >= maxDepth) $ throwError "recursion too deep"
   when (length ts' + 1 > limit) $ throwError "token list too long"
   assign esPendingTokenList (t : ts')
 
@@ -269,7 +271,7 @@ maybeEvalToken = do
           return $ Just (t,injectCommonValue $ Character c cc)
     Nothing -> return Nothing
 
-evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (Value s))
+evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
 evalToValue = do
   et <- nextEToken
   case et of
@@ -283,11 +285,11 @@ evalToValue = do
               let d = etDepth t
               unreadETokens (d+1) r
               evalToValue
-            Right v -> return (Just v)
+            Right v -> return (Just (t,v))
         ETCommandName { etNoexpand = True, etName = name } -> do
-          return (Just (injectCommonValue $ Unexpanded name))
+          return (Just (t,injectCommonValue $ Unexpanded name))
         ETCharacter { etChar = c, etCatCode = cc } ->
-          return (Just (injectCommonValue $ Character c cc))
+          return (Just (t,injectCommonValue $ Character c cc))
     Nothing -> return Nothing
 
 required :: (MonadError String m) => m (Maybe a) -> m a

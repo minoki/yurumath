@@ -628,14 +628,6 @@ readMathMaterial = loop []
             doExecute v
             loop revList
 
-readLBrace :: (MonadMathState state set m, MonadError String m) => m ()
-readLBrace = do
-  t <- readMathToken
-  case t of
-    Just MTLBrace -> do
-      enterGroup ScopeByBrace
-    _ -> throwError "Expected `{'"
-
 -- <math symbol> ::= <character> | <math character>
 -- <math field> ::= <math symbol> | {<math mode material>}
 readMathField :: (MonadMathState state set m, MonadError String m, BoxReader a m) => m (MathField a)

@@ -4,6 +4,7 @@ module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Tokenizer
+import Text.YuruMath.TeX.State
 import Data.Int
 import Data.Char
 import Data.Ratio
@@ -748,3 +749,12 @@ readGeneralText = do
     Just (Character _ CCBeginGroup) -> readUntilEndGroup LongParam
     Just Relax -> readGeneralText -- relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
+
+readLBrace :: (MonadTeXState s m, MonadError String m) => m ()
+readLBrace = do
+  (t,v) <- evalToken
+  case toCommonValue v of
+    Just (Character _ CCSpace) -> readLBrace
+    Just (Character _ CCBeginGroup) -> do
+      enterGroup ScopeByBrace
+    _ -> throwError ("Expected `{', but got " ++ show t)

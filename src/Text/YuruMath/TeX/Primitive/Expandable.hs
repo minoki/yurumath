@@ -227,25 +227,25 @@ ifxCommand = do
 ifnumCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifnumCommand = do
   x <- readNumber
-  -- TODO: skip spaces
-  rel <- required nextEToken >>= meaning
+  readOptionalSpaces
+  (rel,_) <- evalToken
   y <- readNumber
-  case toCommonValue <$> rel of
-    Right (Just (Character '<' CCOther)) -> return $ x < y
-    Right (Just (Character '=' CCOther)) -> return $ x == y
-    Right (Just (Character '>' CCOther)) -> return $ x > y
+  case rel of
+    ETCharacter { etChar = '<', etCatCode = CCOther } -> return $ x < y
+    ETCharacter { etChar = '=', etCatCode = CCOther } -> return $ x == y
+    ETCharacter { etChar = '>', etCatCode = CCOther } -> return $ x > y
     _ -> throwError "unrecognized relation for \\ifnum"
 
 ifdimCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdimCommand = do
   x <- readDimension
-  -- TODO: skip spaces
-  rel <- required nextEToken >>= meaning
+  readOptionalSpaces
+  (rel,_) <- evalToken
   y <- readDimension
-  case toCommonValue <$> rel of
-    Right (Just (Character '<' CCOther)) -> return $ x < y
-    Right (Just (Character '=' CCOther)) -> return $ x == y
-    Right (Just (Character '>' CCOther)) -> return $ x > y
+  case rel of
+    ETCharacter { etChar = '<', etCatCode = CCOther } -> return $ x < y
+    ETCharacter { etChar = '=', etCatCode = CCOther } -> return $ x == y
+    ETCharacter { etChar = '>', etCatCode = CCOther } -> return $ x > y
     _ -> throwError "unrecognized relation for \\ifdim"
 
 ifoddCommand :: (MonadTeXState s m, MonadError String m) => m Bool

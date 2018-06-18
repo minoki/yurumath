@@ -5,7 +5,6 @@ module Text.YuruMath.TeX.LaTeX where
 import Text.YuruMath.TeX.Types
 import qualified Text.YuruMath.TeX.Tokenizer as Tok (tokenizeString,latexInternalTokenizerContext)
 import Text.YuruMath.TeX.Macro
-import Text.YuruMath.TeX.State
 import Data.Text (Text)
 import TypeFun.Data.List (Elem,SubList)
 import Data.OpenUnion

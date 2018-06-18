@@ -12,6 +12,8 @@
 module Text.YuruMath.TeX.Types where
 import Data.Int
 import Data.Word
+import Data.Bits
+import Data.Char
 import Data.Text (Text)
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
@@ -21,7 +23,6 @@ import Data.OpenUnion
 import Data.OpenUnion.Internal ((@!>))
 import TypeFun.Data.List (Delete,Elem)
 import Data.Typeable (Typeable)
-import Data.Char
 import Text.YuruMath.TeX.Quantity
 
 data CatCode = CCEscape       -- 0
@@ -82,9 +83,59 @@ data MathCode = MathCode !Word16 -- "xyzz (15-bit number) or "8000 (math active)
               | UMathCode !Int32 -- 8 bits for the math family, 3 bits for the math class, 21 bits for the character code
               deriving (Eq,Show)
 
+mkMathCode :: MathClass -> Word8 -> Char -> MathCode
+mkMathCode cls fam code
+  | code <= '\xFF' = MathCode
+                     $ (fromIntegral (fromEnum cls) `shiftL` 12)
+                     .|. (fromIntegral fam `shiftL` 8)
+                     .|. fromIntegral (ord code)
+  | otherwise = error "Use mkUMathCode for code points beyond U+0100 "
+
+mkUMathCode :: MathClass -> Word8 -> Char -> MathCode
+mkUMathCode cls fam code = UMathCode
+                           $ (fromIntegral (fromIntegral fam :: Int8) `shiftL` 24)
+                           .|. (fromIntegral (fromEnum cls) `shiftL` 21)
+                           .|. fromIntegral (ord code)
+
+mathcharClass :: MathCode -> MathClass
+mathcharClass (MathCode x) = toEnum $ fromIntegral $ 7 .&. (x `shiftR` 12)
+mathcharClass (UMathCode x) = toEnum $ fromIntegral $ 7 .&. (int32ToWord32 x `shiftR` 21)
+
+mathcharFamily :: MathCode -> Word8
+mathcharFamily (MathCode x) = fromIntegral $ 0xF .&. (x `shiftR` 8)
+mathcharFamily (UMathCode x) = fromIntegral $ 0xFF .&. (int32ToWord32 x `shiftR` 24)
+
+mathcharSlot :: MathCode -> Char
+mathcharSlot (MathCode x) = toEnum $ fromIntegral $ 0xFF .&. x
+mathcharSlot (UMathCode x) = toEnum $ fromIntegral $ 0x1FFFFF .&. int32ToWord32 x
+
+mathActive :: MathCode
+mathActive = MathCode 0x8000
+
 data DelimiterCode = DelimiterCode !Int32 -- "uvvxyy (24-bit number), where uvv: the small variant, xyy: the large variant
                    | UDelimiterCode !Int32
                    deriving (Eq,Show)
+
+mkUDelCode :: Word8 -> Char -> DelimiterCode
+mkUDelCode fam code = UDelimiterCode
+                      $ (fromIntegral fam `shiftL` 21)
+                      .|. fromIntegral (ord code)
+
+delimiterFamilySmall :: DelimiterCode -> Word8
+delimiterFamilySmall (DelimiterCode x) = fromIntegral (0xF .&. (x `shiftR` 20))
+delimiterFamilySmall (UDelimiterCode x) = fromIntegral (int32ToWord32 x `shiftR` 24)
+
+delimiterSlotSmall :: DelimiterCode -> Char
+delimiterSlotSmall (DelimiterCode x) = chr $ fromIntegral (0xFF .&. (x `shiftR` 12))
+delimiterSlotSmall (UDelimiterCode x) = chr $ fromIntegral (0x1FFFFF .&. int32ToWord32 x)
+
+delimiterFamilyLarge :: DelimiterCode -> Word8
+delimiterFamilyLarge (DelimiterCode x) = fromIntegral (0xF .&. (x `shiftR` 8))
+delimiterFamilyLarge (UDelimiterCode x) = fromIntegral (int32ToWord32 x `shiftR` 24)
+
+delimiterSlotLarge :: DelimiterCode -> Char
+delimiterSlotLarge (DelimiterCode x) = chr $ fromIntegral (0xFF .&. x)
+delimiterSlotLarge (UDelimiterCode x) = chr $ fromIntegral (0x1FFFFF .&. int32ToWord32 x)
 
 data LimitsSpec = Limits
                 | NoLimits

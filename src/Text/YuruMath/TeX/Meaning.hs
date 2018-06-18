@@ -15,7 +15,6 @@ module Text.YuruMath.TeX.Meaning
   ,can'tUseThisCommandInCurrentMode
   ) where
 import Text.YuruMath.TeX.Types hiding (_escapechar)
-import Text.YuruMath.TeX.State
 import Control.Monad.Except (MonadError,throwError)
 import Control.Lens.Getter (use)
 import Numeric

@@ -2,13 +2,7 @@
 module Text.YuruMath.TeX.State where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
-import Data.Bits
-import Data.Int
-import Data.Word
 import Data.Char
-import Data.Text (Text)
-import Data.Map.Strict (Map)
-import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
 import Control.Lens.Getter (view,use)
@@ -125,32 +119,6 @@ ucCodeFn = do
   m <- use (localState . uccodeMap)
   pure (\c -> Map.findWithDefault (defaultUCCodeOf c) c m)
 
-mkMathCode :: MathClass -> Word8 -> Char -> MathCode
-mkMathCode cls fam code
-  | code <= '\xFF' = MathCode
-                     $ (fromIntegral (fromEnum cls) `shiftL` 12)
-                     .|. (fromIntegral fam `shiftL` 8)
-                     .|. fromIntegral (ord code)
-  | otherwise = error "Use mkUMathCode for code points beyond U+0100 "
-
-mkUMathCode :: MathClass -> Word8 -> Char -> MathCode
-mkUMathCode cls fam code = UMathCode
-                           $ (fromIntegral (fromIntegral fam :: Int8) `shiftL` 24)
-                           .|. (fromIntegral (fromEnum cls) `shiftL` 21)
-                           .|. fromIntegral (ord code)
-
-mathcharClass :: MathCode -> MathClass
-mathcharClass (MathCode x) = toEnum $ fromIntegral $ 7 .&. (x `shiftR` 12)
-mathcharClass (UMathCode x) = toEnum $ fromIntegral $ 7 .&. ((fromIntegral x :: Word32) `shiftR` 21)
-
-mathcharFamily :: MathCode -> Word8
-mathcharFamily (MathCode x) = toEnum $ fromIntegral $ 0xF .&. (x `shiftR` 8)
-mathcharFamily (UMathCode x) = toEnum $ fromIntegral $ 0xFF .&. ((fromIntegral x :: Word32) `shiftR` 24)
-
-mathcharSlot :: MathCode -> Char
-mathcharSlot (MathCode x) = toEnum $ fromIntegral $ 0xFF .&. x
-mathcharSlot (UMathCode x) = toEnum $ fromIntegral $ 0x1FFFFF .&. (fromIntegral x :: Word32)
-
 defaultMathCodeOf :: Char -> MathCode
 defaultMathCodeOf c = case c of
   {-
@@ -177,9 +145,9 @@ defaultMathCodeOf c = case c of
   '{' -> mkMathCode MathOpen  symbols   '\x66' -- "66 (plain TeX only)
   '}' -> mkMathCode MathClose symbols   '\x67' -- "67 (plain TeX only)
   -}
-  ' '  -> MathCode 0x8000 -- active
-  '\'' -> MathCode 0x8000 -- active
-  '_'  -> MathCode 0x8000 -- active
+  ' '  -> mathActive
+  '\'' -> mathActive
+  '_'  -> mathActive
 
   -- unicode-math:
   '!'  -> mkUMathCode MathClose 0 '!' -- a postfix operator
@@ -220,36 +188,6 @@ mathCodeOf :: MonadTeXState a m => Char -> m MathCode
 mathCodeOf c = do
   m <- use (localState . mathcodeMap)
   pure (Map.findWithDefault (defaultMathCodeOf c) c m)
-
-isMathActive :: MonadTeXState a m => Char -> m Bool
-isMathActive c = do
-  mc <- mathCodeOf c
-  return (mc == MathCode 0x8000)
-
-mkUDelCode :: Word8 -> Char -> DelimiterCode
-mkUDelCode fam code = UDelimiterCode
-                      $ (fromIntegral fam `shiftL` 21)
-                      .|. fromIntegral (ord code)
-
-delimiterFamilySmall :: DelimiterCode -> Word8
-delimiterFamilySmall (DelimiterCode x) = fromIntegral (0xF .&. (x `shiftR` 20))
-delimiterFamilySmall (UDelimiterCode x) = let u = fromIntegral x :: Word32
-                                          in fromIntegral (u `shiftR` 24)
-
-delimiterSlotSmall :: DelimiterCode -> Char
-delimiterSlotSmall (DelimiterCode x) = chr $ fromIntegral (0xFF .&. (x `shiftR` 12))
-delimiterSlotSmall (UDelimiterCode x) = let u = fromIntegral x :: Word32
-                                        in chr $ fromIntegral (0x1FFFFF .&. u)
-
-delimiterFamilyLarge :: DelimiterCode -> Word8
-delimiterFamilyLarge (DelimiterCode x) = fromIntegral (0xF .&. (x `shiftR` 8))
-delimiterFamilyLarge (UDelimiterCode x) = let u = fromIntegral x :: Word32
-                                          in fromIntegral (u `shiftR` 24)
-
-delimiterSlotLarge :: DelimiterCode -> Char
-delimiterSlotLarge (DelimiterCode x) = chr $ fromIntegral (0xFF .&. x)
-delimiterSlotLarge (UDelimiterCode x) = let u = fromIntegral x :: Word32
-                                        in chr $ fromIntegral (0x1FFFFF .&. u)
 
 defaultDelimiterCodeOf :: Char -> DelimiterCode
 defaultDelimiterCodeOf c = case c of

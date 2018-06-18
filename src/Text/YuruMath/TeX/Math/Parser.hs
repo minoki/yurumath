@@ -444,7 +444,7 @@ readMathMaterial = loop []
           -- <character>
           MTChar c -> do
             mc <- mathCodeOf c
-            if mc == MathCode 0x8000
+            if mc == mathActive
               then do -- math active
                       unreadEToken (ETCommandName { etDepth = etDepth et + 1, etNoexpand = False, etName = NActiveChar c })
                       loop revList
@@ -639,7 +639,7 @@ readMathField = do
     Just (et,t) -> case t of
       MTChar c -> do
         mc <- mathCodeOf c
-        if mc == MathCode 0x8000
+        if mc == mathActive
           then do -- math active
                   unreadEToken (ETCommandName { etDepth = etDepth et + 1, etNoexpand = False, etName = NActiveChar c })
                   readMathField

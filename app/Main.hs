@@ -15,12 +15,11 @@ import Text.Blaze.Renderer.Pretty as Pretty
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Setter (modifying)
-import Data.OpenUnion
 import TypeFun.Data.List ((:++:))
 import Data.Void
 
-type MathExpandableT = Union (ExpandablePrimitiveList :++: MathExpandableList)
-type MathValue = Union (NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList)
+type MathExpandableT = ExpandablePrimitiveList :++: MathExpandableList
+type MathValue = NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList
 type MathLocalState' = MathLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String (MathList Void)
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialStateWithLocalState initialLocalMathState input)

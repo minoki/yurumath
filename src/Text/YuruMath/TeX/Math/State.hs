@@ -12,6 +12,7 @@ import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Math.List
 import Control.Lens.Lens
+import Data.OpenUnion (Union)
 
 class (IsLocalState localstate) => IsMathLocalState localstate where
   famParam          :: Lens' localstate Int
@@ -52,12 +53,12 @@ initialMathState !isDisplay !commonState
               , _currentMathStyle = Just $ if isDisplay then DisplayStyle else TextStyle
               }
 
-instance (IsExpandable ecommand, IsValue value) => IsLocalState (MathLocalState ecommand value) where
-  type ExpandableT (MathLocalState ecommand value) = ecommand
-  type ValueT (MathLocalState ecommand value) = value
+instance (IsExpandable (Union ecommand), IsValue (Union value)) => IsLocalState (MathLocalState ecommand value) where
+  type ExpandableSetT (MathLocalState ecommand value) = ecommand
+  type ValueSetT (MathLocalState ecommand value) = value
   commonLocalState = lens _mCommonLocalState (\s v -> s { _mCommonLocalState = v })
 
-instance (IsExpandable ecommand, IsValue value) => IsMathLocalState (MathLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsValue (Union value)) => IsMathLocalState (MathLocalState ecommand value) where
   famParam          = lens _famParam          (\s v -> s { _famParam = v })
   currentVariant    = lens _currentVariant    (\s v -> s { _currentVariant = v })
   currentSymbolMode = lens _currentSymbolMode (\s v -> s { _currentSymbolMode = v })

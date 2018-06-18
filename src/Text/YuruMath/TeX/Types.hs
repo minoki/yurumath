@@ -180,8 +180,8 @@ data ScopeType = ScopeByBrace      -- { .. }
 data CommonLocalState ecommand value
   = CommonLocalState
     { _scopeType     :: !ScopeType
-    , _controlSeqDef :: !(Map.Map Text (Either ecommand value)) -- definitions of control sequences
-    , _activeDef     :: !(Map.Map Char (Either ecommand value)) -- definitions of active characters
+    , _controlSeqDef :: !(Map.Map Text (Either (Union ecommand) (Union value))) -- definitions of control sequences
+    , _activeDef     :: !(Map.Map Char (Either (Union ecommand) (Union value))) -- definitions of active characters
     , _catcodeMap    :: !(Map.Map Char CatCode)
     , _lccodeMap     :: !(Map.Map Char Char)
     , _uccodeMap     :: !(Map.Map Char Char)
@@ -217,10 +217,13 @@ data CommonState localstate
     , _conditionals       :: [ConditionalKind]
     }
 
-class (IsExpandable (ExpandableT localstate), IsValue (ValueT localstate)) => IsLocalState localstate where
-  type ExpandableT localstate
-  type ValueT localstate
-  commonLocalState :: Lens' localstate (CommonLocalState (ExpandableT localstate) (ValueT localstate))
+class (IsExpandable (Union (ExpandableSetT localstate)), IsValue (Union (ValueSetT localstate))) => IsLocalState localstate where
+  type ExpandableSetT localstate :: [*]
+  type ValueSetT localstate :: [*]
+  commonLocalState :: Lens' localstate (CommonLocalState (ExpandableSetT localstate) (ValueSetT localstate))
+
+type ExpandableT localstate = Union (ExpandableSetT localstate)
+type ValueT localstate = Union (ValueSetT localstate)
 
 definitionAt  :: (IsLocalState localstate) => CommandName -> Lens' localstate (Either (ExpandableT localstate) (ValueT localstate))
 scopeType     :: (IsLocalState localstate) => Lens' localstate ScopeType
@@ -362,6 +365,8 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonVa
   getQuantity (IntegerConstant x) = QInteger (return $ fromIntegral x)
   getQuantity _ = NotQuantity
 
+type ExpandableSet s = ExpandableSetT (LocalState s)
+type ValueSet s = ValueSetT (LocalState s)
 type Expandable s = ExpandableT (LocalState s)
 type Value s = ValueT (LocalState s)
 
@@ -372,9 +377,9 @@ instance Show ConditionalMarker where
   show Efi = "\\fi"
   show Eor = "\\or"
 
-instance (IsExpandable ecommand, IsValue value) => IsLocalState (CommonLocalState ecommand value) where
-  type ExpandableT (CommonLocalState ecommand value) = ecommand
-  type ValueT (CommonLocalState ecommand value) = value
+instance (IsExpandable (Union ecommand), IsValue (Union value)) => IsLocalState (CommonLocalState ecommand value) where
+  type ExpandableSetT (CommonLocalState ecommand value) = ecommand
+  type ValueSetT (CommonLocalState ecommand value) = value
   commonLocalState = id
 
 instance IsLocalState localstate => IsState (CommonState localstate) where

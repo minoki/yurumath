@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 module Text.YuruMath.TeX.Expansion where
@@ -293,32 +294,36 @@ readOptionalSigns !s = do
     Just (Character '-' CCOther) -> readOptionalSigns (-s)
     _ -> unreadETokens 0 [t] >> return s
 
-readUnsignedDecimalInteger :: (MonadTeXState s m, MonadError String m) => Char -> m Integer
+readUnsignedDecimalInteger :: forall s m. (MonadTeXState s m, MonadError String m) => Char -> m Integer
 readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
-  where readRest !x = do
-          (t,v) <- evalToken
-          case toCommonValue v of
-            Just (Character c CCOther) | isDigit c -> do
-                                           readRest (10 * x + fromIntegral (digitToInt c))
-            Just (Character _ CCSpace) -> return x -- consumed
-            _ -> unreadETokens 0 [t] >> return x
+  where
+    readRest :: Integer -> m Integer
+    readRest !x = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character c CCOther) | isDigit c -> do
+                                       readRest (10 * x + fromIntegral (digitToInt c))
+        Just (Character _ CCSpace) -> return x -- consumed
+        _ -> unreadETokens 0 [t] >> return x
 
-readUnsignedOctal :: (MonadTeXState s m, MonadError String m) => m Integer
+readUnsignedOctal :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedOctal = do
   (t,v) <- evalToken
   case toCommonValue v of
     Just (Character c CCOther) | isOctDigit c -> do
                                    readRest (fromIntegral (digitToInt c))
     _ -> throwError $ "unexpected token while reading octal: " ++ show t
-  where readRest !x = do
-          (t,v) <- evalToken
-          case toCommonValue v of
-            Just (Character c CCOther) | isOctDigit c -> do
-                                           readRest (8 * x + fromIntegral (digitToInt c))
-            Just (Character _ CCSpace) -> return x -- consumed
-            _ -> unreadETokens 0 [t] >> return x
+  where
+    readRest :: Integer -> m Integer
+    readRest !x = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character c CCOther) | isOctDigit c -> do
+                                       readRest (8 * x + fromIntegral (digitToInt c))
+        Just (Character _ CCSpace) -> return x -- consumed
+        _ -> unreadETokens 0 [t] >> return x
 
-readUnsignedHex :: (MonadTeXState s m, MonadError String m) => m Integer
+readUnsignedHex :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedHex = do
   (t,v) <- evalToken
   case toCommonValue v of
@@ -327,16 +332,18 @@ readUnsignedHex = do
     Just (Character c CCLetter) | isHexDigit c && isAsciiUpper c -> do
                              readRest (fromIntegral (digitToInt c))
     _ -> throwError $ "unexpected token while reading hexadecimal: " ++ show t
-  where readRest !x = do
-          (t,v) <- evalToken
-          case toCommonValue v of
-            Just (Character c CCOther) | isUpperHexDigit c -> do
-                                           readRest (16 * x + fromIntegral (digitToInt c))
-            Just (Character c CCLetter) | isHexDigit c && isAsciiUpper c -> do
-                                            readRest (16 * x + fromIntegral (digitToInt c))
-            Just (Character _ CCSpace) -> return x -- consumed
-            _ -> unreadETokens 0 [t] >> return x
-        isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
+  where
+    readRest :: Integer -> m Integer
+    readRest !x = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character c CCOther) | isUpperHexDigit c -> do
+                                       readRest (16 * x + fromIntegral (digitToInt c))
+        Just (Character c CCLetter) | isHexDigit c && isAsciiUpper c -> do
+                                        readRest (16 * x + fromIntegral (digitToInt c))
+        Just (Character _ CCSpace) -> return x -- consumed
+        _ -> unreadETokens 0 [t] >> return x
+    isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
 readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
 readOneOptionalSpace = do
@@ -379,11 +386,12 @@ readNumber = do
            QGlue getGlue -> (asScaledPoints . glueSpace) <$> getGlue
            _ -> throwError $ "Unexpected token while reading number: " ++ show t -- Missing number, treated as zero.
 
-readUnsignedDecimalFraction :: (MonadTeXState s m, MonadError String m) => Char -> m Rational
+readUnsignedDecimalFraction :: forall s m. (MonadTeXState s m, MonadError String m) => Char -> m Rational
 readUnsignedDecimalFraction c
   | c == '.' || c == ',' = readFractionPart 0 0
   | otherwise = readIntegerPart (fromIntegral (digitToInt c)) -- c should be a digit
   where
+    readIntegerPart :: Integer -> m Rational
     readIntegerPart !x = do
       (t,v) <- evalToken
       case toCommonValue v of
@@ -392,12 +400,13 @@ readUnsignedDecimalFraction c
         Just (Character c CCOther) | isDigit c -> do
                                        readIntegerPart (10 * x + fromIntegral (digitToInt c))
         _ -> unreadETokens 0 [t] >> return (fromInteger x)
+    readFractionPart :: Integer -> Int -> m Rational
     readFractionPart !intPart !expPart = do
       (t,v) <- evalToken
       case toCommonValue v of
         Just (Character c CCOther) | isDigit c -> do
                                        readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
-        _ -> unreadETokens 0 [t] >> return (intPart % 10^(expPart :: Int))
+        _ -> unreadETokens 0 [t] >> return (intPart % 10^expPart)
 
 class DimenRead f where
   doUnit :: (MonadTeXState s m, MonadError String m) => (Rational -> m a) -> Rational -> m (f a)

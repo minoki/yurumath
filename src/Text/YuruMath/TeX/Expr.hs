@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -63,9 +64,10 @@ etexDiv !x !y
 -- <mul or div> ::= <optional spaces>'*'12 | <optional spaces>'/'12
 -- <left paren> ::= <optional spaces>'('12
 -- <right paren> ::= <optional spaces>')'12
-parseExpression :: (MonadTeXState s m, MonadError String m, QuantityRead q) => String -> Int -> m q
+parseExpression :: forall s q m. (MonadTeXState s m, MonadError String m, QuantityRead q) => String -> Int -> m q
 parseExpression name !level = parseTerm >>= readAddOp
   where
+    readAddOp :: q -> m q
     readAddOp !acc = do
       et <- maybeEvalToken
       case et of
@@ -84,6 +86,7 @@ parseExpression name !level = parseTerm >>= readAddOp
 
     parseTerm = parseFactor >>= readMulOp
 
+    readMulOp :: q -> m q
     readMulOp !acc = do
       et <- maybeEvalToken
       case et of
@@ -99,6 +102,7 @@ parseExpression name !level = parseTerm >>= readAddOp
             _ -> unreadETokens 0 [t] >> return acc -- end of factor
         Nothing -> return acc
 
+    parseFactor :: m q
     parseFactor = do
       (t,v) <- evalToken
       case toCommonValue v of

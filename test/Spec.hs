@@ -18,12 +18,12 @@ import Data.OpenUnion
 import TypeFun.Data.List ((:++:))
 import Data.Void
 
-defineBuiltins :: (MonadTeXState s m, MonadError String m, Value s ~ Union NonExpandablePrimitiveList, Expandable s ~ Union ExpandablePrimitiveList) => m ()
+defineBuiltins :: (MonadTeXState s m, MonadError String m, ValueSet s ~ NonExpandablePrimitiveList, ExpandableSet s ~ ExpandablePrimitiveList) => m ()
 defineBuiltins = do
   modifying (localState . controlSeqDef)
     $ \s -> primitiveDefinitions <> s
 
-tokenizeAll :: (MonadTeXState s m, MonadError String m, Value s ~ CommonValue, Expandable s ~ Union ExpandablePrimitiveList) => m [TeXToken]
+tokenizeAll :: (MonadTeXState s m, MonadError String m, ValueSet s ~ '[CommonValue], ExpandableSet s ~ ExpandablePrimitiveList) => m [TeXToken]
 tokenizeAll = do
   t <- nextToken
   case t of
@@ -40,11 +40,11 @@ expandAll = do
     Nothing -> return []
     Just v -> (v:) <$> expandAll
 
-expandAllString :: String -> Either String [Value (CommonState (CommonLocalState (Union ExpandablePrimitiveList) (Union NonExpandablePrimitiveList)))]
+expandAllString :: String -> Either String [Value (CommonState (CommonLocalState ExpandablePrimitiveList NonExpandablePrimitiveList))]
 expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
 
-type MathExpandableT = Union (ExpandablePrimitiveList :++: MathExpandableList)
-type MathValue = Union (NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList)
+type MathExpandableT = ExpandablePrimitiveList :++: MathExpandableList
+type MathValue = NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList
 type MathLocalState' = MathLocalState MathExpandableT MathValue
 runMathList :: Bool -> String -> Either String (MathList Void)
 runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState isDisplay $ initialStateWithLocalState initialLocalMathState input)

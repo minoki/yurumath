@@ -85,7 +85,7 @@ parseExpression name !level = parseTerm >>= readAddOp
               Just (Character _ CCSpace) -> readAddOp acc
               Just Relax | level == 0 -> return acc -- end of input
                          | otherwise -> throwError $ name ++ ": Unexpected \\relax"
-              _ -> unreadETokens 0 [t] >> return acc -- end of factor
+              _ -> unreadEToken t >> return acc -- end of factor
         Nothing -> return acc
 
     parseTerm = parseFactor >>= readMulOp
@@ -105,7 +105,7 @@ parseExpression name !level = parseTerm >>= readAddOp
                 then throwError $ name ++ ": Divide by zero"
                 else readMulOp (scaleAsInteger (`etexDiv` y) acc)
             _ | isImplicitSpace v -> readMulOp acc
-              | otherwise -> unreadETokens 0 [t] >> return acc -- end of factor
+              | otherwise -> unreadEToken t >> return acc -- end of factor
         Nothing -> return acc
 
     parseFactor :: m q
@@ -115,7 +115,7 @@ parseExpression name !level = parseTerm >>= readAddOp
         ETCharacter { etChar = '(', etCatCode = CCOther } ->
           parseExpression name (level + 1)
         _ | isImplicitSpace v -> parseFactor
-          | otherwise -> unreadETokens 0 [t] >> readQuantity
+          | otherwise -> unreadEToken t >> readQuantity
 
 parseIntegerFactor :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
 parseIntegerFactor name !level = do
@@ -124,7 +124,7 @@ parseIntegerFactor name !level = do
     ETCharacter { etChar = '(', etCatCode = CCOther } ->
       parseExpression name (level + 1)
     _ | isImplicitSpace v -> parseIntegerFactor name level
-      | otherwise -> unreadETokens 0 [t] >> readNumber
+      | otherwise -> unreadEToken t >> readNumber
 
 ssToDimen :: StretchShrink Dimen -> Dimen
 ssToDimen (FixedSS dimen) = dimen

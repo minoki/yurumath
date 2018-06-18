@@ -97,9 +97,9 @@ readMathToken = do
       Character _ CCMathShift -> do
         m <- use mode
         if m == DisplayMathMode
-          then do et <- nextEToken
+          then do et <- nextEToken -- without expansion
                   case et of
-                    Just (ETCharacter _ CCMathShift) -> return $ Just MTStopDisplay
+                    Just (ETCharacter { etCatCode = CCMathShift }) -> return $ Just MTStopDisplay
                     _ -> throwError "Display math should end with $$."
           else return $ Just MTStopInline
       Character c CCAlignmentTab -> throwError "alignment tab: not implemented yet"
@@ -445,7 +445,7 @@ readMathMaterial = loop []
             mc <- mathCodeOf c
             if mc == MathCode 0x8000
               then do -- math active
-                      unreadETokens 0 [ETCommandName False (NActiveChar c)] -- TODO: prevent infinite loop
+                      unreadEToken (ETCommandName { etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
                       loop revList
               else do delcode <- delimiterCodeOf c
                       let mathclass = mathcharClass mc
@@ -640,7 +640,7 @@ readMathField = do
         mc <- mathCodeOf c
         if mc == MathCode 0x8000
           then do -- math active
-                  unreadETokens 0 [ETCommandName False (NActiveChar c)] -- TODO: prevent infinite loop
+                  unreadEToken (ETCommandName { etNoexpand = False, etName = NActiveChar c }) -- TODO: prevent infinite loop
                   readMathField
           else makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed

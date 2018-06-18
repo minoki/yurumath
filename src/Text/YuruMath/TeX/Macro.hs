@@ -129,10 +129,10 @@ testDelimiter (d:ds) = do
           r <- testDelimiter ds
           if r
             then return True -- consumed
-            else do unreadETokens 0 [et]
+            else do unreadEToken et
                     return False
       | otherwise -> do
-          unreadETokens 0 [et]
+          unreadEToken et
           return False
 
 testLBrace :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> m Bool
@@ -147,7 +147,7 @@ testLBrace !consumeSpace = do
           -- TODO: Issue a warning
           testLBrace consumeSpace
     Just et -> do
-      unreadETokens 0 [et]
+      unreadEToken et
       return False
 
 readRequiredDelimiter :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> [TeXToken] -> m ()
@@ -215,7 +215,7 @@ testOptionalToken !consume !t = do
           -- TODO: Issue a warning
           testOptionalToken consume t
     Just et | fromEToken et == t -> return True
-            | otherwise -> do unreadETokens 0 [et]
+            | otherwise -> do unreadEToken et
                               return False
 
 testStar :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> m Bool
@@ -251,7 +251,7 @@ readUntilBeginGroup !long revTokens = do
   case t of
     Nothing -> throwError "Unexpected end of input when reading an argument"
     Just t@(ETCharacter { etCatCode = CCBeginGroup }) -> do
-      unreadETokens 0 [t]
+      unreadEToken t
       return (reverse revTokens)
     Just t@(ETCharacter { etCatCode = CCEndGroup }) -> throwError "Argument of <macro> has an extra }"
     Just (ETCommandName { etName = NControlSeq "par" })

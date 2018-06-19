@@ -46,6 +46,8 @@ repl = do
     Just "" -> lift (outputStrLn "Press Control-C to exit") >> repl
     Just input -> do
       assign tokenizerState (TokenizerState input SSNewLine)
+      assign esPendingTokenList []
+      assign conditionals []
       result <- runExceptT $ runMMDGlobal <$> readMathMaterial
       output <- use outputLines
       lift $ forM_ output outputStrLn

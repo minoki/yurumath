@@ -298,12 +298,13 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
   where
     readRest :: Integer -> m Integer
     readRest !x = do
-      (t,v) <- evalToken
-      case t of
-        ETCharacter { etChar = c, etCatCode = CCOther }
+      m <- maybeEvalToken
+      case m of
+        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readRest (10 * x + fromIntegral (digitToInt c))
-        _ | isImplicitSpace v -> return x -- space: consumed
-          | otherwise -> unreadEToken t >> return x
+        Just (t,v) | isImplicitSpace v -> return x -- space: consumed
+                   | otherwise -> unreadEToken t >> return x
+        Nothing -> return x
 
 readUnsignedOctal :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedOctal = do
@@ -315,12 +316,13 @@ readUnsignedOctal = do
   where
     readRest :: Integer -> m Integer
     readRest !x = do
-      (t,v) <- evalToken
-      case t of
-        ETCharacter { etChar = c, etCatCode = CCOther }
+      m <- maybeEvalToken
+      case m of
+        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isOctDigit c -> readRest (8 * x + fromIntegral (digitToInt c))
-        _ | isImplicitSpace v -> return x -- consumed
-          | otherwise -> unreadEToken t >> return x
+        Just (t,v) | isImplicitSpace v -> return x -- consumed
+                   | otherwise -> unreadEToken t >> return x
+        Nothing -> return x
 
 readUnsignedHex :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedHex = do
@@ -335,20 +337,21 @@ readUnsignedHex = do
   where
     readRest :: Integer -> m Integer
     readRest !x = do
-      (t,v) <- evalToken
-      case t of
-        ETCharacter { etChar = c, etCatCode = CCOther }
+      m <- maybeEvalToken
+      case m of
+        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isUpperHexDigit c -> readRest (16 * x + fromIntegral (digitToInt c))
-        ETCharacter { etChar = c, etCatCode = CCLetter }
+        Just (t@ETCharacter { etChar = c, etCatCode = CCLetter },_)
           | isHexDigit c && isAsciiUpper c ->
               readRest (16 * x + fromIntegral (digitToInt c))
-        _ | isImplicitSpace v -> return x -- consumed
-          | otherwise -> unreadEToken t >> return x
+        Just (t,v) | isImplicitSpace v -> return x -- consumed
+                   | otherwise -> unreadEToken t >> return x
+        Nothing -> return x
     isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
 readCharacterCode :: (MonadTeXState s m, MonadError String m) => m Integer
 readCharacterCode = do
-  t <- required nextEToken
+  t <- required nextEToken -- without expansion
   readOneOptionalSpace
   case t of
     ETCommandName { etName = NControlSeq name } -> case T.unpack name of
@@ -415,20 +418,22 @@ readUnsignedDecimalFraction c
   where
     readIntegerPart :: Integer -> m Rational
     readIntegerPart !x = do
-      (t,v) <- evalToken
-      case t of
-        ETCharacter { etChar = '.', etCatCode = CCOther } -> readFractionPart x 0
-        ETCharacter { etChar = ',', etCatCode = CCOther } -> readFractionPart x 0
-        ETCharacter { etChar = c, etCatCode = CCOther }
+      m <- maybeEvalToken
+      case m of
+        Just (t@ETCharacter { etChar = '.', etCatCode = CCOther },_) -> readFractionPart x 0
+        Just (t@ETCharacter { etChar = ',', etCatCode = CCOther },_) -> readFractionPart x 0
+        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readIntegerPart (10 * x + fromIntegral (digitToInt c))
-        _ -> unreadEToken t >> return (fromInteger x)
+        Just (t,_) -> unreadEToken t >> return (fromInteger x)
+        Nothing -> return (fromInteger x)
     readFractionPart :: Integer -> Int -> m Rational
     readFractionPart !intPart !expPart = do
-      (t,v) <- evalToken
-      case t of
-        ETCharacter { etChar = c, etCatCode = CCOther }
+      m <- maybeEvalToken
+      case m of
+        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
-        _ -> unreadEToken t >> return (intPart % 10^expPart)
+        Just (t,_) -> unreadEToken t >> return (intPart % 10^expPart)
+        Nothing -> return (intPart % 10^expPart)
 
 class DimenRead f where
   doUnit :: (MonadTeXState s m, MonadError String m) => (Rational -> m a) -> Rational -> m (f a)

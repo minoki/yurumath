@@ -16,25 +16,30 @@ import Data.OpenUnion
 import TypeFun.Data.List (Elem)
 import qualified Data.Map.Strict as Map
 import Control.Lens.Getter (use)
-import Control.Lens.Setter (assign)
+import Control.Lens.Setter (assign,mapped)
 
 data MacroDefPrefix = MacroDefPrefix
                       { prefixGlobal    :: !Bool
-                      , prefixLong      :: !Bool
+                      , prefixLong      :: !ParamLong
                       , prefixOuter     :: !Bool
                       , prefixProtected :: !Bool
                       }
                     deriving (Eq)
 
 unprefixed :: MacroDefPrefix
-unprefixed = MacroDefPrefix False False False False
+unprefixed = MacroDefPrefix False ShortParam False False
 
 globalPrefix :: MacroDefPrefix
-globalPrefix = MacroDefPrefix True False False False
+globalPrefix = MacroDefPrefix True ShortParam False False
+
+data ParamDelimiter = ParamDelimiter
+                      { delimiterToken :: [TeXToken] -- empty if undelimited
+                      , delimitedByLBrace :: !Bool
+                      }
+                    deriving (Eq,Show)
 
 data MacroParamSpec
   = StandardMandatory { paramSpecIsLong   :: !ParamLong } -- m
-  | DelimitedByLBrace { paramSpecIsLong   :: !ParamLong } -- l
   | RequiredDelimited { paramSpecIsLong   :: !ParamLong
                       , paramSpecBalanced :: !Bool
                       , paramSpecOpen     :: !TeXToken
@@ -42,8 +47,8 @@ data MacroParamSpec
                       , paramSpecDefault  :: [TeXToken] -- for error recovery
                       } -- r<char1><char2>, R<char1><char2>{<default>}
   | Until { paramSpecIsLong    :: !ParamLong
-          , paramSpecDelimiter :: [TeXToken]
-          } -- #n<token list>, u{<tokens>}
+          , paramSpecDelimiter :: !ParamDelimiter
+          } -- #n<token list>, u{<tokens>}, l
   | Verbatim -- v
   | OptionalDelimited { paramSpecIsLong       :: !ParamLong
                       , paramSpecConsumeSpace :: ConsumeSpace
@@ -66,7 +71,7 @@ data MacroParamSpec
 
 data Macro = Macro { macroIsOuter :: !Bool
                    , macroIsProtected :: !Bool
-                   , macroDelimiterBeforeFirstParam :: [TeXToken]
+                   , macroDelimiterBeforeFirstParam :: ParamDelimiter
                    , macroParamSpec :: [MacroParamSpec]
                    , macroReplacement :: [TeXToken] -- TODO: Generate 'parameter token'
                    }
@@ -77,7 +82,7 @@ data Macro = Macro { macroIsOuter :: !Bool
 mkSimpleMacro :: [MacroParamSpec] -> [TeXToken] -> Macro
 mkSimpleMacro param rep = Macro { macroIsOuter = False
                                 , macroIsProtected = False
-                                , macroDelimiterBeforeFirstParam = []
+                                , macroDelimiterBeforeFirstParam = ParamDelimiter [] False
                                 , macroParamSpec = param
                                 , macroReplacement = rep
                                 }
@@ -277,13 +282,24 @@ readBalanced !long !c1 !c2 = unArgToken <$> loop (0 :: Int)
                 | fromEToken et == c1 -> (Bare (fromEToken et) :) <$> loop (depth + 1)
                 | otherwise -> (Bare (fromEToken et) :) <$> loop depth
 
+readExplicitLBrace :: (MonadTeXState s m, MonadError String m) => m ()
+readExplicitLBrace = do
+  t <- required nextEToken
+  case t of
+    ETCharacter { etCatCode = CCBeginGroup } -> return ()
+    _ -> throwError ("Expected `{', but got " ++ show t) -- Use of \foo doesn't match its definition.
+
+expectExplicitLBrace :: (MonadTeXState s m, MonadError String m) => m ()
+expectExplicitLBrace = do
+  t <- required nextEToken
+  case t of
+    ETCharacter { etCatCode = CCBeginGroup } -> unreadEToken t
+    _ -> throwError ("Expected `{', but got " ++ show t) -- Use of \foo doesn't match its definition.
+
 readParam :: (MonadTeXState s m, MonadError String m) => MacroParamSpec -> m [TeXToken]
 readParam spec = case spec of
   StandardMandatory { paramSpecIsLong = long } ->
     readArgument long
-
-  DelimitedByLBrace { paramSpecIsLong = long } ->
-    readUntilBeginGroup long []
 
   RequiredDelimited { paramSpecIsLong = long
                     , paramSpecOpen = c1
@@ -292,8 +308,13 @@ readParam spec = case spec of
     readRequiredDelimiter ConsumeSpaces [c1]
     readDelimitedArgument long [c2]
 
-  Until { paramSpecIsLong = long, paramSpecDelimiter = delim } ->
-    readDelimitedArgument long delim
+  Until { paramSpecIsLong = long, paramSpecDelimiter = ParamDelimiter [] True } ->
+    readUntilBeginGroup long []
+
+  Until { paramSpecIsLong = long, paramSpecDelimiter = ParamDelimiter delim lbrace } -> do
+    xs <- readDelimitedArgument long delim
+    when lbrace expectExplicitLBrace
+    return xs
 
   Verbatim {} -> throwError "Verbatim argument: not implemented yet"
 
@@ -342,7 +363,10 @@ readParam spec = case spec of
 
 doMacro :: (MonadTeXState s m, MonadError String m) => Macro -> m [TeXToken]
 doMacro m = do
-  readRequiredDelimiter Don'tConsumeSpace $ macroDelimiterBeforeFirstParam m
+  case macroDelimiterBeforeFirstParam m of
+    ParamDelimiter d lbrace -> do
+      readRequiredDelimiter Don'tConsumeSpace d
+      when lbrace expectExplicitLBrace
   args <- mapM readParam (macroParamSpec m)
   let doReplace [] = return []
       doReplace (TTCharacter c CCParam : xs) = case xs of
@@ -364,6 +388,8 @@ instance IsExpandable Macro where
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand Macro m where
   doExpand m = map toEToken <$> doMacro m
+  doTotallyExpand t m | macroIsProtected m = Just (return [t])
+                      | otherwise = Nothing
   evalBooleanConditional _ = Nothing
 
 -- LaTeX 2e
@@ -401,7 +427,7 @@ newcommandFamily f = do
                Nothing -> return $ Macro
                           { macroIsOuter = False
                           , macroIsProtected = False
-                          , macroDelimiterBeforeFirstParam = []
+                          , macroDelimiterBeforeFirstParam = ParamDelimiter [] False
                           , macroParamSpec = replicate numOfArgs $ StandardMandatory long
                           , macroReplacement = repText
                           }
@@ -410,7 +436,7 @@ newcommandFamily f = do
                  | otherwise -> return $ Macro
                                 { macroIsOuter = False
                                 , macroIsProtected = False
-                                , macroDelimiterBeforeFirstParam = []
+                                , macroDelimiterBeforeFirstParam = ParamDelimiter [] False
                                 , macroParamSpec = OptionalDelimited
                                                    { paramSpecIsLong = long
                                                    , paramSpecConsumeSpace = if numOfArgs == 1 then WarnIfConsumedSpaces else ConsumeSpaces
@@ -437,11 +463,71 @@ providecommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXStat
 providecommandCommand = newcommandFamily $ \_name isUndefined doDefine -> do
   when isUndefined doDefine
 
-defCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
-defCommand name !prefix = throwError $ "\\" ++ name ++ ": not implemented yet"
+data ParameterTextToken = PTTNumbered -- #1..#9
+                        | PTTDelimiter [TeXToken] !Bool
+                        deriving (Show)
 
-edefCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
-edefCommand name !prefix = throwError $ "\\" ++ name ++ ": not implemented yet"
+-- read <parameter text> and the left brace
+readParameterText :: (MonadTeXState s m, MonadError String m) => ParamLong -> m (ParamDelimiter,[MacroParamSpec])
+readParameterText !long = do
+  pt <- readParameterTextToken 1
+  return $ case pt of
+             PTTDelimiter ts lbrace : xs -> (ParamDelimiter ts lbrace, parseRest xs)
+             xs -> (ParamDelimiter [] False, parseRest xs)
+  where
+    readParameterTextToken !i = do
+      t <- required nextEToken -- without expansion
+      case t of
+        ETCharacter { etCatCode = CCBeginGroup } -> return []
+        ETCharacter { etCatCode = CCEndGroup } -> throwError "Unexpected `}' while reading parameter text"
+        ETCharacter { etCatCode = CCParam } -> do
+          t <- required nextEToken
+          case t of
+            -- #1 .. #9
+            ETCharacter { etChar = c, etCatCode = CCOther }
+              | isDigit c && i == digitToInt c -> (PTTNumbered :) <$> readParameterTextToken (i + 1)
+            -- #{
+            ETCharacter { etCatCode = CCBeginGroup } -> return [PTTDelimiter [] True]
+            _ -> throwError "Parameters must be numbered consecutively"
+        -- other token: delimiter
+        t -> do xs <- readParameterTextToken i
+                return $ case xs of
+                           PTTDelimiter ts lbrace : xss -> PTTDelimiter (fromEToken t : ts) lbrace : xss
+                           _ -> PTTDelimiter [fromEToken t] False : xs
+    parseRest [] = []
+    parseRest (PTTNumbered : PTTDelimiter ts lbrace : xs) = Until long (ParamDelimiter ts lbrace) : parseRest xs
+    parseRest (PTTNumbered : xs) = StandardMandatory long : parseRest xs
+    parseRest xs = error $ "internal error: readParameterText " ++ show xs
+
+defCommand :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
+defCommand _defcmdname !prefix = do
+  name <- readCommandName
+  (pd,ps) <- readParameterText (prefixLong prefix)
+  repText <- readUntilEndGroup LongParam
+  let macro = Macro { macroIsOuter = prefixOuter prefix
+                    , macroIsProtected = prefixProtected prefix
+                    , macroDelimiterBeforeFirstParam = pd
+                    , macroParamSpec = ps
+                    , macroReplacement = repText
+                    }
+  if prefixGlobal prefix
+    then assign (localStates . mapped . definitionAt name) (Left $ liftUnion macro)
+    else assign (localState . definitionAt name) (Left $ liftUnion macro)
+
+edefCommand :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
+edefCommand _defcmdname !prefix = do
+  name <- readCommandName
+  (pd,ps) <- readParameterText (prefixLong prefix)
+  repText <- edefReadUntilEndGroup
+  let macro = Macro { macroIsOuter = prefixOuter prefix
+                    , macroIsProtected = prefixProtected prefix
+                    , macroDelimiterBeforeFirstParam = pd
+                    , macroParamSpec = ps
+                    , macroReplacement = repText
+                    }
+  if prefixGlobal prefix
+    then assign (localStates . mapped . definitionAt name) (Left $ liftUnion macro)
+    else assign (localState . definitionAt name) (Left $ liftUnion macro)
 
 doPrefix :: (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadError String m, Union vset ~ Value s, Show (Union vset)) => String -> MacroDefPrefix -> m ()
 doPrefix name !prefix = do
@@ -456,7 +542,7 @@ doPrefix name !prefix = do
     onMacroCommand Mgdef = defCommand "gdef" prefix { prefixGlobal = True }
     onMacroCommand Mxdef = edefCommand "xdef" prefix { prefixGlobal = True }
     onMacroCommand Mouter = doPrefix "outer" prefix { prefixOuter = True }
-    onMacroCommand Mlong = doPrefix "long" prefix { prefixLong = True }
+    onMacroCommand Mlong = doPrefix "long" prefix { prefixLong = LongParam }
     onMacroCommand Mprotected = doPrefix "protected" prefix { prefixProtected = True }
     onMacroCommand v = throwError $ "Invalid prefix " ++ name ++ " on " ++ show v
 
@@ -490,7 +576,7 @@ instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadEr
   doExecute Mgdef      = defCommand "gdef" globalPrefix
   doExecute Mxdef      = edefCommand "xdef" globalPrefix
   doExecute Mouter     = doPrefix "outer" (unprefixed { prefixOuter = True })
-  doExecute Mlong      = doPrefix "long" (unprefixed { prefixLong = True })
+  doExecute Mlong      = doPrefix "long" (unprefixed { prefixLong = LongParam })
   doExecute Mprotected = doPrefix "protected" (unprefixed { prefixProtected = True })
   doExecute Mnewcommand     = newcommandCommand
   doExecute Mrenewcommand   = renewcommandCommand
@@ -500,7 +586,7 @@ instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadEr
   doGlobal Mgdef      = Just $ defCommand "gdef" globalPrefix
   doGlobal Mxdef      = Just $ edefCommand "xdef" globalPrefix
   doGlobal Mouter     = Just $ doPrefix "outer" (globalPrefix { prefixOuter = True })
-  doGlobal Mlong      = Just $ doPrefix "long" (globalPrefix { prefixLong = True })
+  doGlobal Mlong      = Just $ doPrefix "long" (globalPrefix { prefixLong = LongParam })
   doGlobal Mprotected = Just $ doPrefix "protected" (globalPrefix { prefixProtected = True })
   doGlobal _          = Nothing
   getQuantity _ = NotQuantity

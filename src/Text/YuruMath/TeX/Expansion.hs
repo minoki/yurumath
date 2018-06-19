@@ -81,6 +81,39 @@ readUntilEndGroupE !long = loop (0 :: Int) []
 readUntilEndGroup :: (MonadState s m, IsState s, MonadError String m) => ParamLong -> m [TeXToken]
 readUntilEndGroup !long = map fromEToken <$> readUntilEndGroupE long
 
+-- Used by \edef
+edefReadUntilEndGroupE :: forall s m. (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+edefReadUntilEndGroupE = loop (0 :: Int) []
+  where
+    loop :: Int -> [ExpansionToken] -> m [ExpansionToken]
+    loop !depth revTokens = do
+      t <- required nextEToken
+      case t of
+        ETCharacter { etCatCode = CCEndGroup }
+          | depth == 0 -> return (reverse revTokens)
+          | otherwise -> loop (depth - 1) (t : revTokens)
+        ETCharacter { etCatCode = CCBeginGroup }
+          -> loop (depth + 1) (t : revTokens)
+        ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
+          m <- use (localState . definitionAt name)
+          case m of
+            Left e -> -- expandable
+              case doTotallyExpand t e of
+                Nothing -> do
+                  r <- doExpand e
+                  unreadETokens (etDepth t + 1) r
+                  loop depth revTokens
+                Just m -> do r <- m
+                             -- the result should be balanced text
+                             loop depth (reverse r ++ revTokens)
+            Right v | Just (Undefined _) <- toCommonValue v -> throwError $ "Undefined control sequence (" ++ show name ++ ")"
+                    | otherwise -> loop depth (t : revTokens) -- unexpandable
+        -- character, \noexpand-ed name, inserted \relax
+        t -> loop depth (t : revTokens) -- noexpand flag should be stripped later
+
+edefReadUntilEndGroup :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
+edefReadUntilEndGroup = map fromEToken <$> edefReadUntilEndGroupE
+
 -- reads undelimited macro argument
 readArgument :: (MonadState s m, IsState s, MonadError String m) => ParamLong -> m [TeXToken]
 readArgument !long = do

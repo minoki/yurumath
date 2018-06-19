@@ -22,6 +22,9 @@ shortParam, longParam :: MacroParamSpec
 shortParam = StandardMandatory ShortParam
 longParam = StandardMandatory LongParam
 
+delimitedBy :: ParamLong -> [TeXToken] -> MacroParamSpec
+delimitedBy !isLong delimiter = Until isLong (ParamDelimiter delimiter False)
+
 optionalStar :: [TeXToken] -> [TeXToken] -> MacroParamSpec
 optionalStar ifTrue ifFalse = OptionalChar
   { paramSpecConsumeSpace = ConsumeSpaces
@@ -70,9 +73,9 @@ latexDefinitions = Map.fromList
   ,("@namedef",      Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "\\expandafter\\def\\csname #1\\endcsname")
   ,("@nameuse",      Left $ liftUnion $ mkSimpleMacroWithString [shortParam] "\\csname #1\\endcsname")
   -- \@cons
-  ,("@car",          Left $ liftUnion $ mkSimpleMacroWithString [shortParam, Until ShortParam [TTCommandName (NControlSeq "@nil")]] "#1")
-  ,("@cdr",          Left $ liftUnion $ mkSimpleMacroWithString [shortParam, Until ShortParam [TTCommandName (NControlSeq "@nil")]] "#2")
-  ,("@carcube",      Left $ liftUnion $ mkSimpleMacroWithString [shortParam, shortParam, shortParam, Until ShortParam [TTCommandName (NControlSeq "@nil")]] "#1#2#3")
+  ,("@car",          Left $ liftUnion $ mkSimpleMacroWithString [shortParam, delimitedBy ShortParam [TTCommandName (NControlSeq "@nil")]] "#1")
+  ,("@cdr",          Left $ liftUnion $ mkSimpleMacroWithString [shortParam, delimitedBy ShortParam [TTCommandName (NControlSeq "@nil")]] "#2")
+  ,("@carcube",      Left $ liftUnion $ mkSimpleMacroWithString [shortParam, shortParam, shortParam, delimitedBy ShortParam [TTCommandName (NControlSeq "@nil")]] "#1#2#3")
   ,("@gobble",       Left $ liftUnion $ mkSimpleMacroWithString [longParam] "")
   ,("@gobbletwo",    Left $ liftUnion $ mkSimpleMacroWithString [longParam, longParam] "")
   ,("@gobblefour",   Left $ liftUnion $ mkSimpleMacroWithString [longParam, longParam, longParam, longParam] "")

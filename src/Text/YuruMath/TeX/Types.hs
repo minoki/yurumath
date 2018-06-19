@@ -360,15 +360,20 @@ localState = localStates . lens head setter
 
 class (IsExpandable e, Monad m) => DoExpand e m where
   doExpand               :: e -> m [ExpansionToken]
+  doTotallyExpand        :: ExpansionToken -> e -> Maybe (m [ExpansionToken]) -- in the context of \edef
   evalBooleanConditional :: e -> Maybe (m Bool)
+  doTotallyExpand _ _ = Nothing
 
 instance (Monad m) => DoExpand (Union '[]) m where
   doExpand               = typesExhausted
+  doTotallyExpand _      = typesExhausted
   evalBooleanConditional = typesExhausted
 
 instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpand (Union (e : es)) m where
   doExpand               = (doExpand :: e -> m [ExpansionToken])
                            @> (doExpand :: Union (Delete e es) -> m [ExpansionToken])
+  doTotallyExpand t      = (doTotallyExpand t :: e -> Maybe (m [ExpansionToken]))
+                           @> (doTotallyExpand t :: Union (Delete e es) -> Maybe (m [ExpansionToken]))
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 

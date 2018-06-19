@@ -131,6 +131,10 @@ etest7 = TestCase $ assertEqual "\\dimexpr" expected (expandAllString "\\the\\di
       ,Character 't' CCOther
       ]
 
+macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
+  where
+    expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 1 MVItalic SMSymbol . T.singleton) "Y"
+
 mtest1 = TestCase $ assertEqual "Math" expected (runMathList True "1+1")
   where
 {-
@@ -255,6 +259,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 7 (\\dimexpr)" etest7
                  --,TestLabel "Expansion 8 (\\glueexpr)" etest8
                  --,TestLabel "Expansion 9 (\\muexpr)" etest9
+                 ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2
                  ,TestLabel "Math 3" mtest3

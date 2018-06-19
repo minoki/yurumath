@@ -820,3 +820,12 @@ readLBrace = do
     Just (Character _ CCBeginGroup) -> do
       enterGroup ScopeByBrace
     _ -> throwError ("Expected `{', but got " ++ show t)
+
+readFillerAndLBrace :: (MonadTeXState s m, MonadError String m) => m ()
+readFillerAndLBrace = do
+  (t,v) <- evalToken
+  case toCommonValue v of
+    Just (Character _ CCBeginGroup) -> enterGroup ScopeByBrace -- explicit or implict left brace
+    Just (Character _ CCSpace) -> readFillerAndLBrace -- optional spaces: ignored
+    Just Relax -> readFillerAndLBrace -- relax: ignored
+    _ -> throwError ("Expected `{', but got " ++ show t)

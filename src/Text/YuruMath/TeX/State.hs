@@ -3,6 +3,7 @@ module Text.YuruMath.TeX.State where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
 import Data.Char
+import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
 import Control.Lens.Getter (view,use)
@@ -81,12 +82,12 @@ defaultCategoryCodeOf c = case c of
   c | isLetter c -> CCLetter
   _ -> CCOther
 
-categoryCodeOf :: MonadTeXState a m => Char -> m CatCode
+categoryCodeOf :: (MonadState s m, IsState s) => Char -> m CatCode
 categoryCodeOf c = do
   m <- use (localState . catcodeMap)
   pure (Map.findWithDefault (defaultCategoryCodeOf c) c m)
 
-categoryCodeFn :: MonadTeXState a m => m (Char -> CatCode)
+categoryCodeFn :: (MonadState s m, IsState s) => m (Char -> CatCode)
 categoryCodeFn = do
   m <- use (localState . catcodeMap)
   pure (\c -> Map.findWithDefault (defaultCategoryCodeOf c) c m)
@@ -95,12 +96,12 @@ defaultLCCodeOf :: Char -> Char
 defaultLCCodeOf c | isAlpha c = toLower c
                   | otherwise = '\0'
 
-lcCodeOf :: MonadTeXState a m => Char -> m Char
+lcCodeOf :: (MonadState s m, IsState s) => Char -> m Char
 lcCodeOf c = do
   m <- use (localState . lccodeMap)
   pure (Map.findWithDefault (defaultLCCodeOf c) c m)
 
-lcCodeFn :: MonadTeXState a m => m (Char -> Char)
+lcCodeFn :: (MonadState s m, IsState s) => m (Char -> Char)
 lcCodeFn = do
   m <- use (localState . lccodeMap)
   pure (\c -> Map.findWithDefault (defaultLCCodeOf c) c m)
@@ -109,12 +110,12 @@ defaultUCCodeOf :: Char -> Char
 defaultUCCodeOf c | isAlpha c = toUpper c
                   | otherwise = '\0'
 
-ucCodeOf :: MonadTeXState a m => Char -> m Char
+ucCodeOf :: (MonadState s m, IsState s) => Char -> m Char
 ucCodeOf c = do
   m <- use (localState . uccodeMap)
   pure (Map.findWithDefault (defaultUCCodeOf c) c m)
 
-ucCodeFn :: MonadTeXState a m => m (Char -> Char)
+ucCodeFn :: (MonadState s m, IsState s) => m (Char -> Char)
 ucCodeFn = do
   m <- use (localState . uccodeMap)
   pure (\c -> Map.findWithDefault (defaultUCCodeOf c) c m)
@@ -184,7 +185,7 @@ defaultMathCodeOf c = case c of
     symbols = 2 -- ?
   -}
 
-mathCodeOf :: MonadTeXState a m => Char -> m MathCode
+mathCodeOf :: (MonadState s m, IsState s) => Char -> m MathCode
 mathCodeOf c = do
   m <- use (localState . mathcodeMap)
   pure (Map.findWithDefault (defaultMathCodeOf c) c m)
@@ -219,16 +220,16 @@ defaultDelimiterCodeOf c = case c of
 
   _ -> DelimiterCode (-1) -- IniTeX
 
-delimiterCodeOf :: MonadTeXState a m => Char -> m DelimiterCode
+delimiterCodeOf :: (MonadState s m, IsState s) => Char -> m DelimiterCode
 delimiterCodeOf c = do
   m <- use (localState . delcodeMap)
   pure (Map.findWithDefault (defaultDelimiterCodeOf c) c m)
 
-enterGroup :: MonadTeXState a m => ScopeType -> m ()
+enterGroup :: (MonadState s m, IsState s) => ScopeType -> m ()
 enterGroup !st = do
   modifying localStates (\ss -> set scopeType st (head ss) : ss)
 
-leaveGroup :: (MonadTeXState a m, MonadError String m) => ScopeType -> m ()
+leaveGroup :: (MonadState s m, IsState s, MonadError String m) => ScopeType -> m ()
 leaveGroup !st = do
   ss <- use localStates
   case ss of

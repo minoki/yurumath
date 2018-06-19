@@ -694,25 +694,12 @@ showRomannumeral !x
         a2 = ["", "x", "xx", "xxx", "xl", "l", "lx", "lxx", "lxxx", "xc"]
         a1 = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"]
 
--- to be used by conditionals, \or, \else
--- does not actually expand the token.
-shallowEval :: (MonadTeXState s m, MonadError String m) => m (Maybe (Expandable s))
-shallowEval = do
-  t <- required nextEToken
-  case t of
-    ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
-      m <- use (localState . definitionAt name)
-      case m of
-        Left e -> return (Just e) -- expandable
-        Right _ -> return Nothing -- non-expandable
-    _ -> return Nothing -- non-expandable
-
 -- True if encountered \else, False if encountered \fi
 skipUntilElse :: (MonadTeXState s m, MonadError String m) => Int -> m Bool
 skipUntilElse !level = do
-  x <- shallowEval
+  x <- required nextEToken >>= meaningWithoutExpansion
   case x of
-    Just c | Just m <- isConditionalMarker c -> case m of
+    Left c | Just m <- isConditionalMarker c -> case m of
                Eor | level == 0 -> throwError "Extra \\or"
                Eelse | level == 0 -> return True
                Efi | level == 0 -> return False
@@ -723,9 +710,9 @@ skipUntilElse !level = do
 
 skipUntilFi :: (MonadTeXState s m, MonadError String m) => Int -> m ()
 skipUntilFi !level = do
-  x <- shallowEval
+  x <- required nextEToken >>= meaningWithoutExpansion
   case x of
-    Just c | isConditionalMarker c == Just Efi
+    Left c | isConditionalMarker c == Just Efi
              -> if level == 0
                 then return ()
                 else skipUntilFi (level - 1)
@@ -738,15 +725,15 @@ data SkipUntilOr = FoundOr
 
 skipUntilOr :: (MonadTeXState s m, MonadError String m) => Int -> m SkipUntilOr
 skipUntilOr !level = do
-  x <- shallowEval
+  x <- required nextEToken >>= meaningWithoutExpansion
   case x of
-    Just c | Just m <- isConditionalMarker c -> case m of
+    Left c | Just m <- isConditionalMarker c -> case m of
                Eor | level == 0 -> return FoundOr
                Eelse | level == 0 -> return FoundElse
                Efi | level == 0 -> return FoundFi
                    | otherwise -> skipUntilOr (level - 1)
                _ -> skipUntilOr level -- Inner \else, \or
-    Just c | isConditional c -> skipUntilOr (level + 1)
+           | isConditional c -> skipUntilOr (level + 1)
     _ -> skipUntilOr level
 
 doBooleanConditional :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
@@ -791,6 +778,7 @@ readGeneralTextE = do
     Just Relax -> readGeneralTextE -- relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
+-- Read an explicit or implicit `{' (character with category code 2)
 readLBrace :: (MonadTeXState s m, MonadError String m) => m ()
 readLBrace = do
   (t,v) <- evalToken

@@ -33,11 +33,11 @@ noexpandCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken
 noexpandCommand = do
   t <- required nextEToken
   case t of
-    ETCommandName { etNoexpand = False, etName = name } -> do
+    ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
       m <- use (localState . definitionAt name)
       return $ case m of
-        Left _ -> [ETCommandName { etDepth = 0, etNoexpand = True, etName = name }] -- expandable
-        Right c | Just (Undefined _) <- toCommonValue c -> [ETCommandName { etDepth = 0, etNoexpand = True, etName = name }] -- undefined
+        Left _ -> [ETCommandName { etDepth = 0, etFlavor = ECNFNoexpanded, etName = name }] -- expandable
+        Right c | Just (Undefined _) <- toCommonValue c -> [ETCommandName { etDepth = 0, etFlavor = ECNFNoexpanded, etName = name }] -- undefined
         Right _ -> [t] -- not expandable
     _ -> return [t]
 
@@ -51,14 +51,14 @@ csnameCommand = do
   when (Map.notMember tname d)
     $ modifying (localState . controlSeqDef) (Map.insert tname (Right (injectCommonValue Relax)))
 
-  return [ETCommandName { etDepth = 0, etNoexpand = False, etName = NControlSeq tname }]
+  return [ETCommandName { etDepth = 0, etFlavor = ECNFPlain, etName = NControlSeq tname }]
 
 -- LuaTeX extension: \begincsname
 begincsnameCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 begincsnameCommand = do
   name <- readUntilEndcsname []
   let tname = T.pack name
-  return [ETCommandName { etDepth = 0, etNoexpand = False, etName = NControlSeq tname }]
+  return [ETCommandName { etDepth = 0, etFlavor = ECNFPlain, etName = NControlSeq tname }]
 
 stringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 stringCommand = do

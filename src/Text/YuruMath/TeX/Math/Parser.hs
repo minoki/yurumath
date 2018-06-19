@@ -446,7 +446,7 @@ readMathMaterial = loop []
             mc <- mathCodeOf c
             if mc == mathActive
               then do -- math active
-                      unreadEToken (ETCommandName { etDepth = etDepth et + 1, etNoexpand = False, etName = NActiveChar c })
+                      unreadEToken (ETCommandName { etDepth = etDepth et + 1, etFlavor = ECNFPlain, etName = NActiveChar c })
                       loop revList
               else do delcode <- delimiterCodeOf c
                       let mathclass = mathcharClass mc
@@ -641,7 +641,7 @@ readMathField = do
         mc <- mathCodeOf c
         if mc == mathActive
           then do -- math active
-                  unreadEToken (ETCommandName { etDepth = etDepth et + 1, etNoexpand = False, etName = NActiveChar c })
+                  unreadEToken (ETCommandName { etDepth = etDepth et + 1, etFlavor = ECNFPlain, etName = NActiveChar c })
                   readMathField
           else makeMathSymbol (mathcharClass mc) (mathcharFamily mc) (mathcharSlot mc)
       MTMathChar mc -> do -- \mathchar or \mathchardef-ed

@@ -51,9 +51,14 @@ data TeXToken = TTCommandName !CommandName
               | TTCharacter !Char !CatCode -- not CCEscape, CCEndLine, CCIgnored, CCActive, CCComment, CCInvalid
               deriving (Eq,Show)
 
+data ExpansionCommandNameFlavor = ECNFPlain
+                                | ECNFNoexpanded    -- prefixed by \noexpand
+                                | ECNFInsertedRelax -- \relax, inserted by \else, \fi
+                                deriving (Eq,Show)
+
 data ExpansionToken = ETCommandName
                       { etDepth :: !Int
-                      , etNoexpand :: !Bool
+                      , etFlavor :: !ExpansionCommandNameFlavor
                       , etName :: !CommandName
                       }
                     | ETCharacter -- non-active character

@@ -9,6 +9,7 @@ import Text.YuruMath.TeX.State
 import Data.Int
 import Data.Char
 import Data.Ratio
+import Data.Maybe
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 import Control.Monad
@@ -18,11 +19,11 @@ import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign,modifying)
 
 toEToken :: TeXToken -> ExpansionToken
-toEToken (TTCommandName name) = ETCommandName { etDepth = 0, etNoexpand = False, etName = name }
+toEToken (TTCommandName name) = ETCommandName { etDepth = 0, etFlavor = ECNFPlain, etName = name }
 toEToken (TTCharacter c cc) = ETCharacter { etDepth = 0, etChar = c, etCatCode = cc }
 
 fromEToken :: ExpansionToken -> TeXToken
-fromEToken (ETCommandName { etName = name }) = TTCommandName name -- etNoexpand is ignored
+fromEToken (ETCommandName { etName = name }) = TTCommandName name -- etFlavor is ignored
 fromEToken (ETCharacter { etChar = c, etCatCode = cc }) = TTCharacter c cc
 
 nextEToken :: (MonadState s m, IsState s, MonadError String m) => m (Maybe ExpansionToken)
@@ -204,7 +205,7 @@ readOptionalKeyword name = do _ <- readKeyword name
 
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]
-expandOnce et@(ETCommandName { etNoexpand = False, etName = name }) = do
+expandOnce et@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
   m <- use (localState . definitionAt name)
   case m of
     Left e -> doExpand e
@@ -213,85 +214,52 @@ expandOnce et = return [et]
 
 -- used by number reading, \if and \ifcat argument, general text
 evalToken :: (MonadTeXState s m, MonadError String m) => m (ExpansionToken,Value s)
-evalToken = do
-  t <- required nextEToken
-  let d = etDepth t
-  case t of
-    ETCommandName { etNoexpand = False, etName = name } -> do
-      m <- use (localState . definitionAt name)
-      case m of
-        Left e | Just v <- isConditionalMarker e -> do
-          cs <- use conditionals
-          case cs of
-            CondTest:_ -> do
-              unreadETokens d [t]
-              return (ETCommandName { etDepth = d, etNoexpand = False, etName = NControlSeq "relax" }, injectCommonValue $ Relax)
-            _ -> do
-              r <- doExpand e
-              unreadETokens (d+1) r
-              evalToken
-        Left e -> do
-          r <- doExpand e
-          unreadETokens (d+1) r
-          evalToken
-        Right v -> return (t,v) -- non-expandable commands are not executed
-    ETCommandName { etNoexpand = True, etName = name } -> do
-      return (t,injectCommonValue $ Unexpanded name)
-    ETCharacter { etChar = c, etCatCode = cc } ->
-      return (t,injectCommonValue $ Character c cc)
+evalToken = required maybeEvalToken
 
 maybeEvalToken :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
 maybeEvalToken = do
   et <- nextEToken
   case et of
-    Just t ->
-      case t of
-        ETCommandName { etNoexpand = False, etName = name } -> do
-          m <- use (localState . definitionAt name)
-          case m of
-            Left e | Just v <- isConditionalMarker e -> do
-                       cs <- use conditionals
-                       case cs of
-                         CondTest:_ -> do
-                           let d = etDepth t
-                           unreadETokens d [t]
-                           return $ Just (ETCommandName { etDepth = 0, etNoexpand = False, etName = NControlSeq "relax" }, injectCommonValue $ Relax)
-                         _ -> do
-                           r <- doExpand e
-                           let d = etDepth t
-                           unreadETokens (d+1) r
-                           maybeEvalToken
-            Left e -> do
-              let d = etDepth t
-              r <- doExpand e
-              unreadETokens (d+1) r
-              maybeEvalToken
-            Right v -> return $ Just (t,v) -- non-expandable commands are not executed
-        ETCommandName { etNoexpand = True, etName = name } -> do
-          return $ Just (t,injectCommonValue $ Unexpanded name)
-        ETCharacter { etChar = c, etCatCode = cc } ->
-          return $ Just (t,injectCommonValue $ Character c cc)
+    Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
+      m <- use (localState . definitionAt name)
+      cs <- use conditionals
+      case m of
+        Left e | isJust (isConditionalMarker e), CondTest:_ <- cs -> do
+                   -- \else, \or, \fi in conditional test: Insert \relax with a special flavor
+                   unreadEToken t
+                   return $ Just (ETCommandName { etDepth = 0, etFlavor = ECNFInsertedRelax, etName = NControlSeq "relax" }, injectCommonValue Relax)
+        Left e -> do
+          -- Other expandable command: Just expand it
+          r <- doExpand e
+          unreadETokens (etDepth t + 1) r
+          maybeEvalToken
+        Right v -> return $ Just (t,v) -- non-expandable commands are not executed
+    Just t@(ETCommandName { etFlavor = ECNFNoexpanded, etName = name }) -> do
+      return $ Just (t,injectCommonValue $ Unexpanded name)
+    Just t@(ETCommandName { etFlavor = ECNFInsertedRelax, etName = name }) -> do
+      return $ Just (t,injectCommonValue Relax)
+    Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
+      return $ Just (t,injectCommonValue $ Character c cc)
     Nothing -> return Nothing
 
 evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
 evalToValue = do
   et <- nextEToken
   case et of
-    Just t -> do
-      case t of
-        ETCommandName { etNoexpand = False, etName = name } -> do
-          m <- use (localState . definitionAt name)
-          case m of
-            Left e -> do
-              r <- doExpand e
-              let d = etDepth t
-              unreadETokens (d+1) r
-              evalToValue
-            Right v -> return (Just (t,v))
-        ETCommandName { etNoexpand = True, etName = name } -> do
-          return (Just (t,injectCommonValue $ Unexpanded name))
-        ETCharacter { etChar = c, etCatCode = cc } ->
-          return (Just (t,injectCommonValue $ Character c cc))
+    Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
+      m <- use (localState . definitionAt name)
+      case m of
+        Left e -> do
+          r <- doExpand e
+          unreadETokens (etDepth t + 1) r
+          evalToValue
+        Right v -> return (Just (t,v))
+    Just t@(ETCommandName { etFlavor = ECNFNoexpanded, etName = name }) -> do
+      return (Just (t,injectCommonValue $ Unexpanded name))
+    Just t@(ETCommandName { etFlavor = ECNFInsertedRelax, etName = name }) -> do
+      return (Just (t,injectCommonValue Relax))
+    Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
+      return (Just (t,injectCommonValue $ Character c cc))
     Nothing -> return Nothing
 
 required :: (MonadError String m) => m (Maybe a) -> m a
@@ -727,7 +695,7 @@ shallowEval :: (MonadTeXState s m, MonadError String m) => m (Maybe (Expandable 
 shallowEval = do
   t <- required nextEToken
   case t of
-    ETCommandName { etNoexpand = False, etName = name } -> do
+    ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
       m <- use (localState . definitionAt name)
       case m of
         Left e -> return (Just e) -- expandable
@@ -795,8 +763,9 @@ expandBooleanConditional c = do
 meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
 meaningWithoutExpansion t = do
   case t of
-    ETCommandName { etNoexpand = True, etName = name } -> return (Right (injectCommonValue $ Unexpanded name))
-    ETCommandName { etNoexpand = False, etName = name } -> use (localState . definitionAt name)
+    ETCommandName { etFlavor = ECNFPlain, etName = name } -> use (localState . definitionAt name)
+    ETCommandName { etFlavor = ECNFNoexpanded, etName = name } -> return (Right (injectCommonValue $ Unexpanded name))
+    ETCommandName { etFlavor = ECNFInsertedRelax, etName = name } -> return (Right (injectCommonValue Relax))
     ETCharacter { etChar = c, etCatCode = cc } -> return (Right (injectCommonValue $ Character c cc))
 
 readGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]

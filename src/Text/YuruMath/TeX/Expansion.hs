@@ -10,6 +10,7 @@ import Data.Int
 import Data.Char
 import Data.Ratio
 import Data.Maybe
+import Data.Bits
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 import Control.Monad
@@ -829,3 +830,36 @@ readFillerAndLBrace = do
     Just (Character _ CCSpace) -> readFillerAndLBrace -- optional spaces: ignored
     Just Relax -> readFillerAndLBrace -- relax: ignored
     _ -> throwError ("Expected `{', but got " ++ show t)
+
+-- \Umathchardef, \Umathcode, \Umathchar's math code: <0-7><0-255><21-bit number>
+readUMathCodeTriplet :: (MonadTeXState s m, MonadError String m) => m MathCode
+readUMathCodeTriplet = do
+  mathclass <- readIntBetween 0 7 -- "Invalid math code"
+  fam <- readIntBetween 0 0xFF -- "Invalid math code"
+  slot <- readUnicodeScalarValue
+  return $ mkUMathCode (toEnum mathclass) (fromIntegral fam) slot
+
+-- \Umathcharnumdef, \Umathcodenum, \Umathcharnum's math code: <32-bit number>
+readUMathCode32 :: (MonadTeXState s m, MonadError String m) => m MathCode
+readUMathCode32 = do
+  value <- int32ToWord32 <$> readInt32
+  let slot = 0x1FFFFF .&. value
+  if isUnicodeScalarValue slot
+    then return $ UMathCode (word32ToInt32 value)
+    else throwError "Invalid math code"
+
+-- \Udelcode's delimiter code: <0-255><21-bit number>
+readUDelimiterCodePair :: (MonadTeXState s m, MonadError String m) => m DelimiterCode
+readUDelimiterCodePair = do
+  fam <- readIntBetween 0 0xFF -- "Invalid delimiter code."
+  slot <- readUnicodeScalarValue
+  return $ mkUDelCode (fromIntegral fam) slot
+
+-- \Udelcodenum's delimiter code (8-bit + 21-bit in 32 bit)
+readUDelimiterCode32 :: (MonadTeXState s m, MonadError String m) => m DelimiterCode
+readUDelimiterCode32 = do
+  value <- readInt32
+  let slot = 0x1FFFFF .&. int32ToWord32 value
+  if 0 <= value && value < 2^(29::Int) && isUnicodeScalarValue value
+    then return $ UDelimiterCode value
+    else throwError "Invalid delimiter code"

@@ -83,7 +83,7 @@ Some commands are from e-TeX or XeTeX/LuaTeX.
 - `\let`, `\futurelet`
 - `\def`, `\edef`, `\gdef`, `\xdef`, `\outer`, `\long`, `\protected`
 - `\chardef`, `\mathchardef`, `\Umathchardef`, `\Umathcharnumdef`
-- `\catcode`, `\lccode`, `\uccode`, `\mathcode`, `\delcode`
+- `\catcode`, `\lccode`, `\uccode`, `\mathcode`, `\Umathcode`, `\Umathcodenum`, `\delcode`, `\Udelcode`, `\Udelcodenum`
 - `\begingroup`, `\endgroup`
 - `\endlinechar`, `\escapechar`
 - `\count`, `\countdef`, `\dimen`, `\dimendef`, `\skip`, `\skipdef`, `\muskip`, `\muskipdef`

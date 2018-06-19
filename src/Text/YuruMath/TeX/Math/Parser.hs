@@ -166,18 +166,11 @@ readMathToken = do
 
       -- \Umathchar<0-7><0-"FF><0-"10FFFF>
       MUmathchar -> do
-        mathclass <- readIntBetween 0 7
-        fam <- readIntBetween 0 0xFF
-        c <- readUnicodeScalarValue
-        return $ MTMathChar (mkUMathCode (toEnum mathclass) (fromIntegral fam) c)
+        MTMathChar <$> readUMathCodeTriplet
 
       -- \Umathcharnum<signed 32-bit integer>
       MUmathcharnum -> do
-        x <- int32ToWord32 <$> readInt32
-        let slot = 0x1FFFFF .&. x
-        if isUnicodeScalarValue slot
-          then return $ MTMathChar (UMathCode (word32ToInt32 x))
-          else throwError "\\Umathcharnum: Invalid math code"
+        MTMathChar <$> readUMathCode32
 
       -- \delimiter<27-bit integer>
       Mdelimiter -> do
@@ -186,12 +179,11 @@ readMathToken = do
             value = fromIntegral (0xFFFFFF .&. x)
         return $ MTDelimiter mathclass (DelimiterCode value)
 
-      -- \Udelimiter<0-7><0-"FF"><0-"10FFFF>
+      -- \Udelimiter<0-7><0-"FF><0-"10FFFF>
       MUdelimiter -> do
         mathclass <- toEnum <$> readIntBetween 0 7
-        fam <- fromIntegral <$> readIntBetween 0 0xFF
-        slot <- readUnicodeScalarValue
-        return $ MTDelimiter mathclass $ mkUDelCode fam slot
+        code <- readUDelimiterCodePair
+        return $ MTDelimiter mathclass code
 
       -- \radical<24-bit integer><math field>
       Mradical -> do
@@ -201,15 +193,11 @@ readMathToken = do
 
       -- \Uradical<0-"FF><0-"10FFFF><math field>
       MUradical -> do
-        fam <- readIntBetween 0 0xFF
-        slot <- readUnicodeScalarValue
-        return $ MTRadical $ mkUDelCode (fromIntegral fam) slot
+        MTRadical <$> readUDelimiterCodePair
 
       -- \Uroot<0-"FF><0-"10FFFF><math field><math field>
       MUroot -> do
-        fam <- readIntBetween 0 0xFF
-        slot <- readUnicodeScalarValue
-        return $ MTRoot $ mkUDelCode (fromIntegral fam) slot
+        MTRoot <$> readUDelimiterCodePair
 
       -- \mathaccent<15-bit integer><math field>
       Mmathaccent -> do
@@ -219,11 +207,9 @@ readMathToken = do
 
       -- \Umathaccent<0-7><0-"FF"><0-"10FFFF><math field>
       MUmathaccent -> do
-        -- TODO: handle optional keywords
-        mathclass <- readIntBetween 0 7
-        fam <- readIntBetween 0 0xFF
-        slot <- readUnicodeScalarValue
-        return $ MTAccent $ mkUMathCode (toEnum mathclass) (fromIntegral fam) slot
+        -- TODO: handle optional keywords ("both" "bottom" "top" "overlay" "fixed")
+        code <- readUMathCodeTriplet
+        return $ MTAccent code
 
       MUsuperscript -> return MTSup
       MUsubscript -> return MTSub

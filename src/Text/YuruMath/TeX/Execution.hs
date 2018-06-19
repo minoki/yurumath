@@ -5,15 +5,32 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-module Text.YuruMath.TeX.Execution where
+module Text.YuruMath.TeX.Execution
+  (CountReg
+  ,DimenReg
+  ,SkipReg
+  ,MuskipReg
+  ,readRegIndex
+  ,Assignment
+  ,runLocal
+  ,runGlobal
+  ,runArithmetic
+  ,texAssign
+  ,advanceInteger
+  ,advanceQuantity
+  ,multiplyInteger
+  ,multiplyQuantity
+  ,divideInteger
+  ,divideQuantity
+  ,CommonExecutable(..)
+  ,executableDefinitions
+  ) where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
-import Data.Bits
 import Data.Text (Text)
-import Control.Monad
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
 import Control.Lens.Lens (Lens')
@@ -148,25 +165,16 @@ umathchardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment
 umathchardefCommand = do
   name <- readCommandName
   readEquals
-  mathclass <- readIntBetween 0 7 -- "Invalid math code"
-  fam <- readIntBetween 0 0xFF -- "Invalid math code"
-  c <- readUnicodeScalarValue
-  let w = injectCommonValue $ DefinedMathCharacter $ mkUMathCode (toEnum mathclass) (fromIntegral fam) c
-  texAssign (definitionAt name) (Right w)
+  w <- readUMathCodeTriplet
+  texAssign (definitionAt name) (Right $ injectCommonValue $ DefinedMathCharacter w)
 
 -- \Umathcharnumdef<control sequence><equals><32-bit number>
 umathcharnumdefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 umathcharnumdefCommand = do
   name <- readCommandName
   readEquals
-  value <- int32ToWord32 <$> readInt32
-  let -- mathclass = 0x7 .&. (value `shiftR` 21)
-      -- fam = 0xFF .&. (value `shiftR` 24)
-      code = 0x1FFFFF .&. value
-  unless (isUnicodeScalarValue code)
-    $ throwError "\\Umathcharnumdef: Invalid math code"
-  let w = injectCommonValue $ DefinedMathCharacter $ UMathCode (word32ToInt32 value)
-  texAssign (definitionAt name) (Right w)
+  w <- readUMathCode32
+  texAssign (definitionAt name) (Right $ injectCommonValue $ DefinedMathCharacter w)
 
 -- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
 
@@ -227,7 +235,21 @@ mathcodeSet = do
   let w = MathCode (fromIntegral v)
   texAssign (mathcodeMap . at slot) (Just w)
 
--- \UmathcodenumSet
+-- \Umathcode<21-bit number><equals><3-bit number><8-bit number><21-bit number>
+umathcodeSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+umathcodeSet = do
+  slot <- readUnicodeScalarValue
+  readEquals
+  w <- readUMathCodeTriplet
+  texAssign (mathcodeMap . at slot) (Just w)
+
+-- \Umathcodenum<21-bit number><equals><32-bit number>
+umathcodenumSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+umathcodenumSet = do
+  slot <- readUnicodeScalarValue
+  readEquals
+  w <- readUMathCode32
+  texAssign (mathcodeMap . at slot) (Just w)
 
 delcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 delcodeGet = do
@@ -251,9 +273,7 @@ udelcodeSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 udelcodeSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  fam <- readIntBetween 0 0xFF -- "Invalid delimiter code."
-  c <- readUnicodeScalarValue
-  let w = mkUDelCode (fromIntegral fam) c
+  w <- readUDelimiterCodePair
   texAssign (delcodeMap . at slot) (Just w)
 
 -- \Udelcodenum<21-bit number><equals><32-bit number>
@@ -261,15 +281,7 @@ udelcodenumSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 udelcodenumSet = do
   slot <- readUnicodeScalarValue
   readEquals
-  value <- readInt32
-  unless (0 <= value && value < 2^(29::Int))
-    $ throwError "\\Udelcodenum: Invalid delimiter code"
-  let valueu = int32ToWord32 value
-      -- fam = 0xFF .&. (valueu `shiftR` 21)
-      code = 0x1FFFFF .&. valueu
-  unless (isUnicodeScalarValue code)
-    $ throwError "\\Udelcodenum: Invalid delimiter code"
-  let w = UDelimiterCode value
+  w <- readUDelimiterCode32
   texAssign (delcodeMap . at slot) (Just w)
 
 endlinecharGet :: (MonadTeXState s m, MonadError String m) => m Integer
@@ -479,6 +491,10 @@ data CommonExecutable = Eglobal
                       | Euccode
                       | Emathcode
                       | Edelcode
+                      | EUmathcode
+                      | EUmathcodenum
+                      | EUdelcode
+                      | EUdelcodenum
                       | Ebegingroup
                       | Eendgroup
                       | Eendlinechar
@@ -555,6 +571,10 @@ instance Meaning CommonExecutable where
   meaningString Euccode = controlSequence "uccode"
   meaningString Emathcode = controlSequence "mathcode"
   meaningString Edelcode = controlSequence "delcode"
+  meaningString EUmathcode = controlSequence "Umathcode"
+  meaningString EUmathcodenum = controlSequence "Umathcodenum"
+  meaningString EUdelcode = controlSequence "Udelcode"
+  meaningString EUdelcodenum = controlSequence "Udelcodenum"
   meaningString Ebegingroup = controlSequence "begingroup"
   meaningString Eendgroup = controlSequence "endgroup"
   meaningString Eendlinechar = controlSequence "endlinechar"
@@ -584,6 +604,10 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   doExecute Euccode          = runLocal uccodeSet
   doExecute Emathcode        = runLocal mathcodeSet
   doExecute Edelcode         = runLocal delcodeSet
+  doExecute EUmathcode       = runLocal umathcodeSet
+  doExecute EUmathcodenum    = runLocal umathcodenumSet
+  doExecute EUdelcode        = runLocal udelcodeSet
+  doExecute EUdelcodenum     = runLocal udelcodenumSet
   doExecute Eendlinechar     = runLocal endlinecharSet
   doExecute Eescapechar      = runLocal escapecharSet
   doExecute Euppercase       = uppercaseCommand
@@ -613,6 +637,10 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   doGlobal Euccode          = Just $ runGlobal uccodeSet
   doGlobal Emathcode        = Just $ runGlobal mathcodeSet
   doGlobal Edelcode         = Just $ runGlobal delcodeSet
+  doGlobal EUmathcode       = Just $ runGlobal umathcodeSet
+  doGlobal EUmathcodenum    = Just $ runGlobal umathcodenumSet
+  doGlobal EUdelcode        = Just $ runGlobal udelcodeSet
+  doGlobal EUdelcodenum     = Just $ runGlobal udelcodenumSet
   doGlobal Eendlinechar     = Just $ runGlobal endlinecharSet
   doGlobal Eescapechar      = Just $ runGlobal escapecharSet
   doGlobal Ecount           = Just $ runGlobal countSet
@@ -653,6 +681,10 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, 
   getQuantity Euccode      = QInteger uccodeGet
   getQuantity Emathcode    = QInteger mathcodeGet
   getQuantity Edelcode     = QInteger delcodeGet
+  getQuantity EUmathcode   = QInteger mathcodeGet -- Same as \mathcode
+  getQuantity EUmathcodenum= QInteger mathcodeGet -- Same as \mathcode
+  getQuantity EUdelcode    = QInteger delcodeGet  -- Same as \delcode
+  getQuantity EUdelcodenum = QInteger delcodeGet  -- Same as \delcode
   getQuantity Eendlinechar = QInteger endlinecharGet
   getQuantity Eescapechar  = QInteger escapecharGet
   getQuantity Ecount       = QInteger countGet
@@ -679,6 +711,10 @@ executableDefinitions = Map.fromList
   ,("uccode",         liftUnion Euccode)
   ,("mathcode",       liftUnion Emathcode)
   ,("delcode",        liftUnion Edelcode)
+  ,("Umathcode",      liftUnion EUmathcode)
+  ,("Umathcodenum",   liftUnion EUmathcodenum)
+  ,("Udelcode",       liftUnion EUdelcode)
+  ,("Udelcodenum",    liftUnion EUdelcodenum)
   ,("begingroup",     liftUnion Ebegingroup)
   ,("endgroup",       liftUnion Eendgroup)
   ,("endlinechar",    liftUnion Eendlinechar)

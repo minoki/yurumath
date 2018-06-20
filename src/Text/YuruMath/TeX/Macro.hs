@@ -615,13 +615,14 @@ edefCommand _defcmdname !prefix = do
     then assign (localStates . mapped . definitionAt name) (Left $ liftUnion macro)
     else assign (localState . definitionAt name) (Left $ liftUnion macro)
 
-doPrefix :: (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadError String m, Union vset ~ Value s, Show (Union vset)) => String -> MacroDefPrefix -> m ()
+doPrefix :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Meaning (Value s)) => String -> MacroDefPrefix -> m ()
 doPrefix name !prefix = do
   (et,v) <- evalToken
   case toCommonValue v of
     Just Relax -> doPrefix name prefix -- ignore \relax
     Just (Character _ CCSpace) -> doPrefix name prefix -- ignore spaces
-    _ -> (onMacroCommand @> (\_ -> throwError $ "Invalid prefix " ++ name ++ " on " ++ show v)) v
+    --  _ -> (onMacroCommand @> invalidPrefix name) v
+    _ -> (onMacroCommand @> (\_ -> invalidPrefix name v)) v
   where
     onMacroCommand Mdef = defCommand "def" prefix
     onMacroCommand Medef = edefCommand "edef" prefix
@@ -630,7 +631,7 @@ doPrefix name !prefix = do
     onMacroCommand Mouter = doPrefix "outer" prefix { prefixOuter = True }
     onMacroCommand Mlong = doPrefix "long" prefix { prefixLong = LongParam }
     onMacroCommand Mprotected = doPrefix "protected" prefix { prefixProtected = True }
-    onMacroCommand v = throwError $ "Invalid prefix " ++ name ++ " on " ++ show v
+    onMacroCommand v = invalidPrefix name v
 
 data MacroCommand = Mdef
                   | Medef
@@ -656,7 +657,7 @@ instance Meaning MacroCommand where
   meaningString Mrenewcommand = controlSequence "renewcommand"
   meaningString Mprovidecommand = controlSequence "providecommand"
 
-instance (Elem Macro eset, Union eset ~ Expandable s, MonadTeXState s m, MonadError String m, Monad m, Union vset ~ Value s, Show (Union vset)) => DoExecute MacroCommand m where
+instance (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Monad m, Meaning (Value s)) => DoExecute MacroCommand m where
   doExecute Mdef       = defCommand "def" unprefixed
   doExecute Medef      = edefCommand "edef" unprefixed
   doExecute Mgdef      = defCommand "gdef" globalPrefix

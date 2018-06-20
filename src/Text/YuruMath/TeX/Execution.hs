@@ -97,7 +97,7 @@ runArithmetic m = return $ \g -> if g then runGlobal m else runLocal m
 texAssign :: (MonadTeXState s m) => ASetter (LocalState s) (LocalState s) b b -> b -> m (Assignment s)
 texAssign setter !value = return (WillAssign setter value)
 
-globalCommand :: (MonadTeXState s m, MonadError String m) => m ()
+globalCommand :: (MonadTeXState s m, MonadError String m, Meaning (Value s)) => m ()
 globalCommand = do
   (et,v) <- evalToken
   case toCommonValue v of
@@ -105,7 +105,7 @@ globalCommand = do
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
     _ -> case doGlobal v of
            Just m -> m
-           Nothing -> throwError $ "You can't use a prefix with " ++ show et
+           Nothing -> invalidPrefix "global" v
 
 letCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 letCommand = do
@@ -593,7 +593,7 @@ instance Meaning CommonExecutable where
   meaningString Emultiply = controlSequence "multiply"
   meaningString Edivide = controlSequence "divide"
 
-instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set, Elem DimenReg set, Elem SkipReg set, Elem MuskipReg set) => DoExecute CommonExecutable m where
+instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set, Elem DimenReg set, Elem SkipReg set, Elem MuskipReg set, Meaning (Value s)) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand
   doExecute Elet             = runLocal letCommand
   doExecute Efuturelet       = runLocal futureletCommand

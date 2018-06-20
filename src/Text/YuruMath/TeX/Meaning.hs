@@ -13,6 +13,7 @@ module Text.YuruMath.TeX.Meaning
   ,showCommandName
   ,showToken
   ,can'tUseThisCommandInCurrentMode
+  ,invalidPrefix
   ) where
 import Text.YuruMath.TeX.Types hiding (_escapechar,_catcodeMap)
 import Text.YuruMath.TeX.State (defaultCategoryCodeOf)
@@ -67,6 +68,12 @@ can'tUseThisCommandInCurrentMode value = do
         MathMode -> "math mode"
         DisplayMathMode -> "display math mode"
   throwError $ "You can't use `" ++ name ++ "' in " ++ modeStr
+
+invalidPrefix :: (Meaning a, MonadTeXState s m, MonadError String m) => String -> a -> m b
+invalidPrefix prefixName v = do
+  -- You can't use a prefix with ...
+  message <- showMessageStringM $ "You can't use a prefix (" <> controlSequence prefixName <> ") with `" <> meaningString v <> "'"
+  throwError message
 
 prependEscapechar :: Int -> String -> String
 prependEscapechar e s | isUnicodeScalarValue e = chr e : s

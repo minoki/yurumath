@@ -30,9 +30,11 @@ import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
+import Data.String
 import Data.Text (Text)
-import Control.Monad.Error.Class
+import Data.Monoid
 import qualified Data.Map.Strict as Map
+import Control.Monad.Error.Class
 import Control.Lens.Lens (Lens')
 import Control.Lens.At (at)
 import Control.Lens.Iso (non)
@@ -513,7 +515,7 @@ data CommonExecutable = Eglobal
                       deriving (Eq,Show)
 
 instance Meaning CountReg where
-  meaningString (CountReg i) = (++) <$> controlSequence "count" <*> pure (show i)
+  meaningString (CountReg i) = controlSequence "count" <> fromString (show i)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg m where
   doExecute (CountReg i)   = runLocal $ setCountReg i
@@ -524,7 +526,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg
   getQuantity (CountReg i) = QInteger $ use (localState . countRegAt i)
 
 instance Meaning DimenReg where
-  meaningString (DimenReg i) = (++) <$> controlSequence "dimen" <*> pure (show i)
+  meaningString (DimenReg i) = controlSequence "dimen" <> fromString (show i)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute DimenReg m where
   doExecute (DimenReg i)   = runLocal $ setDimenReg i
@@ -535,7 +537,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute DimenReg
   getQuantity (DimenReg i) = QDimension $ use (localState . dimenRegAt i)
 
 instance Meaning SkipReg where
-  meaningString (SkipReg i) = (++) <$> controlSequence "skip" <*> pure (show i)
+  meaningString (SkipReg i) = controlSequence "skip" <> fromString (show i)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute SkipReg m where
   doExecute (SkipReg i)   = runLocal $ setSkipReg i
@@ -546,7 +548,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute SkipReg 
   getQuantity (SkipReg i) = QGlue $ use (localState . skipRegAt i)
 
 instance Meaning MuskipReg where
-  meaningString (MuskipReg i) = (++) <$> controlSequence "muskip" <*> pure (show i)
+  meaningString (MuskipReg i) = controlSequence "muskip" <> fromString (show i)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MuskipReg m where
   doExecute (MuskipReg i)   = runLocal $ setMuskipReg i

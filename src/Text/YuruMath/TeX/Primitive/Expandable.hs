@@ -95,9 +95,8 @@ theCommand = stringToEToken <$> theString "\\the"
 
 meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => m [ExpansionToken]
 meaningCommand = do
-  e <- use (localState . escapechar)
   value <- required nextEToken >>= meaningWithoutExpansion
-  return $ stringToEToken (meaningWithEscapecharAsInt e value)
+  stringToEToken <$> showMessageStringM (meaningString value)
 
 romannumeralCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 romannumeralCommand = do

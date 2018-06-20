@@ -381,7 +381,7 @@ doMacro m = do
   doReplace (macroReplacement m)
 
 instance Meaning Macro where
-  meaningString _ = pure "macro:-> <<meaning of macro: not implemented yet>>"
+  meaningString _ = "macro:-> <<meaning of macro: not implemented yet>>"
 
 instance IsExpandable Macro where
   isConditional _ = False

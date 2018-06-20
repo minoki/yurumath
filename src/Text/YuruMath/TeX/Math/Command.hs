@@ -79,10 +79,10 @@ instance Meaning MathAtomCommand where
   meaningString (MathAtomCommand AInner) = controlSequence "mathinner"
   meaningString (MathAtomCommand AUnder) = controlSequence "underline"
   meaningString (MathAtomCommand AOver) = controlSequence "overline"
-  meaningString (MathAtomCommand AAcc) = pure "<<accented atom>>"
-  meaningString (MathAtomCommand ARad) = pure "<<radical>>"
-  meaningString (MathAtomCommand AVcent) = pure "<<vcenter>>"
-  meaningString (MathAtomCommand ARoot) = pure "<<root>>"
+  meaningString (MathAtomCommand AAcc) = "<<accented atom>>"
+  meaningString (MathAtomCommand ARad) = "<<radical>>"
+  meaningString (MathAtomCommand AVcent) = "<<vcenter>>"
+  meaningString (MathAtomCommand ARoot) = "<<root>>"
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MathAtomCommand m where
   doExecute = can'tUseThisCommandInCurrentMode

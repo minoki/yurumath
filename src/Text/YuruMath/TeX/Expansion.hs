@@ -832,9 +832,7 @@ readFillerAndLBrace = do
     _ -> throwError ("Expected `{', but got " ++ show t)
 
 readUnexpandedGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
-readUnexpandedGeneralText = do
-  readFillerAndLBrace
-  readUntilEndGroup LongParam
+readUnexpandedGeneralText = map fromEToken <$> readUnexpandedGeneralTextE
 
 readUnexpandedGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 readUnexpandedGeneralTextE = do
@@ -842,9 +840,12 @@ readUnexpandedGeneralTextE = do
   readUntilEndGroupE LongParam
 
 readExpandedGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
-readExpandedGeneralText = do
+readExpandedGeneralText = map fromEToken <$> readExpandedGeneralTextE
+
+readExpandedGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+readExpandedGeneralTextE = do
   readFillerAndLBrace
-  edefReadUntilEndGroup
+  edefReadUntilEndGroupE
 
 -- \Umathchardef, \Umathcode, \Umathchar's math code: <0-7><0-255><21-bit number>
 readUMathCodeTriplet :: (MonadTeXState s m, MonadError String m) => m MathCode

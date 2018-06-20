@@ -210,6 +210,16 @@ etest13 = TestCase $ assertEqual "\\strcmp" expected $ runMessage $ concat
                      ,"0"
                      ]
 
+etest14 = TestCase $ assertEqual "\\expanded" expected $ runMessage $ concat
+          ["\\def\\foo{\\bar}\\def\\bar{baz}"
+          ,"\\message{\\unexpanded{\\foo\\foo}}"
+          ,"\\message{\\unexpanded\\expandafter{\\expanded{\\foo\\foo}}}"
+          ]
+  where
+    expected = Right ["\\foo \\foo "
+                     ,"bazbaz"
+                     ]
+
 macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 1 MVItalic SMSymbol . T.singleton) "Y"
@@ -342,6 +352,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 11 (\\detokenize)" etest11
                  ,TestLabel "Expansion 12 (\\detokenize)" etest12
                  ,TestLabel "Expansion 13 (\\strcmp)" etest13
+                 ,TestLabel "Expansion 14 (\\expanded)" etest14
                  ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2

@@ -286,6 +286,10 @@ unlessCommand = do
 unexpandedCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 unexpandedCommand = readUnexpandedGeneralTextE
 
+-- LuaTeX extension: \expanded<general text>
+expandedCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+expandedCommand = readExpandedGeneralTextE
+
 -- e-TeX extension: \detokenize<general text>
 detokenizeCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 detokenizeCommand = do
@@ -329,6 +333,7 @@ data CommonExpandable = Eexpandafter
 
                       -- pdfTeX extension
                       | Estrcmp
+                      | Eexpanded
 
                       -- LuaTeX extension:
                       | Ebegincsname
@@ -356,6 +361,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
   doExpand Eunexpanded = unexpandedCommand
   doExpand Edetokenize = detokenizeCommand
   doExpand Estrcmp = strcmpCommand
+  doExpand Eexpanded = expandedCommand
   doExpand Ebegincsname = begincsnameCommand
   doExpand Ecsstring = csstringCommand
   doExpand EUchar = ucharCommand
@@ -377,6 +383,7 @@ instance Meaning CommonExpandable where
   meaningString Eunexpanded = controlSequence "unexpanded"
   meaningString Edetokenize = controlSequence "detokenize"
   meaningString Estrcmp = controlSequence "strcmp" -- \strcmp rather than \pdfstrcmp
+  meaningString Eexpanded = controlSequence "expanded"
   meaningString Ebegincsname = controlSequence "begincsname"
   meaningString Ecsstring = controlSequence "csstring"
   meaningString EUchar = controlSequence "Uchar"
@@ -483,6 +490,7 @@ expandableDefinitions = Map.fromList
   -- pdfTeX extension:
   ,("pdfstrcmp",   liftUnion Estrcmp) -- pdfTeX name
   ,("strcmp",      liftUnion Estrcmp) -- XeTeX name
+  ,("expanded",    liftUnion Eexpanded)
 
   -- LuaTeX extension:
   ,("begincsname", liftUnion Ebegincsname)
@@ -502,7 +510,6 @@ expandableDefinitions = Map.fromList
 --   \scantokens
 -- pdfTeX:
 --   \ifincsname
---   \expanded
 -- LuaTeX:
 --   \lastnamedcs
 -- LaTeX

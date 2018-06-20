@@ -193,6 +193,23 @@ etest12 = TestCase $ assertEqual "\\detokenize" expected $ runMessage $ concat
     expected = Right ["hell o  world !"
                      ]
 
+etest13 = TestCase $ assertEqual "\\strcmp" expected $ runMessage $ concat
+          ["\\message{\\strcmp{a}{z}}"
+          ,"\\def\\z{a} \\message{\\strcmp{a}{\\z}}"
+          ,"\\def\\a{z} \\message{\\strcmp{\\a}{\\z}}"
+          ,"\\edef\\b{\\string b} \\message{\\strcmp{b}{\\b}}"
+          ,"\\escapechar=-1 \\message{\\strcmp{\\relax}{relax}}"
+          ,"\\message{\\strcmp{\\relax}{relax }}"
+          ]
+  where
+    expected = Right ["-1"
+                     ,"0"
+                     ,"1"
+                     ,"0"
+                     ,"1"
+                     ,"0"
+                     ]
+
 macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 1 MVItalic SMSymbol . T.singleton) "Y"
@@ -324,6 +341,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 10 (\\unexpanded)" etest10
                  ,TestLabel "Expansion 11 (\\detokenize)" etest11
                  ,TestLabel "Expansion 12 (\\detokenize)" etest12
+                 ,TestLabel "Expansion 13 (\\strcmp)" etest13
                  ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2

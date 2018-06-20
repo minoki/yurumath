@@ -51,8 +51,7 @@ instance Meaning InteractionCommand where
 
 instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s, Meaning (Expandable s), Meaning (Value s)) => DoExecute InteractionCommand m where
   doExecute Imessage = do
-    readFillerAndLBrace
-    content <- edefReadUntilEndGroup
+    content <- readExpandedGeneralText
     contentS <- showMessageStringM $ mconcat (map showToken content)
     modifying outputLines (++ [contentS])
   doExecute Ishow = do
@@ -66,8 +65,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s,
     str <- theString "\\showthe"
     modifying outputLines (++ ["> " ++ str])
   doExecute Ishowtokens = do
-    readFillerAndLBrace
-    content <- readUntilEndGroup LongParam
+    content <- readUnexpandedGeneralText
     contentS <- showMessageStringM $ mconcat (map showToken content)
     modifying outputLines (++ [contentS])
   getQuantity _ = NotQuantity

@@ -284,15 +284,12 @@ unlessCommand = do
 
 -- e-TeX extension: \unexpanded<general text>
 unexpandedCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-unexpandedCommand = do
-  readFillerAndLBrace
-  readUntilEndGroupE LongParam
+unexpandedCommand = readUnexpandedGeneralTextE
 
 -- e-TeX extension: \detokenize<general text>
 detokenizeCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 detokenizeCommand = do
-  readFillerAndLBrace
-  content <- readUntilEndGroup LongParam
+  content <- readUnexpandedGeneralText
   stringToEToken <$> showMessageStringM (mconcat $ map showToken content)
 
 -- LuaTeX extension: \Uchar
@@ -302,6 +299,19 @@ ucharCommand = do
   if x == ' '
     then return [ETCharacter { etDepth = 0, etChar = ' ', etCatCode = CCSpace }]
     else return [ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther }]
+
+-- pdfTeX extension: \pdfstrcmp (\strcmp in XeTeX)
+-- \pdfstrcmp<general text><general text>
+strcmpCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+strcmpCommand = do
+  lhs <- readExpandedGeneralText
+  rhs <- readExpandedGeneralText
+  lhsS <- showMessageStringM (mconcat $ map showToken lhs)
+  rhsS <- showMessageStringM (mconcat $ map showToken rhs)
+  return $ case compare lhsS rhsS of
+             LT -> stringToEToken "-1"
+             EQ -> stringToEToken "0"
+             GT -> stringToEToken "1"
 
 data CommonExpandable = Eexpandafter
                       | Enoexpand
@@ -316,6 +326,9 @@ data CommonExpandable = Eexpandafter
                       | Eunless
                       | Eunexpanded
                       | Edetokenize
+
+                      -- pdfTeX extension
+                      | Estrcmp
 
                       -- LuaTeX extension:
                       | Ebegincsname
@@ -342,6 +355,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
   doExpand Eunless = unlessCommand
   doExpand Eunexpanded = unexpandedCommand
   doExpand Edetokenize = detokenizeCommand
+  doExpand Estrcmp = strcmpCommand
   doExpand Ebegincsname = begincsnameCommand
   doExpand Ecsstring = csstringCommand
   doExpand EUchar = ucharCommand
@@ -362,6 +376,7 @@ instance Meaning CommonExpandable where
   meaningString Eunless = controlSequence "unless"
   meaningString Eunexpanded = controlSequence "unexpanded"
   meaningString Edetokenize = controlSequence "detokenize"
+  meaningString Estrcmp = controlSequence "strcmp" -- \strcmp rather than \pdfstrcmp
   meaningString Ebegincsname = controlSequence "begincsname"
   meaningString Ecsstring = controlSequence "csstring"
   meaningString EUchar = controlSequence "Uchar"
@@ -465,6 +480,10 @@ expandableDefinitions = Map.fromList
   ,("unexpanded",  liftUnion Eunexpanded)
   ,("detokenize",  liftUnion Edetokenize)
 
+  -- pdfTeX extension:
+  ,("pdfstrcmp",   liftUnion Estrcmp) -- pdfTeX name
+  ,("strcmp",      liftUnion Estrcmp) -- XeTeX name
+
   -- LuaTeX extension:
   ,("begincsname", liftUnion Ebegincsname)
   ,("csstring",    liftUnion Ecsstring)
@@ -473,7 +492,6 @@ expandableDefinitions = Map.fromList
 -- \endcsname is not included here
 
 -- other expandable primitives:
---   \ifdim
 --   \ifeof
 --   \ifhbox
 --   \ifvbox
@@ -481,7 +499,6 @@ expandableDefinitions = Map.fromList
 --   \input
 --   \jobname
 -- e-TeX:
---   \detokenize
 --   \scantokens
 -- pdfTeX:
 --   \ifincsname

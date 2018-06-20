@@ -283,16 +283,19 @@ unlessCommand = do
     _ -> throwError "\\unless must be followed by a boolean conditional command"
     -- You can't use `\\unless' before `XXX'.
 
--- e-TeX extension: \unexpanded
+-- e-TeX extension: \unexpanded<general text>
 unexpandedCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 unexpandedCommand = do
-  throwError "\\unexpanded: not implemented yet"
+  readFillerAndLBrace
+  readUntilEndGroupE LongParam
 
 -- LuaTeX extension: \Uchar
 ucharCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 ucharCommand = do
   x <- readUnicodeScalarValue
-  return [ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther }] -- TODO: category code?
+  if x == ' '
+    then return [ETCharacter { etDepth = 0, etChar = ' ', etCatCode = CCSpace }]
+    else return [ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther }]
 
 data CommonExpandable = Eexpandafter
                       | Enoexpand
@@ -335,6 +338,8 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
   doExpand Ecsstring = csstringCommand
   doExpand EUchar = ucharCommand
   doExpand Eifcase = ifcaseCommand
+  doTotallyExpand _ Eunexpanded = Just unexpandedCommand -- \unexpanded in \edef
+  doTotallyExpand _ _ = Nothing
   evalBooleanConditional _ = Nothing
 
 instance Meaning CommonExpandable where

@@ -75,6 +75,7 @@ Some commands are from e-TeX or XeTeX/LuaTeX.
 - `\ifhmode`, `\ifvmode`, `\ifmmode`, `\ifinner`, `\ifdefined`, `\ifcsname`
 - `\unless`, `\else`, `\fi`, `\or`
 - `\begincsname`, `\csstring`, `\Uchar`, `\mathstyle`
+- `\unexpanded`
 
 ### Non-expandable commands
 

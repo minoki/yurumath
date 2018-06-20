@@ -9,9 +9,11 @@ import Text.YuruMath.TeX.State
 import qualified Text.YuruMath.TeX.Tokenizer as Tok
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Primitive
+import Text.YuruMath.TeX.Interaction
 import Text.YuruMath.TeX.Math
 import Control.Monad.State.Strict
 import Control.Monad.Except
+import Control.Lens.Getter (use)
 import Control.Lens.Setter (modifying)
 import qualified Data.Text as T
 import Data.OpenUnion
@@ -54,6 +56,21 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
       modifying (localState . controlSeqDef)
         $ \m -> mconcat [primitiveDefinitions
                         ,mathDefinitions
+                        ,m
+                        ]
+      runMMDGlobal <$> readMathMaterial
+
+runMessage :: String -> Either String [String]
+runMessage input = runExcept $ evalStateT (action >> use outputLines) initialState
+  where
+    initialState = initialStateWithOutputLines $ initialMathState True $ initialStateWithLocalState initialLocalMathState input
+    action :: StateT (StateWithOutputLines (MathState (MathLocalState MathExpandableT (MathValue :++: '[InteractionCommand]))))
+              (Except String) (MathList Void)
+    action = do
+      modifying (localState . controlSeqDef)
+        $ \m -> mconcat [primitiveDefinitions
+                        ,mathDefinitions
+                        ,interactionCommands
                         ,m
                         ]
       runMMDGlobal <$> readMathMaterial
@@ -130,6 +147,19 @@ etest7 = TestCase $ assertEqual "\\dimexpr" expected (expandAllString "\\the\\di
       ,Character 'p' CCOther
       ,Character 't' CCOther
       ]
+
+etest10 = TestCase $ assertEqual "\\unexpanded" expected $ runMessage $ concat
+          ["\\def\\foo{bar}\\message{\\foo\\unexpanded{\\foo}}"
+          ,"\\edef\\bar{\\foo\\unexpanded{\\foo}}\\def\\baz{bar\\foo}\\message{\\ifx\\bar\\baz Y\\else N\\fi}"
+          ,"\\edef\\bar{\\number\"1\\unexpanded{\\number\"0}}\\def\\baz{16}\\message{\\ifx\\bar\\baz Y\\else N\\fi}"
+          ,"\\edef\\bar{\\number\"1 \\unexpanded{\\number\"0}}\\def\\baz{1\\number\"0}\\message{\\ifx\\bar\\baz Y\\else N\\fi}"
+          ]
+  where
+    expected = Right ["bar\\foo "
+                     ,"Y"
+                     ,"Y"
+                     ,"Y"
+                     ]
 
 macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
   where
@@ -259,6 +289,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 7 (\\dimexpr)" etest7
                  --,TestLabel "Expansion 8 (\\glueexpr)" etest8
                  --,TestLabel "Expansion 9 (\\muexpr)" etest9
+                 ,TestLabel "Expansion 10 (\\unexpanded)" etest10
                  ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2

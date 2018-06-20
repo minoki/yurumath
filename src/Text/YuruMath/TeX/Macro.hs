@@ -9,7 +9,10 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Meaning
 import Control.Monad
 import Control.Monad.Error.Class
+import Data.List
 import Data.Char
+import Data.String
+import Data.Monoid ((<>))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.OpenUnion
@@ -380,8 +383,91 @@ doMacro m = do
       doReplace (x : xs) = (x :) <$> doReplace xs
   doReplace (macroReplacement m)
 
+showParamDelimiter :: ParamDelimiter -> MessageString
+showParamDelimiter (ParamDelimiter t lbrace)
+  | lbrace = mconcat (map showToken t) <> "{"
+  | otherwise = mconcat (map showToken t)
+
+showParamSpec :: ParamLong -> Int -> Int -> MacroParamSpec -> MessageString
+showParamSpec !isLong !totalParam !i param = case param of
+  StandardMandatory long -> withDescription (paramLong long)
+
+  RequiredDelimited {} -> withDescriptionD (paramSpecOpen param) (paramSpecClose param) $
+    ["delimited"]
+    ++ (if paramSpecBalanced param then ["balanced"] else [])
+    ++ defaultValue (paramSpecDefault param)
+
+  Until long del -> withDescription (paramLong long) <> showParamDelimiter del
+
+  Verbatim -> withDescription ["verbatim"]
+
+  OptionalDelimited {} -> withDescriptionD (paramSpecOpen param) (paramSpecClose param) $
+    ["optional"]
+    ++ consumeSpaces (paramSpecConsumeSpace param)
+    ++ (if paramSpecBalanced param then ["balanced"] else [])
+    ++ defaultValue (paramSpecDefault param)
+
+  OptionalChar {} -> withDescription $
+    [if paramSpecToken param == TTCharacter '*' CCOther
+     then "optional star"
+     else "optional char " <> showToken (paramSpecToken param)
+    ]
+    ++ consumeSpaces (paramSpecConsumeSpace param)
+    ++ ["iftrue={" <> mconcat (map showToken (paramSpecIfTrue param)) <> "}"]
+    ++ ["iffalse={" <> mconcat (map showToken (paramSpecIfFalse param)) <> "}"]
+
+  OptionalGroup {} -> withDescription $
+    ["optional group"]
+    ++ consumeSpaces (paramSpecConsumeSpace param)
+    ++ defaultValue (paramSpecDefault param)
+
+  where paramLong long | isLong == long = []
+                       | long == LongParam = ["long"]
+                       | otherwise = ["short"]
+        consumeSpaces ConsumeSpaces | i /= totalParam = []
+                                    | otherwise = ["gobble spaces"]
+        consumeSpaces Don'tConsumeSpace = ["don't gobble spaces"]
+        consumeSpaces WarnIfConsumedSpaces = ["gobble spaces (with a warning)"]
+        defaultValue xs | xs == noValueMarker = []
+                        | otherwise = ["default={" <> mconcat (map showToken xs) <> "}"]
+        withDescription :: [MessageString] -> MessageString
+        withDescription [] = "#" <> fromString (show i)
+        withDescription desc = "<" <> mconcat (intersperse ", " desc) <> ">#" <> fromString (show i)
+        withDescriptionD :: TeXToken -> TeXToken -> [MessageString] -> MessageString
+        withDescriptionD t1 t2 [] = showToken t1 <> "#" <> fromString (show i) <> showToken t2
+        withDescriptionD t1 t2 desc = showToken t1 <> "<" <> mconcat (intersperse ", " desc) <> ">#" <> fromString (show i) <> showToken t2
+
+paramSpecIsLongM :: MacroParamSpec -> Maybe ParamLong
+paramSpecIsLongM (StandardMandatory { paramSpecIsLong = long }) = Just long
+paramSpecIsLongM (RequiredDelimited { paramSpecIsLong = long }) = Just long
+paramSpecIsLongM (Until { paramSpecIsLong = long }) = Just long
+paramSpecIsLongM (Verbatim {}) = Nothing
+paramSpecIsLongM (OptionalDelimited { paramSpecIsLong = long }) = Just long
+paramSpecIsLongM (OptionalChar {}) = Nothing
+paramSpecIsLongM (OptionalGroup { paramSpecIsLong = long }) = Just long
+
 instance Meaning Macro where
-  meaningString _ = "macro:-> <<meaning of macro: not implemented yet>>"
+  meaningString m = prefix <> "macro:" <> beforeFirstParam <> paramSpec <> "->" <> repText
+    where
+      prefixP | macroIsProtected m = controlSequence "protected"
+              | otherwise = ""
+      prefixO | macroIsOuter m = controlSequence "outer"
+              | otherwise = ""
+      allLong = all (\p -> paramSpecIsLongM p /= Just ShortParam) (macroParamSpec m)
+      allShort = all (\p -> paramSpecIsLongM p /= Just LongParam) (macroParamSpec m)
+      prefixL | allShort = ""
+              | allLong = controlSequence "long"
+              | otherwise = "(partially)" <> controlSequence "long"
+      hasPrefix = macroIsProtected m || macroIsOuter m || not allShort
+      prefix = prefixP <> prefixL <> prefixO <> (if hasPrefix then " " else "")
+      paramCount = length (macroParamSpec m) -- should be <= 9
+      beforeFirstParam = showParamDelimiter (macroDelimiterBeforeFirstParam m)
+      paramSpec = mconcat $ zipWith (showParamSpec (if allLong then LongParam else ShortParam) paramCount) [1..] (macroParamSpec m)
+      repText = mconcat (map showToken (macroReplacement m)) <> if isLastLBrace then "{" else ""
+      isLastLBrace | paramCount == 0 = delimitedByLBrace $ macroDelimiterBeforeFirstParam m
+                   | otherwise = case last (macroParamSpec m) of
+                                   Until _ d -> delimitedByLBrace d
+                                   _ -> False
 
 instance IsExpandable Macro where
   isConditional _ = False

@@ -91,7 +91,7 @@ Some commands are from e-TeX or XeTeX/LuaTeX.
 - `\advance`, `\multiply`, `\divide`
 - `\numexpr`, `\dimexpr`, `\glueexpr`, `\muexpr`
 - `\gluestretch`, `\glueshrink`, `\gluestretchorder`, `\glueshrinkorder`, `\mutoglue`, `\gluetomu`
-- `\message`, `\show`, `\showthe`
+- `\message`, `\show`, `\showthe`, `\showtokens`
 - `\char`, `\kern`, `\unkern`, `\unskip`, `\hskip`, `\hfil`, `\hfill`, `\hss`, `\hfilneg`, `\noindent`, `\ `, `\/`
 - `\newcommand`, `\renewcommand`, `\providecommand` (from LaTeX)
 

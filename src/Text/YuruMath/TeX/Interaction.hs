@@ -44,12 +44,14 @@ instance (IsState basestate) => IsInteractiveState (StateWithOutputLines basesta
 data InteractionCommand = Imessage
                         | Ishow
                         | Ishowthe
+                        | Ishowtokens
                         deriving (Eq,Show)
 
 instance Meaning InteractionCommand where
   meaningString Imessage = controlSequence "message"
   meaningString Ishow = controlSequence "show"
   meaningString Ishowthe = controlSequence "showthe"
+  meaningString Ishowtokens = controlSequence "showtokens"
 
 prependEscapechar :: (MonadState s m, IsState s) => String -> m String
 prependEscapechar s = do
@@ -94,11 +96,17 @@ instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s,
   doExecute Ishowthe = do
     str <- theString "\\showthe"
     modifying outputLines (++ ["> " ++ str])
+  doExecute Ishowtokens = do
+    readFillerAndLBrace
+    content <- readUntilEndGroup LongParam
+    contentS <- concat <$> mapM showToken content
+    modifying outputLines (++ [contentS])
   getQuantity _ = NotQuantity
 
 interactionCommands :: (Elem InteractionCommand set) => Map.Map Text (Either eset (Union set))
 interactionCommands = Map.fromList
   [("message", Right $ liftUnion Imessage)
   ,("show", Right $ liftUnion Ishow)
-  ,("showthe", Right $ liftUnion Ishow)
+  ,("showthe", Right $ liftUnion Ishowthe)
+  ,("showtokens", Right $ liftUnion Ishowtokens)
   ]

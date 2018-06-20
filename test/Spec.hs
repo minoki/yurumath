@@ -161,6 +161,38 @@ etest10 = TestCase $ assertEqual "\\unexpanded" expected $ runMessage $ concat
                      ,"Y"
                      ]
 
+etest11 = TestCase $ assertEqual "\\detokenize" expected (expandAllString "\\detokenize{\\hell\\o\\ \\world\\!}")
+  where
+    expected = Right $ map liftUnion
+      [Character '\\' CCOther
+      ,Character 'h' CCOther
+      ,Character 'e' CCOther
+      ,Character 'l' CCOther
+      ,Character 'l' CCOther
+      ,Character ' ' CCSpace
+      ,Character '\\' CCOther
+      ,Character 'o' CCOther
+      ,Character ' ' CCSpace
+      ,Character '\\' CCOther
+      ,Character ' ' CCSpace
+      ,Character '\\' CCOther
+      ,Character 'w' CCOther
+      ,Character 'o' CCOther
+      ,Character 'r' CCOther
+      ,Character 'l' CCOther
+      ,Character 'd' CCOther
+      ,Character ' ' CCSpace
+      ,Character '\\' CCOther
+      ,Character '!' CCOther
+      ]
+
+etest12 = TestCase $ assertEqual "\\detokenize" expected $ runMessage $ concat
+          ["\\escapechar=-1 \\message{\\detokenize{\\hell\\o\\ \\world\\!}}"
+          ]
+  where
+    expected = Right ["hell o  world !"
+                     ]
+
 macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 1 MVItalic SMSymbol . T.singleton) "Y"
@@ -290,6 +322,8 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  --,TestLabel "Expansion 8 (\\glueexpr)" etest8
                  --,TestLabel "Expansion 9 (\\muexpr)" etest9
                  ,TestLabel "Expansion 10 (\\unexpanded)" etest10
+                 ,TestLabel "Expansion 11 (\\detokenize)" etest11
+                 ,TestLabel "Expansion 12 (\\detokenize)" etest12
                  ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2

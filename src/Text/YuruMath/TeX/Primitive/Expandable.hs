@@ -288,6 +288,13 @@ unexpandedCommand = do
   readFillerAndLBrace
   readUntilEndGroupE LongParam
 
+-- e-TeX extension: \detokenize<general text>
+detokenizeCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+detokenizeCommand = do
+  readFillerAndLBrace
+  content <- readUntilEndGroup LongParam
+  stringToEToken <$> showMessageStringM (mconcat $ map showToken content)
+
 -- LuaTeX extension: \Uchar
 ucharCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 ucharCommand = do
@@ -308,6 +315,7 @@ data CommonExpandable = Eexpandafter
                       -- e-TeX extension:
                       | Eunless
                       | Eunexpanded
+                      | Edetokenize
 
                       -- LuaTeX extension:
                       | Ebegincsname
@@ -333,6 +341,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
   doExpand Emeaning = meaningCommand
   doExpand Eunless = unlessCommand
   doExpand Eunexpanded = unexpandedCommand
+  doExpand Edetokenize = detokenizeCommand
   doExpand Ebegincsname = begincsnameCommand
   doExpand Ecsstring = csstringCommand
   doExpand EUchar = ucharCommand
@@ -352,6 +361,7 @@ instance Meaning CommonExpandable where
   meaningString Emeaning = controlSequence "meaning"
   meaningString Eunless = controlSequence "unless"
   meaningString Eunexpanded = controlSequence "unexpanded"
+  meaningString Edetokenize = controlSequence "detokenize"
   meaningString Ebegincsname = controlSequence "begincsname"
   meaningString Ecsstring = controlSequence "csstring"
   meaningString EUchar = controlSequence "Uchar"
@@ -453,6 +463,7 @@ expandableDefinitions = Map.fromList
 
   ,("unless",      liftUnion Eunless)
   ,("unexpanded",  liftUnion Eunexpanded)
+  ,("detokenize",  liftUnion Edetokenize)
 
   -- LuaTeX extension:
   ,("begincsname", liftUnion Ebegincsname)

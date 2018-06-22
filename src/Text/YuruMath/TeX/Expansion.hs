@@ -107,7 +107,7 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
                 Just m -> do r <- m
                              -- the result should be balanced text
                              loop depth (reverse r ++ revTokens)
-            Right v | Just (Undefined _) <- toCommonValue v -> throwError $ "Undefined control sequence (" ++ show name ++ ")"
+            Right v | isUndefined v -> throwError $ "Undefined control sequence (" ++ show name ++ ")"
                     | otherwise -> loop depth (t : revTokens) -- unexpandable
         -- character, \noexpand-ed name, inserted \relax
         t -> loop depth (t : revTokens) -- noexpand flag should be stripped later
@@ -136,12 +136,6 @@ readCommandName = do
     ETCommandName { etName = name } -> return name
     _ -> throwError $ "unexpected character token: " ++ show t
          -- or, "Missing control sequence inserted"
-
--- explicit space or implicit space
-isImplicitSpace :: IsValue v => v -> Bool
-isImplicitSpace v = case toCommonValue v of
-  Just (Character _ CCSpace) -> True
-  _ -> False
 
 readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
 readOneOptionalSpace = do

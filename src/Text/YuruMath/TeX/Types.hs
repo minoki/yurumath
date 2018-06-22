@@ -199,6 +199,17 @@ instance (Eq (Union s), Elem CommonValue s) => IsValue (Union s) where
   injectCommonValue = liftUnion
   toCommonValue = Just @!> \_ -> Nothing
 
+-- explicit space or implicit space
+isImplicitSpace :: (IsValue v) => v -> Bool
+isImplicitSpace v = case toCommonValue v of
+  Just (Character _ CCSpace) -> True
+  _ -> False
+
+isUndefined :: (IsValue v) => v -> Bool
+isUndefined v = case toCommonValue v of
+  Just (Undefined _) -> True
+  _ -> False
+
 data Mode = HorizontalMode
           | RestrictedHorizontalMode
           | VerticalMode

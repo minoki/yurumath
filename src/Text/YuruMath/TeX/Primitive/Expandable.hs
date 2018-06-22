@@ -37,7 +37,7 @@ noexpandCommand = do
       m <- use (localState . definitionAt name)
       return $ case m of
         Left _ -> [ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = name }] -- expandable
-        Right c | Just (Undefined _) <- toCommonValue c -> [ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = name }] -- undefined
+        Right c | isUndefined c -> [ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = name }] -- undefined
         Right _ -> [t] -- not expandable
     _ -> return [t]
 
@@ -260,9 +260,9 @@ ifinnerCommand = uses mode isInnerMode
 ifdefinedCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdefinedCommand = do
   t <- required nextEToken >>= meaningWithoutExpansion
-  case toCommonValue <$> t of
-    Right (Just (Undefined _)) -> return False
-    _ -> return True
+  return $ case t of
+             Left _ -> False
+             Right v -> isUndefined v
 
 -- e-TeX extension: \ifcsname
 ifcsnameCommand :: (MonadTeXState s m, MonadError String m) => m Bool

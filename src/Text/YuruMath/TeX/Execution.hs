@@ -126,7 +126,7 @@ futureletCommand = do
 
 uppercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 uppercaseCommand = do
-  text <- readGeneralTextE
+  text <- readUnexpandedGeneralTextE
   toUpper <- ucCodeFn
   let makeUpper et@(ETCharacter { etChar = c }) | d <- toUpper c, d /= '\0' = et { etChar = d }
       makeUpper et@(ETCommandName { etName = NActiveChar c }) | d <- toUpper c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
@@ -136,7 +136,7 @@ uppercaseCommand = do
 
 lowercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 lowercaseCommand = do
-  text <- readGeneralTextE
+  text <- readUnexpandedGeneralTextE
   toLower <- lcCodeFn
   let makeLower et@(ETCharacter { etChar = c }) | d <- toLower c, d /= '\0' = et { etChar = d }
       makeLower et@(ETCommandName { etName = NActiveChar c }) | d <- toLower c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }

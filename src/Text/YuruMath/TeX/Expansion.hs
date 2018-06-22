@@ -781,49 +781,39 @@ meaningWithoutExpansion t = do
     ETCommandName { etFlavor = ECNFIsRelax, etName = name } -> return (Right (injectCommonValue Relax))
     ETCharacter { etChar = c, etCatCode = cc } -> return (Right (injectCommonValue $ Character c cc))
 
-readGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
-readGeneralText = do
-  (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character _ CCSpace) -> readGeneralText -- optional spaces: ignored
-    Just (Character _ CCBeginGroup) -> readUntilEndGroup LongParam
-    Just Relax -> readGeneralText -- \relax: ignored
-    _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
+-- Reads an explicit or implicit `{' (character with category code 2), and enters a new group
+readLBrace :: forall s m. (MonadTeXState s m, MonadError String m) => m ()
+readLBrace = loop
+  where
+    loop :: m ()
+    loop = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character _ CCSpace) -> loop -- ignore spaces
+        Just (Character _ CCBeginGroup) -> do
+          enterGroup ScopeByBrace
+        _ -> throwError ("Expected `{', but got " ++ show t)
 
-readGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-readGeneralTextE = do
-  (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character _ CCSpace) -> readGeneralTextE -- optional spaces: ignored
-    Just (Character _ CCBeginGroup) -> readUntilEndGroupE LongParam
-    Just Relax -> readGeneralTextE -- \relax: ignored
-    _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
-
--- Read an explicit or implicit `{' (character with category code 2)
-readLBrace :: (MonadTeXState s m, MonadError String m) => m ()
-readLBrace = do
-  (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character _ CCSpace) -> readLBrace
-    Just (Character _ CCBeginGroup) -> do
-      enterGroup ScopeByBrace
-    _ -> throwError ("Expected `{', but got " ++ show t)
-
-readFillerAndLBrace :: (MonadTeXState s m, MonadError String m) => m ()
-readFillerAndLBrace = do
-  (t,v) <- evalToken
-  case toCommonValue v of
-    Just (Character _ CCBeginGroup) -> enterGroup ScopeByBrace -- explicit or implict left brace
-    Just (Character _ CCSpace) -> readFillerAndLBrace -- optional spaces: ignored
-    Just Relax -> readFillerAndLBrace -- \relax: ignored
-    _ -> throwError ("Expected `{', but got " ++ show t)
+readFillerAndLBrace :: forall s m. (MonadTeXState s m, MonadError String m) => Bool -> m ()
+readFillerAndLBrace !createScope = loop
+  where
+    loop :: m ()
+    loop = do
+      (t,v) <- evalToken
+      case toCommonValue v of
+        Just (Character _ CCBeginGroup)
+          | createScope -> enterGroup ScopeByBrace -- explicit or implict left brace
+          | otherwise -> return ()
+        Just (Character _ CCSpace) -> loop -- optional spaces: ignored
+        Just Relax -> loop -- \relax: ignored
+        _ -> throwError ("Expected `{', but got " ++ show t) -- Missing { inserted
 
 readUnexpandedGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
 readUnexpandedGeneralText = map fromEToken <$> readUnexpandedGeneralTextE
 
 readUnexpandedGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 readUnexpandedGeneralTextE = do
-  readFillerAndLBrace
+  readFillerAndLBrace False
   readUntilEndGroupE LongParam
 
 readExpandedGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
@@ -831,8 +821,10 @@ readExpandedGeneralText = map fromEToken <$> readExpandedGeneralTextE
 
 readExpandedGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 readExpandedGeneralTextE = do
-  readFillerAndLBrace
-  edefReadUntilEndGroupE
+  readFillerAndLBrace True
+  content <- edefReadUntilEndGroupE
+  leaveGroup ScopeByBrace
+  return content
 
 -- \Umathchardef, \Umathcode, \Umathchar's math code: <0-7><0-255><21-bit number>
 readUMathCodeTriplet :: (MonadTeXState s m, MonadError String m) => m MathCode

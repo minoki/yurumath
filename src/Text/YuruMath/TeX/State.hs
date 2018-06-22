@@ -69,7 +69,7 @@ defaultCategoryCodeOf c = case c of
   '}'  -> CCEndGroup
   '$'  -> CCMathShift
   '&'  -> CCAlignmentTab
-  '\n' -> CCEndLine
+  '\r' -> CCEndLine
   '#'  -> CCParam
   '^'  -> CCSup
   '_'  -> CCSub

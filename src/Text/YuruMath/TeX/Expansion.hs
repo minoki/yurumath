@@ -178,6 +178,7 @@ readUnicodeScalarValue = do
     then return $ chr $ fromIntegral x
     else throwError $ "Bad character code (" ++ show x ++ ")"
 
+-- try to read a keyword
 readKeyword :: (MonadTeXState s m, MonadError String m) => String -> m Bool
 readKeyword xs = do
   readOptionalSpaces
@@ -198,8 +199,9 @@ readKeyword xs = do
                      return False
         Nothing -> return False
 
-readOneOfKeywords :: (MonadTeXState s m, MonadError String m) => [String] -> m (Maybe String)
-readOneOfKeywords keywords = readOneOfKeywordsV (map (\k -> (k,k)) keywords)
+readOptionalKeyword :: (MonadTeXState s m, MonadError String m) => String -> m ()
+readOptionalKeyword name = do _ <- readKeyword name
+                              return ()
 
 -- read an optional keyword and return the associated value with it
 readOneOfKeywordsV :: (MonadTeXState s m, MonadError String m) => [(String,v)] -> m (Maybe v)
@@ -232,10 +234,6 @@ readKeywordArguments keywords = doRead mempty $ map (\(k,v) -> (k,(k,v))) keywor
           v <- action
           doRead (acc <> v) [a | a <- argSpec, fst a /= w]
         _ -> return acc
-
-readOptionalKeyword :: (MonadTeXState s m, MonadError String m) => String -> m ()
-readOptionalKeyword name = do _ <- readKeyword name
-                              return ()
 
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]

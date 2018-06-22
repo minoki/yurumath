@@ -156,7 +156,6 @@ instance Show ConditionalMarkerCommand where
 
 instance IsExpandable ConditionalMarkerCommand where
   isConditional _     = False
-  isIfCase _          = False
   isConditionalMarker (ConditionalMarkerCommand x) = Just x
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand ConditionalMarkerCommand m where
@@ -345,7 +344,6 @@ data CommonExpandable = Eexpandafter
 
 instance IsExpandable CommonExpandable where
   isConditional e = e == Eifcase
-  isIfCase e = e == Eifcase
   isConditionalMarker _ = Nothing
 
 instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => DoExpand CommonExpandable m where
@@ -409,7 +407,6 @@ data CommonBoolean = Eiftrue
 
 instance IsExpandable CommonBoolean where
   isConditional _ = True
-  isIfCase _ = False
   isConditionalMarker _ = Nothing
 
 instance Meaning CommonBoolean where

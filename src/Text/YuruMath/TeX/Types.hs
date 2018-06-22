@@ -153,24 +153,19 @@ data ConditionalMarker = Eelse -- \else
                        deriving (Eq)
 
 class (Eq e) => IsExpandable e where
-  isConditional       :: e -> Bool
-  isIfCase            :: e -> Bool
-  isConditionalMarker :: e -> Maybe ConditionalMarker
+  isConditional       :: e -> Bool -- Used by \if.., \or, \else to skip conditionals
+  isConditionalMarker :: e -> Maybe ConditionalMarker -- Used by \if.., \or, \else to skip conditionals
 
   -- default definitions:
-  isIfCase _            = False
   isConditionalMarker _ = Nothing
 
 instance IsExpandable (Union '[]) where
   isConditional       = typesExhausted
-  isIfCase            = typesExhausted
   isConditionalMarker = typesExhausted
 
 instance (IsExpandable e, IsExpandable (Union (Delete e es)), Typeable e) => IsExpandable (Union (e : es)) where
   isConditional       = (isConditional :: e -> Bool)
                         @> (isConditional :: Union (Delete e es) -> Bool)
-  isIfCase            = (isIfCase :: e -> Bool)
-                        @> (isIfCase :: Union (Delete e es) -> Bool)
   isConditionalMarker = (isConditionalMarker :: e -> Maybe ConditionalMarker)
                         @> (isConditionalMarker :: Union (Delete e es) -> Maybe ConditionalMarker)
 
@@ -361,7 +356,7 @@ localState = localStates . lens head setter
 class (IsExpandable e, Monad m) => DoExpand e m where
   doExpand               :: e -> m [ExpansionToken]
   doTotallyExpand        :: ExpansionToken -> e -> Maybe (m [ExpansionToken]) -- in the context of \edef
-  evalBooleanConditional :: e -> Maybe (m Bool)
+  evalBooleanConditional :: e -> Maybe (m Bool) -- used by \unless
   doTotallyExpand _ _ = Nothing
 
 instance (Monad m) => DoExpand (Union '[]) m where

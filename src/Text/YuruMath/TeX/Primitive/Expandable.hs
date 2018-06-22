@@ -93,7 +93,7 @@ numberCommand = do
 theCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 theCommand = stringToEToken <$> theString "\\the"
 
-meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => m [ExpansionToken]
+meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (NValue s)) => m [ExpansionToken]
 meaningCommand = do
   value <- required nextEToken >>= meaningWithoutExpansion
   stringToEToken <$> showMessageStringM (meaningString value)
@@ -346,7 +346,7 @@ instance IsExpandable CommonExpandable where
   isConditional e = e == Eifcase
   isConditionalMarker _ = Nothing
 
-instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (Value s)) => DoExpand CommonExpandable m where
+instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (NValue s)) => DoExpand CommonExpandable m where
   doExpand Eexpandafter = expandafterCommand
   doExpand Enoexpand = noexpandCommand
   doExpand Ecsname = csnameCommand

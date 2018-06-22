@@ -97,7 +97,7 @@ runArithmetic m = return $ \g -> if g then runGlobal m else runLocal m
 texAssign :: (MonadTeXState s m) => ASetter (LocalState s) (LocalState s) b b -> b -> m (Assignment s)
 texAssign setter !value = return (WillAssign setter value)
 
-globalCommand :: (MonadTeXState s m, MonadError String m, Meaning (Value s)) => m ()
+globalCommand :: (MonadTeXState s m, MonadError String m, Meaning (NValue s)) => m ()
 globalCommand = do
   (et,v) <- evalToken
   case toCommonValue v of
@@ -330,7 +330,7 @@ countGet = do
   index <- readRegIndex
   use (localState . countRegAt index)
 
-countdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set) => m (Assignment s)
+countdefCommand :: (MonadTeXState s m, MonadError String m, Elem CountReg (NValueSet s)) => m (Assignment s)
 countdefCommand = do
   name <- readCommandName
   readEquals
@@ -353,7 +353,7 @@ dimenGet = do
   index <- readRegIndex
   use (localState . dimenRegAt index)
 
-dimendefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem DimenReg set) => m (Assignment s)
+dimendefCommand :: (MonadTeXState s m, MonadError String m, Elem DimenReg (NValueSet s)) => m (Assignment s)
 dimendefCommand = do
   name <- readCommandName
   readEquals
@@ -376,7 +376,7 @@ skipGet = do
   index <- readRegIndex
   use (localState . skipRegAt index)
 
-skipdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem SkipReg set) => m (Assignment s)
+skipdefCommand :: (MonadTeXState s m, MonadError String m, Elem SkipReg (NValueSet s)) => m (Assignment s)
 skipdefCommand = do
   name <- readCommandName
   readEquals
@@ -399,7 +399,7 @@ muskipGet = do
   index <- readRegIndex
   use (localState . muskipRegAt index)
 
-muskipdefCommand :: (MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem MuskipReg set) => m (Assignment s)
+muskipdefCommand :: (MonadTeXState s m, MonadError String m, Elem MuskipReg (NValueSet s)) => m (Assignment s)
 muskipdefCommand = do
   name <- readCommandName
   readEquals
@@ -593,7 +593,7 @@ instance Meaning CommonExecutable where
   meaningString Emultiply = controlSequence "multiply"
   meaningString Edivide = controlSequence "divide"
 
-instance (Monad m, MonadTeXState s m, MonadError String m, Value s ~ Union set, Elem CountReg set, Elem DimenReg set, Elem SkipReg set, Elem MuskipReg set, Meaning (Value s)) => DoExecute CommonExecutable m where
+instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValueSet s), Elem DimenReg (NValueSet s), Elem SkipReg (NValueSet s), Elem MuskipReg (NValueSet s), Meaning (NValue s)) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand
   doExecute Elet             = runLocal letCommand
   doExecute Efuturelet       = runLocal futureletCommand

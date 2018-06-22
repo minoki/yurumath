@@ -239,10 +239,10 @@ expandOnce et@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
 expandOnce et = return [et]
 
 -- used by number reading, \if and \ifcat argument, general text
-evalToken :: (MonadTeXState s m, MonadError String m) => m (ExpansionToken,Value s)
+evalToken :: (MonadTeXState s m, MonadError String m) => m (ExpansionToken,NValue s)
 evalToken = required maybeEvalToken
 
-maybeEvalToken :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
+maybeEvalToken :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,NValue s))
 maybeEvalToken = do
   et <- nextEToken
   case et of
@@ -266,7 +266,7 @@ maybeEvalToken = do
       return $ Just (t,injectCommonValue $ Character c cc)
     Nothing -> return Nothing
 
-evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,Value s))
+evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,NValue s))
 evalToValue = do
   et <- nextEToken
   case et of
@@ -774,7 +774,7 @@ expandBooleanConditional c = do
     doBooleanConditional b
     return []
 
-meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m (Either (Expandable s) (Value s))
+meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m (Value s)
 meaningWithoutExpansion t = do
   case t of
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> use (localState . definitionAt name)

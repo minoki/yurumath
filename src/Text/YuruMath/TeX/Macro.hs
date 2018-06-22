@@ -615,7 +615,7 @@ edefCommand _defcmdname !prefix = do
     then assign (localStates . mapped . definitionAt name) (Left $ liftUnion macro)
     else assign (localState . definitionAt name) (Left $ liftUnion macro)
 
-doPrefix :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Meaning (Value s)) => String -> MacroDefPrefix -> m ()
+doPrefix :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Meaning (NValue s)) => String -> MacroDefPrefix -> m ()
 doPrefix name !prefix = do
   (et,v) <- evalToken
   case toCommonValue v of
@@ -656,7 +656,7 @@ instance Meaning MacroCommand where
   meaningString Mrenewcommand = controlSequence "renewcommand"
   meaningString Mprovidecommand = controlSequence "providecommand"
 
-instance (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Monad m, Meaning (Value s)) => DoExecute MacroCommand m where
+instance (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Monad m, Meaning (NValue s)) => DoExecute MacroCommand m where
   doExecute Mdef       = defCommand "def" unprefixed
   doExecute Medef      = edefCommand "edef" unprefixed
   doExecute Mgdef      = defCommand "gdef" globalPrefix

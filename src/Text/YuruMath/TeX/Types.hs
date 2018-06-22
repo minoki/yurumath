@@ -187,25 +187,25 @@ instance Eq CommonValue where
   Endcsname              == Endcsname               = True
   _                      == _                       = False
 
-class Eq value => IsValue value where
+class Eq value => IsNValue value where
   injectCommonValue :: CommonValue -> value
   toCommonValue :: value -> Maybe CommonValue
 
-instance IsValue CommonValue where
+instance IsNValue CommonValue where
   injectCommonValue = id
   toCommonValue = Just
 
-instance (Eq (Union s), Elem CommonValue s) => IsValue (Union s) where
+instance (Eq (Union s), Elem CommonValue s) => IsNValue (Union s) where
   injectCommonValue = liftUnion
   toCommonValue = Just @!> \_ -> Nothing
 
 -- explicit space or implicit space
-isImplicitSpace :: (IsValue v) => v -> Bool
+isImplicitSpace :: (IsNValue v) => v -> Bool
 isImplicitSpace v = case toCommonValue v of
   Just (Character _ CCSpace) -> True
   _ -> False
 
-isUndefined :: (IsValue v) => v -> Bool
+isUndefined :: (IsNValue v) => v -> Bool
 isUndefined v = case toCommonValue v of
   Just (Undefined _) -> True
   _ -> False
@@ -285,18 +285,19 @@ data CommonState localstate
     , _conditionals       :: [ConditionalKind]
     }
 
-class (IsExpandable (Union (ExpandableSetT localstate)), IsValue (Union (ValueSetT localstate))) => IsLocalState localstate where
+class (IsExpandable (Union (ExpandableSetT localstate)), IsNValue (Union (NValueSetT localstate))) => IsLocalState localstate where
   type ExpandableSetT localstate :: [*]
-  type ValueSetT localstate :: [*]
-  commonLocalState :: Lens' localstate (CommonLocalState (ExpandableSetT localstate) (ValueSetT localstate))
+  type NValueSetT localstate :: [*] -- the set of non-expandable values
+  commonLocalState :: Lens' localstate (CommonLocalState (ExpandableSetT localstate) (NValueSetT localstate))
 
 type ExpandableT localstate = Union (ExpandableSetT localstate)
-type ValueT localstate = Union (ValueSetT localstate)
+type NValueT localstate = Union (NValueSetT localstate) -- the type of non-expandable values
+type ValueT localstate = Either (ExpandableT localstate) (NValueT localstate)
 
-definitionAt  :: (IsLocalState localstate) => CommandName -> Lens' localstate (Either (ExpandableT localstate) (ValueT localstate))
+definitionAt  :: (IsLocalState localstate) => CommandName -> Lens' localstate (ValueT localstate)
 scopeType     :: (IsLocalState localstate) => Lens' localstate ScopeType
-controlSeqDef :: (IsLocalState localstate) => Lens' localstate (Map.Map Text (Either (ExpandableT localstate) (ValueT localstate)))
-activeDef     :: (IsLocalState localstate) => Lens' localstate (Map.Map Char (Either (ExpandableT localstate) (ValueT localstate)))
+controlSeqDef :: (IsLocalState localstate) => Lens' localstate (Map.Map Text (ValueT localstate))
+activeDef     :: (IsLocalState localstate) => Lens' localstate (Map.Map Char (ValueT localstate))
 catcodeMap    :: (IsLocalState localstate) => Lens' localstate (Map.Map Char CatCode)
 lccodeMap, uccodeMap :: (IsLocalState localstate) => Lens' localstate (Map.Map Char Char)
 mathcodeMap   :: (IsLocalState localstate) => Lens' localstate (Map.Map Char MathCode)
@@ -438,20 +439,21 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonVa
   getQuantity _ = NotQuantity
 
 type ExpandableSet s = ExpandableSetT (LocalState s)
-type ValueSet s = ValueSetT (LocalState s)
-type Expandable s = ExpandableT (LocalState s)
-type Value s = ValueT (LocalState s)
+type NValueSet s     = NValueSetT (LocalState s)
+type Expandable s    = ExpandableT (LocalState s)
+type NValue s        = NValueT (LocalState s)
+type Value s         = ValueT (LocalState s)
 
-type MonadTeXState s m = (IsState s, MonadState s m, DoExpand (Expandable s) m, DoExecute (Value s) m)
+type MonadTeXState s m = (IsState s, MonadState s m, DoExpand (Expandable s) m, DoExecute (NValue s) m)
 
 instance Show ConditionalMarker where
   show Eelse = "\\else"
   show Efi = "\\fi"
   show Eor = "\\or"
 
-instance (IsExpandable (Union ecommand), IsValue (Union value)) => IsLocalState (CommonLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsNValue (Union value)) => IsLocalState (CommonLocalState ecommand value) where
   type ExpandableSetT (CommonLocalState ecommand value) = ecommand
-  type ValueSetT (CommonLocalState ecommand value) = value
+  type NValueSetT (CommonLocalState ecommand value) = value
   commonLocalState = id
 
 instance IsLocalState localstate => IsState (CommonState localstate) where

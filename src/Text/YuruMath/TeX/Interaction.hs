@@ -49,7 +49,7 @@ instance Meaning InteractionCommand where
   meaningString Ishowthe = controlSequence "showthe"
   meaningString Ishowtokens = controlSequence "showtokens"
 
-instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s, Meaning (Expandable s), Meaning (Value s)) => DoExecute InteractionCommand m where
+instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s, Meaning (Value s)) => DoExecute InteractionCommand m where
   doExecute Imessage = do
     content <- readExpandedGeneralText
     contentS <- showMessageStringM $ mconcat (map showToken content)

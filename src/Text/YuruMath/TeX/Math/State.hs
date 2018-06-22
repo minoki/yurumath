@@ -53,12 +53,12 @@ initialMathState !isDisplay !commonState
               , _currentMathStyle = Just $ if isDisplay then DisplayStyle else TextStyle
               }
 
-instance (IsExpandable (Union ecommand), IsValue (Union value)) => IsLocalState (MathLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsNValue (Union value)) => IsLocalState (MathLocalState ecommand value) where
   type ExpandableSetT (MathLocalState ecommand value) = ecommand
-  type ValueSetT (MathLocalState ecommand value) = value
+  type NValueSetT (MathLocalState ecommand value) = value
   commonLocalState = lens _mCommonLocalState (\s v -> s { _mCommonLocalState = v })
 
-instance (IsExpandable (Union ecommand), IsValue (Union value)) => IsMathLocalState (MathLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsNValue (Union value)) => IsMathLocalState (MathLocalState ecommand value) where
   famParam          = lens _famParam          (\s v -> s { _famParam = v })
   currentVariant    = lens _currentVariant    (\s v -> s { _currentVariant = v })
   currentSymbolMode = lens _currentSymbolMode (\s v -> s { _currentSymbolMode = v })

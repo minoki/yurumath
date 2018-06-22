@@ -65,22 +65,21 @@ data MathToken m where
 
 deriving instance Show (MathToken m)
 
-type MonadMathState state set m
+type MonadMathState state m
   = ( MonadTeXState state m
     , IsMathState state
-    , Value state ~ Union set
-    , DoExecute (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set))))))))) m
-    , Show (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue set)))))))))
+    , DoExecute (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue (NValueSet state)))))))))) m
+    , Show (Union (Delete BoxCommand (Delete TypesetCommand (Delete MathSymbolModeSet (Delete MathVariantSet (Delete MathCommands (Delete MathAtomCommand (Delete MathStyleSet (Delete CommonValue (NValueSet state))))))))))
     )
 
-readMathToken :: forall m state set. (MonadMathState state set m, MonadError String m) => m (Maybe (ExpansionToken,MathToken m))
+readMathToken :: forall m state. (MonadMathState state m, MonadError String m) => m (Maybe (ExpansionToken,MathToken m))
 readMathToken = do
   v <- evalToValue
   case v of
     Nothing -> return Nothing -- end of input
     Just (et,v) -> doMathToken et v
   where
-    doMathToken :: ExpansionToken -> Union set -> m (Maybe (ExpansionToken,MathToken m))
+    doMathToken :: ExpansionToken -> NValue state -> m (Maybe (ExpansionToken,MathToken m))
     doMathToken et = doCommonValue et
                      @> (\(v :: MathStyleSet)    -> just <$> doMathStyleSet v)
                      @> (\(v :: MathAtomCommand) -> just <$> doMathAtom v)
@@ -311,7 +310,7 @@ readMathToken = do
       MUnosubscript    -> throwError "\\Unosubscript: not implemented yet"
     doBoxCommand box = return $ MTBox False box
 
-readDelimiter :: (MonadMathState state set m, MonadError String m) => m DelimiterCode
+readDelimiter :: (MonadMathState state m, MonadError String m) => m DelimiterCode
 readDelimiter = do
   t <- readMathToken
   case t of
@@ -410,7 +409,7 @@ instance MathMaterialEnding MMDDenominator where
   onGenFrac _ _ = throwError "Ambiguous: you need another { and }"
   expectedEnding _ = "`}'"
 
-readMathMaterial :: forall f state set m a. (MathMaterialEnding f, MonadMathState state set m, MonadError String m, BoxReader a m) => m (f (MathList a))
+readMathMaterial :: forall f state m a. (MathMaterialEnding f, MonadMathState state m, MonadError String m, BoxReader a m) => m (f (MathList a))
 readMathMaterial = loop []
   where
     loop :: MathList a -> m (f (MathList a))
@@ -626,7 +625,7 @@ readMathMaterial = loop []
 
 -- <math symbol> ::= <character> | <math character>
 -- <math field> ::= <math symbol> | {<math mode material>}
-readMathField :: (MonadMathState state set m, MonadError String m, BoxReader a m) => m (MathField a)
+readMathField :: (MonadMathState state m, MonadError String m, BoxReader a m) => m (MathField a)
 readMathField = do
   t <- readMathToken
   case t of

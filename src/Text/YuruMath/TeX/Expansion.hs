@@ -800,7 +800,8 @@ readGeneralText = do
   case toCommonValue v of
     Just (Character _ CCSpace) -> readGeneralText -- optional spaces: ignored
     Just (Character _ CCBeginGroup) -> readUntilEndGroup LongParam
-    Just Relax -> readGeneralText -- relax: ignored
+    Just Relax -> readGeneralText -- \relax: ignored
+    Just (Unexpanded {}) -> readGeneralText -- \relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
 readGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
@@ -809,7 +810,8 @@ readGeneralTextE = do
   case toCommonValue v of
     Just (Character _ CCSpace) -> readGeneralTextE -- optional spaces: ignored
     Just (Character _ CCBeginGroup) -> readUntilEndGroupE LongParam
-    Just Relax -> readGeneralTextE -- relax: ignored
+    Just Relax -> readGeneralTextE -- \relax: ignored
+    Just (Unexpanded {}) -> readGeneralTextE -- \relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
 -- Read an explicit or implicit `{' (character with category code 2)
@@ -828,7 +830,8 @@ readFillerAndLBrace = do
   case toCommonValue v of
     Just (Character _ CCBeginGroup) -> enterGroup ScopeByBrace -- explicit or implict left brace
     Just (Character _ CCSpace) -> readFillerAndLBrace -- optional spaces: ignored
-    Just Relax -> readFillerAndLBrace -- relax: ignored
+    Just Relax -> readFillerAndLBrace -- \relax: ignored
+    Just (Unexpanded {}) -> readFillerAndLBrace -- \relax: ignored
     _ -> throwError ("Expected `{', but got " ++ show t)
 
 readUnexpandedGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]

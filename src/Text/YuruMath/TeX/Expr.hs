@@ -85,6 +85,8 @@ parseExpression name !level = parseTerm >>= readAddOp
               Just (Character _ CCSpace) -> readAddOp acc
               Just Relax | level == 0 -> return acc -- end of input
                          | otherwise -> throwError $ name ++ ": Unexpected \\relax"
+              Just (Unexpanded {}) | level == 0 -> return acc -- end of input
+                                   | otherwise -> throwError $ name ++ ": Unexpected \\relax"
               _ -> unreadEToken t >> return acc -- end of factor
         Nothing -> return acc
 

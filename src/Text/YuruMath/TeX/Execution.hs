@@ -102,6 +102,7 @@ globalCommand = do
   (et,v) <- evalToken
   case toCommonValue v of
     Just Relax -> globalCommand -- ignore \relax
+    Just (Unexpanded {}) -> globalCommand -- ignore \relax
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
     _ -> case doGlobal v of
            Just m -> m

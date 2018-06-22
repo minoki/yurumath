@@ -869,6 +869,6 @@ readUDelimiterCode32 :: (MonadTeXState s m, MonadError String m) => m DelimiterC
 readUDelimiterCode32 = do
   value <- readInt32
   let slot = 0x1FFFFF .&. int32ToWord32 value
-  if 0 <= value && value < 2^(29::Int) && isUnicodeScalarValue value
+  if 0 <= value && value < 2^(29::Int) && isUnicodeScalarValue slot
     then return $ UDelimiterCode value
     else throwError "Invalid delimiter code"

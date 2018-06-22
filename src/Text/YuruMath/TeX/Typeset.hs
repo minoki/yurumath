@@ -4,7 +4,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Text.YuruMath.TeX.Typeset where
 import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Meaning
+import Text.YuruMath.TeX.Expansion
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Data.OpenUnion
@@ -110,6 +112,21 @@ class BoxReader box m where
 
 instance (MonadError String m) => BoxReader Void m where
   readBox _ = throwError "box commands are not supported"
+
+-- <box specification> ::= "to"<dimen><filler> | "spread"<dimen><filler> | <filler>
+data BoxSpec = BoxWithoutSpec
+             | BoxTo Dimen
+             | BoxSpread Dimen
+             deriving (Eq,Show)
+
+readBoxSpecification :: (MonadTeXState s m, MonadError String m) => m BoxSpec
+readBoxSpecification = do
+  mspec <- readOneOfKeywordsV [("to",BoxTo <$> readDimension)
+                              ,("spread",BoxSpread <$> readDimension)
+                              ]
+  case mspec of
+    Nothing -> pure BoxWithoutSpec
+    Just m -> m
 
 typesetCommands :: (Elem TypesetCommand vset, Elem BoxCommand vset) => Map.Map Text (Union vset)
 typesetCommands = (fmap liftUnion $ Map.fromList

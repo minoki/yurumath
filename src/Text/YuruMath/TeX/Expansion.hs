@@ -261,16 +261,14 @@ maybeEvalToken = do
         Left e | isJust (isConditionalMarker e), CondTest:_ <- cs -> do
                    -- \else, \or, \fi in conditional test: Insert \relax with a special flavor
                    unreadEToken t
-                   return $ Just (ETCommandName { etDepth = 0, etFlavor = ECNFInsertedRelax, etName = NControlSeq "relax" }, injectCommonValue Relax)
+                   return $ Just (ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = NControlSeq "relax" }, injectCommonValue Relax)
         Left e -> do
           -- Other expandable command: Just expand it
           r <- doExpand e
           unreadETokens (etDepth t + 1) r
           maybeEvalToken
         Right v -> return $ Just (t,v) -- non-expandable commands are not executed
-    Just t@(ETCommandName { etFlavor = ECNFNoexpanded, etName = name }) -> do
-      return $ Just (t,injectCommonValue $ Unexpanded name)
-    Just t@(ETCommandName { etFlavor = ECNFInsertedRelax, etName = name }) -> do
+    Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
       return $ Just (t,injectCommonValue Relax)
     Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
       return $ Just (t,injectCommonValue $ Character c cc)
@@ -288,9 +286,7 @@ evalToValue = do
           unreadETokens (etDepth t + 1) r
           evalToValue
         Right v -> return (Just (t,v))
-    Just t@(ETCommandName { etFlavor = ECNFNoexpanded, etName = name }) -> do
-      return (Just (t,injectCommonValue $ Unexpanded name))
-    Just t@(ETCommandName { etFlavor = ECNFInsertedRelax, etName = name }) -> do
+    Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
       return (Just (t,injectCommonValue Relax))
     Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
       return (Just (t,injectCommonValue $ Character c cc))
@@ -790,8 +786,7 @@ meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => E
 meaningWithoutExpansion t = do
   case t of
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> use (localState . definitionAt name)
-    ETCommandName { etFlavor = ECNFNoexpanded, etName = name } -> return (Right (injectCommonValue $ Unexpanded name))
-    ETCommandName { etFlavor = ECNFInsertedRelax, etName = name } -> return (Right (injectCommonValue Relax))
+    ETCommandName { etFlavor = ECNFIsRelax, etName = name } -> return (Right (injectCommonValue Relax))
     ETCharacter { etChar = c, etCatCode = cc } -> return (Right (injectCommonValue $ Character c cc))
 
 readGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
@@ -801,7 +796,6 @@ readGeneralText = do
     Just (Character _ CCSpace) -> readGeneralText -- optional spaces: ignored
     Just (Character _ CCBeginGroup) -> readUntilEndGroup LongParam
     Just Relax -> readGeneralText -- \relax: ignored
-    Just (Unexpanded {}) -> readGeneralText -- \relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
 readGeneralTextE :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
@@ -811,7 +805,6 @@ readGeneralTextE = do
     Just (Character _ CCSpace) -> readGeneralTextE -- optional spaces: ignored
     Just (Character _ CCBeginGroup) -> readUntilEndGroupE LongParam
     Just Relax -> readGeneralTextE -- \relax: ignored
-    Just (Unexpanded {}) -> readGeneralTextE -- \relax: ignored
     _ -> throwError $ "unexpected token " ++ show t -- Missing { inserted
 
 -- Read an explicit or implicit `{' (character with category code 2)
@@ -831,7 +824,6 @@ readFillerAndLBrace = do
     Just (Character _ CCBeginGroup) -> enterGroup ScopeByBrace -- explicit or implict left brace
     Just (Character _ CCSpace) -> readFillerAndLBrace -- optional spaces: ignored
     Just Relax -> readFillerAndLBrace -- \relax: ignored
-    Just (Unexpanded {}) -> readFillerAndLBrace -- \relax: ignored
     _ -> throwError ("Expected `{', but got " ++ show t)
 
 readUnexpandedGeneralText :: (MonadTeXState s m, MonadError String m) => m [TeXToken]

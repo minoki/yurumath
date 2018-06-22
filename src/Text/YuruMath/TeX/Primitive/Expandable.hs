@@ -36,8 +36,8 @@ noexpandCommand = do
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
       m <- use (localState . definitionAt name)
       return $ case m of
-        Left _ -> [ETCommandName { etDepth = 0, etFlavor = ECNFNoexpanded, etName = name }] -- expandable
-        Right c | Just (Undefined _) <- toCommonValue c -> [ETCommandName { etDepth = 0, etFlavor = ECNFNoexpanded, etName = name }] -- undefined
+        Left _ -> [ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = name }] -- expandable
+        Right c | Just (Undefined _) <- toCommonValue c -> [ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = name }] -- undefined
         Right _ -> [t] -- not expandable
     _ -> return [t]
 

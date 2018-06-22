@@ -52,8 +52,7 @@ data TeXToken = TTCommandName !CommandName
               deriving (Eq,Show)
 
 data ExpansionCommandNameFlavor = ECNFPlain
-                                | ECNFNoexpanded    -- prefixed by \noexpand
-                                | ECNFInsertedRelax -- \relax, inserted by \else, \fi
+                                | ECNFIsRelax -- prefixed by \noexpand, or inserted \relax by \else, \fi
                                 deriving (Eq,Show)
 
 data ExpansionToken = ETCommandName
@@ -174,7 +173,6 @@ data CommonValue = Character !Char !CatCode       -- character with category cod
                  | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
                  | IntegerConstant !Int
                  | Relax                          -- \relax
-                 | Unexpanded !CommandName        -- prefixed with \noexpand
                  | Undefined !CommandName
                  | Endcsname                      -- \endcsname
                  deriving (Show)
@@ -185,7 +183,6 @@ instance Eq CommonValue where
   DefinedMathCharacter c == DefinedMathCharacter c' = c == c'
   IntegerConstant x      == IntegerConstant x'      = x == x'
   Relax                  == Relax                   = True
-  Unexpanded _           == Unexpanded _            = True
   Undefined _            == Undefined _             = True
   Endcsname              == Endcsname               = True
   _                      == _                       = False
@@ -420,7 +417,6 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonVa
   doExecute (DefinedMathCharacter _) = return () -- dummy
   doExecute (IntegerConstant _)      = throwError $ "Unexpected integer constant."
   doExecute Relax                    = return () -- do nothing
-  doExecute (Unexpanded _)           = return () -- do nothing
   doExecute (Undefined _)            = throwError $ "Undefined control sequence."
   doExecute Endcsname                = throwError "Extra \\endcsname"
   getQuantity (DefinedCharacter x) = QInteger (return $ fromIntegral $ ord x)

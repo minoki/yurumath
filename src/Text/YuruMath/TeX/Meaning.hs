@@ -145,6 +145,5 @@ instance Meaning CommonValue where
   meaningString (IntegerConstant x)
     = fromString ("integer constant " ++ show x)
   meaningString Relax = controlSequence "relax"
-  meaningString (Unexpanded _) = controlSequence "relax"
   meaningString (Undefined _) = "undefined"
   meaningString Endcsname = controlSequence "endcsname"

@@ -112,4 +112,8 @@ Math mode commands:
 ## Incompatiblities with TeX
 
 * `\over`-like commands must be prefixed by `\Ustack`, like `\Ustack{1\over2}`.
-* `^^` notation in the control word (e.g. `\f^^6fo` = `\foo`) is not supported.
+* `^^` notation in the control word (e.g. `\f^^6fo` = `\foo`) is not allowed.
+* Expansion of `\noexpand` yields a token whose meaning is *really* equivalent to `\relax`;
+  That is, `\expandafter\let\expandafter\foo\noexpand\baz \ifx\foo\relax\message{Y}\else\message{N}\fi` prints `Y` in YuruMath, whereas it prints `N` in a real TeX.
+* The `\relax` inserted by `\or`, `\else` or `\fi` is equivalent to a control sequence named `relax` whose meaning is `\relax`;
+  That is, `\def\foo\relax{} \expandafter\foo\ifodd1\fi` produces no error in YuruMath, whereas it raises the error `Use of \foo doesn't match its definition.` in a real TeX.

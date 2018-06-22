@@ -102,7 +102,6 @@ globalCommand = do
   (et,v) <- evalToken
   case toCommonValue v of
     Just Relax -> globalCommand -- ignore \relax
-    Just (Unexpanded {}) -> globalCommand -- ignore \relax
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
     _ -> case doGlobal v of
            Just m -> m
@@ -131,7 +130,7 @@ uppercaseCommand = do
   toUpper <- ucCodeFn
   let makeUpper et@(ETCharacter { etChar = c }) | d <- toUpper c, d /= '\0' = et { etChar = d }
       makeUpper et@(ETCommandName { etName = NActiveChar c }) | d <- toUpper c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
-      makeUpper et@(ETCommandName { etFlavor = ECNFNoexpanded }) = et { etFlavor = ECNFPlain } -- strip 'noexpaded' flag
+      makeUpper et@(ETCommandName { etFlavor = ECNFIsRelax }) = et { etFlavor = ECNFPlain } -- strip 'isrelax' flag by \noexpand
       makeUpper et = et
   unreadETokens' (map makeUpper text)
 
@@ -141,7 +140,7 @@ lowercaseCommand = do
   toLower <- lcCodeFn
   let makeLower et@(ETCharacter { etChar = c }) | d <- toLower c, d /= '\0' = et { etChar = d }
       makeLower et@(ETCommandName { etName = NActiveChar c }) | d <- toLower c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
-      makeLower et@(ETCommandName { etFlavor = ECNFNoexpanded }) = et { etFlavor = ECNFPlain } -- strip 'noexpaded' flag
+      makeLower et@(ETCommandName { etFlavor = ECNFIsRelax }) = et { etFlavor = ECNFPlain } -- strip 'isrelax' flag by \noexpand
       makeLower et = et
   unreadETokens' (map makeLower text)
 

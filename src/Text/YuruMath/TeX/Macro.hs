@@ -620,7 +620,6 @@ doPrefix name !prefix = do
   (et,v) <- evalToken
   case toCommonValue v of
     Just Relax -> doPrefix name prefix -- ignore \relax
-    Just (Unexpanded {}) -> doPrefix name prefix -- ignore \relax
     Just (Character _ CCSpace) -> doPrefix name prefix -- ignore spaces
     _ -> (onMacroCommand @> (\_ -> invalidPrefix name v)) v
   where

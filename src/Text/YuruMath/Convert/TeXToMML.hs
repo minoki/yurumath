@@ -3,7 +3,6 @@ module Text.YuruMath.Convert.TeXToMML where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Expansion (showDimension)
 import Text.YuruMath.TeX.Math.List
-import Text.YuruMath.TeX.Math.Postprocess
 import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A
 import Data.Text (Text)
@@ -33,7 +32,6 @@ toMML = doList
     doList style (IKern {} : xs) = doList style xs -- not implemented yet; <mspace> or <mpadded>?
     doList style (IBoundary _ _options delim : xs) = doDelimiter delim ++ doList style xs
     doList style (ISizedDelimiter dimen delim : xs) = doSizedDelimiter dimen delim ++ doList style xs
-    doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
 
     doAtom :: MathStyle -> AtomWithScripts a -> MathML
     doAtom style atom@(AtomWithScripts { atomNucleus = OpAtom { atomLimits = limits } })

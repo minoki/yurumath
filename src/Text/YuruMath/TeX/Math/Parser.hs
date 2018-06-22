@@ -575,7 +575,16 @@ readMathMaterial = loop []
             t  <- doChoiceBranch TextStyle
             s  <- doChoiceBranch ScriptStyle
             ss <- doChoiceBranch ScriptScriptStyle
-            loop (IChoice d t s ss : revList)
+            let chosen = case currentStyle of
+                  DisplayStyle             -> d
+                  CrampedDisplayStyle      -> d
+                  TextStyle                -> t
+                  CrampedTextStyle         -> t
+                  ScriptStyle              -> s
+                  CrampedScriptStyle       -> s
+                  ScriptScriptStyle        -> ss
+                  CrampedScriptScriptStyle -> ss
+            loop (reverse chosen ++ revList)
 
           MTStopInline -> onStopInlineMath $ do
             leaveGroup ScopeByMath

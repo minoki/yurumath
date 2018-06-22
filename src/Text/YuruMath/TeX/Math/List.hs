@@ -255,7 +255,6 @@ data MathItem a = IAtom !(AtomWithScripts a)
                 | IGenFrac !GenFrac (MathList a) (MathList a) -- \above, \over, etc
                 | IBoundary !BoundaryType !DelimiterOptions !DelimiterCode -- \left, \middle, or \right
                 | ISizedDelimiter !Dimen !DelimiterCode -- \big, \Big, \bigg, \Bigg
-                | IChoice (MathList a) (MathList a) (MathList a) (MathList a) -- \mathchoice
                 deriving (Eq,Show,Functor)
 
 -- Options for \Uleft: "height"<dimen> | "depth"<dimen> | "exact" | "axis" | "noaxis" | "class"<number>

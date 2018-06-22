@@ -5,16 +5,6 @@ import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Math.List
 import Data.Semigroup ((<>))
 
-doChoice :: MathStyle -> MathList a -> MathList a -> MathList a -> MathList a -> MathList a
-doChoice        DisplayStyle      d _ _ _  = d
-doChoice CrampedDisplayStyle      d _ _ _  = d
-doChoice        TextStyle         _ t _ _  = t
-doChoice CrampedTextStyle         _ t _ _  = t
-doChoice        ScriptStyle       _ _ s _  = s
-doChoice CrampedScriptStyle       _ _ s _  = s
-doChoice        ScriptScriptStyle _ _ _ ss = ss
-doChoice CrampedScriptScriptStyle _ _ _ ss = ss
-
 stripGlueOrKern :: MathList a -> MathList a
 stripGlueOrKern (IGlue _ : xs) = xs
 stripGlueOrKern (IKern _ : xs) = xs
@@ -63,25 +53,6 @@ doNonScript = doList
     doList !style (IAtom atom : xs) = IAtom (doAtom style atom) : doList style xs
     doList !_ (i@(IStyleChange style) : xs) = i : doList style xs
     doList !style (IGenFrac gf num den : xs) = IGenFrac gf (doList (smallerStyle style) num) (doList (denominatorStyle style) den) : doList style xs
-    doList !style (x : xs) = x : doList style xs
-
-    doAtom :: MathStyle -> AtomWithScripts a -> AtomWithScripts a
-    doAtom = doEachFieldWithStyle doField
-
-    doField :: MathStyle -> MathField a -> MathField a
-    doField !style f@(MFBox {}) = f -- TODO
-    doField !style (MFSubList xs) = MFSubList (doList style xs)
-    doField !style field = field
-
-determineChoice :: forall a. MathStyle -> MathList a -> MathList a
-determineChoice = doList
-  where
-    doList :: MathStyle -> MathList a -> MathList a
-    doList !style [] = []
-    doList !style (IAtom atom : xs) = IAtom (doAtom style atom) : doList style xs
-    doList !_ (i@(IStyleChange style) : xs) = i : doList style xs -- keep IStyleChange for now
-    doList !style (IGenFrac gf num den : xs) = IGenFrac gf (doList (smallerStyle style) num) (doList (denominatorStyle style) den) : doList style xs
-    doList !style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
     doList !style (x : xs) = x : doList style xs
 
     doAtom :: MathStyle -> AtomWithScripts a -> AtomWithScripts a

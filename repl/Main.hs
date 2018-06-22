@@ -56,7 +56,7 @@ repl = do
         Left err -> lift (outputStrLn ("error: " ++ err)) >> repl
         Right [] -> repl
         Right mathList -> do
-          let mathList' = textSymbol $ pairOpenClose $ pairSizedOpenClose $ determineBinForm $ doNonScript DisplayStyle $ determineChoice DisplayStyle mathList
+          let mathList' = textSymbol $ pairOpenClose $ pairSizedOpenClose $ determineBinForm $ doNonScript DisplayStyle mathList
           let mml = math $ mconcat $ toMML DisplayStyle mathList'
           lift $ outputStrLn $ "MathML: " ++ Pretty.renderMarkup mml
           repl

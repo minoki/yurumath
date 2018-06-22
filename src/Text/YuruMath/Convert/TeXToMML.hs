@@ -35,40 +35,42 @@ toMML = doList
     doList style (ISizedDelimiter dimen delim : xs) = doSizedDelimiter dimen delim ++ doList style xs
     doList style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
 
-    doAtom :: MathStyle -> Atom a -> MathML
-    doAtom style (atom@OpAtom { atomLimits = DisplayLimits })
+    doAtom :: MathStyle -> AtomWithScripts a -> MathML
+    doAtom style atom@(AtomWithScripts { atomNucleus = OpAtom { atomLimits = limits } })
+      | limits == DisplayLimits || limits == Limits
+      = addUnderOver style atom $ doAtomNucleus style (atomNucleus atom)
+    doAtom style atom
+      = addSubSup style atom $ doAtomNucleus style (atomNucleus atom)
+
+    doAtomNucleus :: MathStyle -> AtomNucleus a -> MathML
+    doAtomNucleus style (atom@OpAtom { atomLimits = DisplayLimits })
       | style == DisplayStyle || style == CrampedDisplayStyle
-      = addUnderOver style atom
-        $ case atomNucleus atom of
-            MFSymbol { symbolVariant = _, symbolContent = content } -> mo ! A.movablelimits "true" $ toMathML content
-            _ -> doNucleus style (atomType atom) (atomNucleus atom)
+      = case nucleusField atom of
+          MFSymbol { symbolVariant = _, symbolContent = content } -> mo ! A.movablelimits "true" $ toMathML content
+          nucleus -> doNucleus style AOp nucleus
 
-    doAtom style (atom@OpAtom { atomLimits = Limits })
-      = addUnderOver style atom
-        $ case atomNucleus atom of
-            MFSymbol { symbolVariant = _, symbolContent = content } -> mo ! A.movablelimits "false" $ toMathML content
-            _ -> doNucleus style (atomType atom) (atomNucleus atom)
+    doAtomNucleus style (atom@OpAtom { atomLimits = Limits })
+      = case nucleusField atom of
+          MFSymbol { symbolVariant = _, symbolContent = content } -> mo ! A.movablelimits "false" $ toMathML content
+          nucleus -> doNucleus style AOp nucleus
 
-    doAtom style (atom@RadAtom {})
-      = addSubSup style atom
-        $ msqrt $ doNucleus (makeCramped style) ARad (atomNucleus atom)
+    doAtomNucleus style (atom@RadAtom {})
+      = msqrt $ doNucleus (makeCramped style) ARad (nucleusField atom)
 
-    doAtom style (atom@RootAtom {})
-      = addSubSup style atom
-        $ mroot
-        $ doNucleus (makeCramped style) ARoot (atomNucleus atom)
+    doAtomNucleus style (atom@RootAtom {})
+      = mroot
+        $ doNucleus (makeCramped style) ARoot (nucleusField atom)
         <> index
       where index = case doField (rootDegreeStyle style) (atomRootDegree atom) of
                       Nothing -> mrow mempty
                       Just xs -> fromList xs
 
-    -- doAtom style (atom@AccAtom {}) = _
+    -- doAtomNucleus style (atom@AccAtom {}) = _
 
-    doAtom style atom
-      = addSubSup style atom
-        $ doNucleus (nucleusStyle (atomType atom) style) (atomType atom) (atomNucleus atom)
+    doAtomNucleus style atom
+      = doNucleus (nucleusStyle (atomNucleusType atom) style) (atomNucleusType atom) (nucleusField atom)
 
-    addSubSup :: MathStyle -> Atom a -> MathML -> MathML
+    addSubSup :: MathStyle -> AtomWithScripts a -> MathML -> MathML
     addSubSup !style !atom nucleus
       = let sub = doField (subscriptStyle style) (atomSubscript atom)
             sup = doField (superscriptStyle style) (atomSuperscript atom)
@@ -78,7 +80,7 @@ toMML = doList
              (Nothing, Just xs) -> msup $ nucleus <> fromList xs
              (Just xs, Just ys) -> msubsup $ nucleus <> fromList xs <> fromList ys
 
-    addUnderOver :: MathStyle -> Atom a -> MathML -> MathML
+    addUnderOver :: MathStyle -> AtomWithScripts a -> MathML -> MathML
     addUnderOver !style !atom nucleus
       = let sub = doField (subscriptStyle style) (atomSubscript atom)
             sup = doField (superscriptStyle style) (atomSuperscript atom)

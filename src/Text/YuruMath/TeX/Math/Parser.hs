@@ -461,7 +461,7 @@ readMathMaterial = loop []
             enterGroup ScopeByBrace
             content <- runMMDBrace <$> withMathStyle id readMathMaterial
             case content of
-              [item@(IAtom (AccAtom {}))] -> loop (item : revList) -- single Acc atom
+              [item@(IAtom (AtomWithScripts { atomNucleus = AccAtom {} }))] -> loop (item : revList) -- single Acc atom
               _ -> doAtom (mkAtom AOrd (MFSubList content))
 
           -- `}'
@@ -495,23 +495,23 @@ readMathMaterial = loop []
           -- \mathaccent<15-bit number><math field> or \Umathaccent<...><math field>
           MTAccent code -> do
             content <- withMathStyle makeCramped readMathField
-            doAtom (mkAtom AAcc content) { atomAccentCharacter = code }
+            doAtom $ withEmptyScripts $ (mkAtomNucleus AAcc content) { atomAccentCharacter = code }
 
           -- \radical<27-bit number><math field> or \Uradical<...><math field>
           MTRadical code -> do
             content <- withMathStyle makeCramped readMathField
-            doAtom (mkAtom ARad content) { atomDelimiter = code }
+            doAtom $ withEmptyScripts $ (mkAtomNucleus ARad content) { atomDelimiter = code }
 
           -- \Uroot<...><math field><math field>
           MTRoot code -> do
             degree <- withMathStyle rootDegreeStyle readMathField -- SS or SS'
             content <- withMathStyle makeCramped readMathField
-            doAtom (mkAtom ARoot content) { atomDelimiter = code, atomRootDegree = degree }
+            doAtom $ withEmptyScripts $ (mkAtomNucleus ARoot content) { atomDelimiter = code, atomRootDegree = degree }
 
           -- \limits, \nolimits, \displaylimits
           MTLimitsSpec spec -> do
             case revList of
-              IAtom (atom@(OpAtom {})) : xs -> loop (IAtom (atom { atomLimits = spec }) : xs)
+              IAtom atom@(AtomWithScripts { atomNucleus = nucleus@(OpAtom {}) }) : xs -> loop (IAtom (atom { atomNucleus = nucleus { atomLimits = spec } }) : xs)
               _ -> throwError "Limit controls must follow a math operator."
 
           -- \displaystyle, \textstyle, etc
@@ -638,7 +638,9 @@ readMathField = do
         enterGroup ScopeByBrace
         content <- runMMDBrace <$> readMathMaterial
         return $ case content of
-          [IAtom (OrdAtom { atomNucleus = nucleus, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })] -> nucleus
+          [IAtom (AtomWithScripts { atomNucleus = OrdAtom { nucleusField = n }
+                                  , atomSuperscript = MFEmpty
+                                  , atomSubscript = MFEmpty })] -> n
           _ -> MFSubList content
       _ -> throwError $ "Unexpected " ++ show t ++ "; expected a symbol or `{'"
 

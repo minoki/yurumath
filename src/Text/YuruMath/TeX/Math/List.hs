@@ -9,9 +9,14 @@ module Text.YuruMath.TeX.Math.List
   ,MathField(..)
   ,isEmptyField
   ,BinForm(..)
-  ,Atom(..)
+  ,AtomNucleus(..)
+  ,AtomWithScripts(..)
+  ,withEmptyScripts
+  ,atomNucleusType
   ,atomType
+  ,emptyAtomNucleus
   ,emptyAtom
+  ,mkAtomNucleus
   ,mkAtom
   ,markAtomAsDelimiter
   ,GenFracLine(..)
@@ -104,163 +109,111 @@ data BinForm = BinInfix
              | BinPostfix
              deriving (Eq,Show)
 
-data Atom a = OrdAtom   { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | OpAtom    { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomLimits      :: !LimitsSpec -- specific to Op atom
-                        }
-            | BinAtom   { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomBinForm     :: !BinForm   -- specific to Bin atom
-                        }
-            | RelAtom   { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | OpenAtom  { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
-                        }
-            | CloseAtom { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
-                        }
-            | PunctAtom { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | InnerAtom { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | OverAtom  { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | UnderAtom { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | AccAtom   { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomAccentCharacter :: !MathCode -- specific to Acc atom
-                        }
-            | RadAtom   { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomDelimiter   :: !DelimiterCode -- specific to Rad atom
-                        }
-            | VcentAtom { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        }
-            | RootAtom  { atomNucleus     :: !(MathField a)
-                        , atomSuperscript :: !(MathField a)
-                        , atomSubscript   :: !(MathField a)
-                        , atomDelimiter   :: !DelimiterCode -- specific to Root atom
-                        , atomRootDegree  :: !(MathField a) -- specific to Root atom
-                        }
-            deriving (Eq,Show,Functor)
+data AtomNucleus a
+  = OrdAtom   { nucleusField    :: !(MathField a) }
+  | OpAtom    { nucleusField    :: !(MathField a)
+              , atomLimits      :: !LimitsSpec -- specific to Op atom
+              }
+  | BinAtom   { nucleusField    :: !(MathField a)
+              , atomBinForm     :: !BinForm   -- specific to Bin atom
+              }
+  | RelAtom   { nucleusField    :: !(MathField a) }
+  | OpenAtom  { nucleusField    :: !(MathField a)
+              , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
+              }
+  | CloseAtom { nucleusField    :: !(MathField a)
+              , atomIsDelimiter :: !Bool      -- specific to Open and Close atom
+              }
+  | PunctAtom { nucleusField    :: !(MathField a) }
+  | InnerAtom { nucleusField    :: !(MathField a) }
+  | OverAtom  { nucleusField    :: !(MathField a) }
+  | UnderAtom { nucleusField    :: !(MathField a) }
+  | AccAtom   { nucleusField    :: !(MathField a)
+              , atomAccentCharacter :: !MathCode -- specific to Acc atom
+              }
+  | RadAtom   { nucleusField    :: !(MathField a)
+              , atomDelimiter   :: !DelimiterCode -- specific to Rad atom
+              }
+  | VcentAtom { nucleusField    :: !(MathField a) }
+  | RootAtom  { nucleusField    :: !(MathField a)
+              , atomDelimiter   :: !DelimiterCode -- specific to Root atom
+              , atomRootDegree  :: !(MathField a) -- specific to Root atom
+              }
+  deriving (Eq,Show,Functor)
 
-atomType :: Atom a -> AtomType
-atomType (OrdAtom   {}) = AOrd
-atomType (OpAtom    {}) = AOp
-atomType (BinAtom   {}) = ABin
-atomType (RelAtom   {}) = ARel
-atomType (OpenAtom  {}) = AOpen
-atomType (CloseAtom {}) = AClose
-atomType (PunctAtom {}) = APunct
-atomType (InnerAtom {}) = AInner
-atomType (OverAtom  {}) = AOver
-atomType (UnderAtom {}) = AUnder
-atomType (AccAtom   {}) = AAcc
-atomType (RadAtom   {}) = ARad
-atomType (VcentAtom {}) = AVcent
-atomType (RootAtom  {}) = ARoot
-
-emptyAtom :: Atom a
-emptyAtom = OrdAtom { atomNucleus     = MFEmpty
-                    , atomSuperscript = MFEmpty
-                    , atomSubscript   = MFEmpty
+data AtomWithScripts a
+  = AtomWithScripts { atomNucleus     :: !(AtomNucleus a)
+                    , atomSuperscript :: !(MathField a)
+                    , atomSubscript   :: !(MathField a)
                     }
+  deriving (Eq,Show,Functor)
 
-mkAtom :: AtomType -> MathField a -> Atom a
-mkAtom AOrd   !nucleus = OrdAtom   { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom AOp    !nucleus = OpAtom    { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomLimits      = DisplayLimits -- specific to Op taom
-                                   }
-mkAtom ABin   !nucleus = BinAtom   { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomBinForm     = BinInfix
-                                   }
-mkAtom ARel   !nucleus = RelAtom   { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom AOpen  !nucleus = OpenAtom  { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomIsDelimiter = False   -- specific to Open and Close atom
-                                   }
-mkAtom AClose !nucleus = CloseAtom { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomIsDelimiter = False   -- specific to Open and Close atom
-                                   }
-mkAtom APunct !nucleus = PunctAtom { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom AInner !nucleus = InnerAtom { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom AOver  !nucleus = OverAtom  { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom AUnder !nucleus = UnderAtom { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom AAcc   !nucleus = AccAtom   { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomAccentCharacter = MathCode 0 -- specific to Acc atom
-                                   }
-mkAtom ARad   !nucleus = RadAtom   { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom
-                                   }
-mkAtom AVcent !nucleus = VcentAtom { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   }
-mkAtom ARoot  !nucleus = RootAtom  { atomNucleus     = nucleus
-                                   , atomSuperscript = MFEmpty
-                                   , atomSubscript   = MFEmpty
-                                   , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom
-                                   , atomRootDegree  = MFEmpty -- specific to Root atom
-                                   }
+withEmptyScripts :: AtomNucleus a -> AtomWithScripts a
+withEmptyScripts a = AtomWithScripts { atomNucleus = a, atomSuperscript = MFEmpty, atomSubscript = MFEmpty }
 
-markAtomAsDelimiter :: Atom a -> Atom a
-markAtomAsDelimiter atom@(OpenAtom {}) = atom { atomIsDelimiter = True }
-markAtomAsDelimiter atom@(CloseAtom {}) = atom { atomIsDelimiter = True }
+atomNucleusType :: AtomNucleus a -> AtomType
+atomNucleusType (OrdAtom   {}) = AOrd
+atomNucleusType (OpAtom    {}) = AOp
+atomNucleusType (BinAtom   {}) = ABin
+atomNucleusType (RelAtom   {}) = ARel
+atomNucleusType (OpenAtom  {}) = AOpen
+atomNucleusType (CloseAtom {}) = AClose
+atomNucleusType (PunctAtom {}) = APunct
+atomNucleusType (InnerAtom {}) = AInner
+atomNucleusType (OverAtom  {}) = AOver
+atomNucleusType (UnderAtom {}) = AUnder
+atomNucleusType (AccAtom   {}) = AAcc
+atomNucleusType (RadAtom   {}) = ARad
+atomNucleusType (VcentAtom {}) = AVcent
+atomNucleusType (RootAtom  {}) = ARoot
+
+atomType :: AtomWithScripts a -> AtomType
+atomType = atomNucleusType . atomNucleus
+
+emptyAtomNucleus :: AtomNucleus a
+emptyAtomNucleus = OrdAtom { nucleusField = MFEmpty }
+
+emptyAtom :: AtomWithScripts a
+emptyAtom  = withEmptyScripts emptyAtomNucleus
+
+mkAtomNucleus :: AtomType -> MathField a -> AtomNucleus a
+mkAtomNucleus !atomType !nucleus = case atomType of
+  AOrd   -> OrdAtom   { nucleusField    = nucleus }
+  AOp    -> OpAtom    { nucleusField    = nucleus
+                      , atomLimits      = DisplayLimits -- specific to Op taom
+                      }
+  ABin   -> BinAtom   { nucleusField    = nucleus
+                      , atomBinForm     = BinInfix
+                      }
+  ARel   -> RelAtom   { nucleusField    = nucleus }
+  AOpen  -> OpenAtom  { nucleusField    = nucleus
+                      , atomIsDelimiter = False   -- specific to Open and Close atom
+                      }
+  AClose -> CloseAtom { nucleusField    = nucleus
+                      , atomIsDelimiter = False   -- specific to Open and Close atom
+                      }
+  APunct -> PunctAtom { nucleusField    = nucleus }
+  AInner -> InnerAtom { nucleusField    = nucleus }
+  AOver  -> OverAtom  { nucleusField    = nucleus }
+  AUnder -> UnderAtom { nucleusField    = nucleus }
+  AAcc   -> AccAtom   { nucleusField    = nucleus
+                      , atomAccentCharacter = MathCode 0 -- specific to Acc atom
+                      }
+  ARad   -> RadAtom   { nucleusField    = nucleus
+                      , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom
+                      }
+  AVcent -> VcentAtom { nucleusField    = nucleus }
+  ARoot  -> RootAtom  { nucleusField    = nucleus
+                      , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom
+                      , atomRootDegree  = MFEmpty -- specific to Root atom
+                      }
+
+mkAtom :: AtomType -> MathField a -> AtomWithScripts a
+mkAtom !atomType !nucleus = withEmptyScripts (mkAtomNucleus atomType nucleus)
+
+markAtomAsDelimiter :: AtomWithScripts a -> AtomWithScripts a
+markAtomAsDelimiter atom@(AtomWithScripts { atomNucleus = nucleus@(OpenAtom {}) }) = atom { atomNucleus = nucleus { atomIsDelimiter = True } }
+markAtomAsDelimiter atom@(AtomWithScripts { atomNucleus = nucleus@(CloseAtom {}) }) = atom { atomNucleus = nucleus { atomIsDelimiter = True } }
 markAtomAsDelimiter atom = atom
 
 -- generalized fraction
@@ -293,7 +246,7 @@ data MathKern = MKKern !Dimen
               deriving (Eq,Show)
 
 -- See The TeXbook, Chapter 17
-data MathItem a = IAtom !(Atom a)
+data MathItem a = IAtom !(AtomWithScripts a)
                 | IHorizontalMaterial -- a rule or discretionary or penalty or "whatsit"
                 | IVerticalMaterial -- \mark or \insert or \vadjust
                 | IGlue !MathGlue -- \hskip or \mskip or \nonscript

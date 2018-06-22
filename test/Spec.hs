@@ -254,13 +254,14 @@ $$(-1)^n\showlists$$ ->
 .\fam0 )
 ^\fam1 n
 -}
-    expected = Right [IAtom (mkAtom AOpen  (MFSymbol 0 MVNormal SMSymbol "(")) { atomIsDelimiter = True }
+    expected = Right [IAtom (withEmptyScripts (mkAtomNucleus AOpen  (MFSymbol 0 MVNormal SMSymbol "(")) { atomIsDelimiter = True })
                      ,IAtom (mkAtom ABin   (MFSymbol 0 MVNormal SMSymbol "\x2212")) -- U+2212: MINUS SIGN
                      ,IAtom (mkAtom AOrd   (MFSymbol 0 MVItalic SMSymbol "1"))
-                     ,IAtom (mkAtom AClose (MFSymbol 0 MVNormal SMSymbol ")"))
-                      { atomIsDelimiter = True
-                      , atomSuperscript = MFSymbol 1 MVItalic SMSymbol "n"
-                      }
+                     ,IAtom (AtomWithScripts { atomNucleus = (mkAtomNucleus AClose (MFSymbol 0 MVNormal SMSymbol ")"))
+                                                             { atomIsDelimiter = True }
+                                             , atomSuperscript = MFSymbol 1 MVItalic SMSymbol "n"
+                                             , atomSubscript = MFEmpty
+                                             })
                      ]
 
 mtest3 = TestCase $ assertEqual "Math" expected (runMathList True "a<b")

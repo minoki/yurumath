@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Text.YuruMath.TeX.Math.Postprocess where
-import Text.YuruMath.TeX.Types
+import Text.YuruMath.TeX.Types ()
 import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.Math.List
 import Data.Semigroup ((<>))
@@ -20,28 +20,34 @@ stripGlueOrKern (IGlue _ : xs) = xs
 stripGlueOrKern (IKern _ : xs) = xs
 stripGlueOrKern xs = xs
 
-doEachFieldWithStyle :: (MathStyle -> MathField a -> MathField a) -> MathStyle -> Atom a -> Atom a
-doEachFieldWithStyle doField !style !atom@(RootAtom {})
-  = atom { atomNucleus     = doField (makeCramped style)      (atomNucleus atom)
-         , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
-         , atomSubscript   = doField (subscriptStyle style)   (atomSubscript atom)
-         , atomRootDegree  = doField (rootDegreeStyle style)  (atomRootDegree atom)
+doEachNucleusFieldWithStyle :: (MathStyle -> MathField a -> MathField a) -> MathStyle -> AtomNucleus a -> AtomNucleus a
+doEachNucleusFieldWithStyle doField !style !atom@(RootAtom {})
+  = atom { nucleusField   = doField (makeCramped style)      (nucleusField atom)
+         , atomRootDegree = doField (rootDegreeStyle style)  (atomRootDegree atom)
          }
+doEachNucleusFieldWithStyle doField !style !atom
+  = atom { nucleusField   = doField (nucleusStyle (atomNucleusType atom) style) (nucleusField atom)
+         }
+
+doEachFieldWithStyle :: (MathStyle -> MathField a -> MathField a) -> MathStyle -> AtomWithScripts a -> AtomWithScripts a
 doEachFieldWithStyle doField !style !atom
-  = atom { atomNucleus     = doField (nucleusStyle (atomType atom) style) (atomNucleus atom)
+  = atom { atomNucleus     = doEachNucleusFieldWithStyle doField style (atomNucleus atom)
          , atomSuperscript = doField (superscriptStyle style) (atomSuperscript atom)
          , atomSubscript   = doField (subscriptStyle style)   (atomSubscript atom)
          }
 
-doEachField :: (MathField a -> MathField a) -> Atom a -> Atom a
-doEachField doField !atom@(RootAtom {})
-  = atom { atomNucleus     = doField (atomNucleus atom)
-         , atomSuperscript = doField (atomSuperscript atom)
-         , atomSubscript   = doField (atomSubscript atom)
-         , atomRootDegree  = doField (atomRootDegree atom)
+doEachNucleusField :: (MathField a -> MathField a) -> AtomNucleus a -> AtomNucleus a
+doEachNucleusField doField !atom@(RootAtom {})
+  = atom { nucleusField   = doField (nucleusField atom)
+         , atomRootDegree = doField (atomRootDegree atom)
          }
+doEachNucleusField doField !atom
+  = atom { nucleusField   = doField (nucleusField atom)
+         }
+
+doEachField :: (MathField a -> MathField a) -> AtomWithScripts a -> AtomWithScripts a
 doEachField doField !atom
-  = atom { atomNucleus     = doField (atomNucleus atom)
+  = atom { atomNucleus     = doEachNucleusField doField (atomNucleus atom)
          , atomSuperscript = doField (atomSuperscript atom)
          , atomSubscript   = doField (atomSubscript atom)
          }
@@ -59,7 +65,7 @@ doNonScript = doList
     doList !style (IGenFrac gf num den : xs) = IGenFrac gf (doList (smallerStyle style) num) (doList (denominatorStyle style) den) : doList style xs
     doList !style (x : xs) = x : doList style xs
 
-    doAtom :: MathStyle -> Atom a -> Atom a
+    doAtom :: MathStyle -> AtomWithScripts a -> AtomWithScripts a
     doAtom = doEachFieldWithStyle doField
 
     doField :: MathStyle -> MathField a -> MathField a
@@ -78,7 +84,7 @@ determineChoice = doList
     doList !style (IChoice d t s ss : xs) = doList style (doChoice style d t s ss ++ xs)
     doList !style (x : xs) = x : doList style xs
 
-    doAtom :: MathStyle -> Atom a -> Atom a
+    doAtom :: MathStyle -> AtomWithScripts a -> AtomWithScripts a
     doAtom = doEachFieldWithStyle doField
 
     doField :: MathStyle -> MathField a -> MathField a
@@ -98,9 +104,9 @@ determineBinForm = doList Nothing
   where
     doList :: Maybe AtomType -> MathList a -> MathList a
     doList _ [] = []
-    doList prevAtomType (IAtom atom@(BinAtom {}) : xs)
+    doList prevAtomType (IAtom atom@(AtomWithScripts { atomNucleus = nucleus@(BinAtom {}) }) : xs)
       -- should really change to OrdAtom?
-      | isPrefix || isPostfix = IAtom (doAtom atom { atomBinForm = form }) : doList (Just AOrd) xs
+      | isPrefix || isPostfix = IAtom (doAtom atom { atomNucleus = nucleus { atomBinForm = form } }) : doList (Just AOrd) xs
       | otherwise = IAtom (doAtom atom) : doList (Just ABin) xs
       where nextAtomType = nextAtomTypeInList xs
             isPrefix = prevAtomType `elem` [Nothing, Just ABin, Just AOp, Just ARel, Just AOpen, Just APunct]
@@ -112,7 +118,7 @@ determineBinForm = doList Nothing
     doList _ (IGenFrac gf num den : xs) = IGenFrac gf (doList Nothing num) (doList Nothing den) : doList (Just AInner) xs
     doList prevAtomType (x : xs) = x : doList prevAtomType xs -- keep IStyleChange for now
 
-    doAtom :: Atom a -> Atom a
+    doAtom :: AtomWithScripts a -> AtomWithScripts a
     doAtom = doEachField doField
 
     doField :: MathField a -> MathField a
@@ -121,7 +127,7 @@ determineBinForm = doList Nothing
     doField field = field
 
 data ClosingParen a = FoundNoMatch (MathList a)
-                    | FoundClosing (MathList a) (Atom a) (MathList a)
+                    | FoundClosing (MathList a) (AtomWithScripts a) (MathList a)
 
 onFirstList :: (MathList a -> MathList a) -> ClosingParen a -> ClosingParen a
 onFirstList f (FoundNoMatch xs) = FoundNoMatch (f xs)
@@ -133,22 +139,22 @@ pairSizedOpenClose xs = doList xs
   where
     doList :: MathList a -> MathList a
     doList [] = []
-    doList (IAtom atom@(OpenAtom { atomNucleus = MFSubList [ISizedDelimiter dimen delim] }) : xs)
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { nucleusField = MFSubList [ISizedDelimiter dimen delim] } }) : xs)
       = case findClosing dimen xs of
           FoundNoMatch rest -> {- no closing paren found -} IAtom (doAtom atom) : doList rest
           FoundClosing content closing rest -> mkImplicitGroup (doAtom atom) content closing : doList rest
-    doList (IAtom atom@(CloseAtom { atomNucleus = MFSubList [ISizedDelimiter dimen delim] }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { nucleusField = MFSubList [ISizedDelimiter dimen delim] } }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs
 
     findClosing :: Dimen -> MathList a -> ClosingParen a
     findClosing dimen [] = FoundNoMatch []
-    findClosing dimen (IAtom atom@(OpenAtom { atomNucleus = MFSubList [ISizedDelimiter dimen2 delim] }) : xs)
+    findClosing dimen (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { nucleusField = MFSubList [ISizedDelimiter dimen2 delim] } }) : xs)
       = case findClosing dimen2 xs of
           FoundNoMatch rest -> {- no closing paren found -} FoundNoMatch (IAtom (doAtom atom) : rest)
           FoundClosing content closing rest -> onFirstList (mkImplicitGroup (doAtom atom) content closing :) (findClosing dimen rest)
-    findClosing dimen (IAtom atom@(CloseAtom { atomNucleus = MFSubList [ISizedDelimiter dimen' delim] }) : xs)
+    findClosing dimen (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { nucleusField = MFSubList [ISizedDelimiter dimen' delim] } }) : xs)
       | dimen == dimen'
       = FoundClosing [] (doAtom atom) xs
     findClosing dimen (IAtom atom : xs)
@@ -156,84 +162,74 @@ pairSizedOpenClose xs = doList xs
     findClosing dimen (x : xs)
       = onFirstList (x :) $ findClosing dimen xs
 
-    doAtom :: Atom a -> Atom a
+    doAtom :: AtomWithScripts a -> AtomWithScripts a
     doAtom = doEachField doField
 
     doField :: MathField a -> MathField a
     doField (MFSubList xs) = MFSubList (doList xs)
     doField field = field
 
-    mkImplicitGroup :: Atom a -> MathList a -> Atom a -> MathItem a
-    mkImplicitGroup opening content closing
-      = IAtom (mkAtom AOrd (MFSubList [IAtom opening
-                                      ,IAtom (mkAtom AOrd (MFSubList content))
-                                      ,IAtom closing'
-                                      ])) { atomSuperscript = atomSuperscript closing
-                                          , atomSubscript = atomSubscript closing
-                                          }
-      where closing' = closing { atomSuperscript = MFEmpty
-                               , atomSubscript = MFEmpty
-                               }
+mkImplicitGroup :: AtomWithScripts a -> MathList a -> AtomWithScripts a -> MathItem a
+mkImplicitGroup opening content closing
+  = IAtom $ AtomWithScripts
+    { atomNucleus = mkAtomNucleus AOrd (MFSubList [IAtom opening
+                                                  ,IAtom (mkAtom AOrd (MFSubList content))
+                                                  ,IAtom closing'
+                                                  ])
+    , atomSuperscript = atomSuperscript closing
+    , atomSubscript = atomSubscript closing
+    }
+  where closing' = closing { atomSuperscript = MFEmpty
+                           , atomSubscript = MFEmpty
+                           }
 
 pairOpenClose :: forall a. MathList a -> MathList a
 pairOpenClose xs = doList xs
   where
     doList :: MathList a -> MathList a
     doList [] = []
-    doList (IAtom atom@(OpenAtom { atomIsDelimiter = True }) : xs)
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { atomIsDelimiter = True } }) : xs)
       = case findClosing xs of
           FoundNoMatch content -> {- no closing paren found -} IAtom (doAtom atom) : content
           FoundClosing content closing rest -> mkImplicitGroup (doAtom atom) content closing : doList rest
-    doList (IAtom atom@(CloseAtom { atomIsDelimiter = True }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { atomIsDelimiter = True } }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs
 
     findClosing :: MathList a -> ClosingParen a
     findClosing [] = FoundNoMatch []
-    findClosing (IAtom atom@(OpenAtom { atomIsDelimiter = True }) : xs)
+    findClosing (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { atomIsDelimiter = True } }) : xs)
       = case findClosing xs of
           FoundNoMatch content -> {- no closing paren found -} FoundNoMatch (IAtom (doAtom atom) : content)
           FoundClosing content closing rest -> onFirstList (mkImplicitGroup (doAtom atom) content closing :) $ findClosing rest
-    findClosing (IAtom atom@(CloseAtom { atomIsDelimiter = True }) : xs)
+    findClosing (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { atomIsDelimiter = True } }) : xs)
       = FoundClosing [] (doAtom atom) xs
     findClosing (IAtom atom : xs)
       = onFirstList (IAtom (doAtom atom) :) $ findClosing xs
     findClosing (x : xs)
       = onFirstList (x :) $ findClosing xs
 
-    doAtom :: Atom a -> Atom a
+    doAtom :: AtomWithScripts a -> AtomWithScripts a
     doAtom = doEachField doField
 
     doField :: MathField a -> MathField a
     doField (MFSubList xs) = MFSubList (doList xs)
     doField field = field
 
-    mkImplicitGroup :: Atom a -> MathList a -> Atom a -> MathItem a
-    mkImplicitGroup opening content closing
-      = IAtom (mkAtom AOrd (MFSubList [IAtom opening
-                                      ,IAtom (mkAtom AOrd (MFSubList content))
-                                      ,IAtom closing'
-                                      ])) { atomSuperscript = atomSuperscript closing
-                                          , atomSubscript = atomSubscript closing
-                                          }
-      where closing' = closing { atomSuperscript = MFEmpty
-                               , atomSubscript = MFEmpty
-                               }
-
 textSymbol :: forall a. MathList a -> MathList a
 textSymbol = doList
   where
     doList :: MathList a -> MathList a
     doList [] = []
-    doList (IAtom atom@(OrdAtom { atomNucleus = MFSymbol fam var SMText text, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })
-            : IAtom nextAtom@(OrdAtom { atomNucleus = MFSymbol fam' var' SMText text' }) : xs)
-      | fam == fam', var == var' = doList (IAtom nextAtom { atomNucleus = MFSymbol fam var SMText (text <> text') } : xs)
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = OrdAtom { nucleusField = MFSymbol fam var SMText text }, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })
+            : IAtom nextAtom@(AtomWithScripts { atomNucleus = OrdAtom { nucleusField = MFSymbol fam' var' SMText text' } }) : xs)
+      | fam == fam', var == var' = doList (IAtom nextAtom { atomNucleus = OrdAtom { nucleusField = MFSymbol fam var SMText (text <> text') } } : xs)
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs
 
-    doAtom :: Atom a -> Atom a
+    doAtom :: AtomWithScripts a -> AtomWithScripts a
     doAtom = doEachField doField
 
     doField :: MathField a -> MathField a

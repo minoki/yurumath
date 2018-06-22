@@ -44,6 +44,8 @@ data TypesetCommand
   | TItalicCorrection -- \/
   | Tdiscretionary
   | TDiscretionaryHyphen -- \-
+  | TUstartmath
+  | TUstartdisplaymath
   deriving (Eq,Show)
 
 instance Meaning TypesetCommand where
@@ -72,6 +74,8 @@ instance Meaning TypesetCommand where
   meaningString TItalicCorrection = controlSequence "/"
   meaningString Tdiscretionary = controlSequence "discretionary"
   meaningString TDiscretionaryHyphen = controlSequence "-"
+  meaningString TUstartmath = controlSequence "Ustartmath"
+  meaningString TUstartdisplaymath = controlSequence "Ustartdisplaymath"
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute TypesetCommand m where
   doExecute = can'tUseThisCommandInCurrentMode
@@ -134,6 +138,8 @@ typesetCommands = (fmap liftUnion $ Map.fromList
   ,("/",            TItalicCorrection)
   ,("discretionary",Tdiscretionary)
   ,("-",            TDiscretionaryHyphen)
+  ,("Ustartmath",   TUstartmath)
+  ,("Ustartdisplaymath",TUstartdisplaymath)
   ]) <> (fmap liftUnion $ Map.fromList
   [("box", Bbox)
   ,("copy", Bcopy)

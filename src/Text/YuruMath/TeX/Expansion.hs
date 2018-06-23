@@ -139,18 +139,28 @@ readCommandName = do
 
 readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
 readOneOptionalSpace = do
-  et <- maybeEvalToken
-  case et of
-    Just (t,v) | isImplicitSpace v -> return () -- consumed
-               | otherwise -> unreadEToken t
+  t <- nextEToken
+  case t of
+    Just (ETCharacter { etCatCode = CCSpace }) ->
+      return () -- consumed
+    Just t -> do
+      v <- meaningWithoutExpansion t
+      case v of
+        Right v | isImplicitSpace v -> return () -- consumed
+        _ -> unreadEToken t
     Nothing -> return ()
 
 readOptionalSpaces :: (MonadTeXState s m, MonadError String m) => m ()
 readOptionalSpaces = do
-  et <- maybeEvalToken
-  case et of
-    Just (t,v) | isImplicitSpace v -> readOptionalSpaces -- consumed
-               | otherwise -> unreadEToken t
+  t <- nextEToken
+  case t of
+    Just (ETCharacter { etCatCode = CCSpace }) ->
+      readOptionalSpaces -- consumed, read more
+    Just t -> do
+      v <- meaningWithoutExpansion t
+      case v of
+        Right v | isImplicitSpace v -> readOptionalSpaces -- consumed, read more
+        _ -> unreadEToken t
     Nothing -> return ()
 
 -- <equals> ::= <optional spaces> | <optional spaces>'='12

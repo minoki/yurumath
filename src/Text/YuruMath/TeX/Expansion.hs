@@ -146,7 +146,7 @@ readOneOptionalSpace = do
     Just t -> do
       v <- meaningWithoutExpansion t
       case v of
-        Right v | isImplicitSpace v -> return () -- consumed
+        Right v | isImplicitSpace v -> return () -- consume a space
         _ -> unreadEToken t
     Nothing -> return ()
 
@@ -159,18 +159,22 @@ readOptionalSpaces = do
     Just t -> do
       v <- meaningWithoutExpansion t
       case v of
-        Right v | isImplicitSpace v -> readOptionalSpaces -- consumed, read more
+        Right v | isImplicitSpace v -> readOptionalSpaces -- consume a space, and read more
         _ -> unreadEToken t
     Nothing -> return ()
 
 -- <equals> ::= <optional spaces> | <optional spaces>'='12
 readEquals :: (MonadTeXState s m, MonadError String m) => m ()
 readEquals = do
-  t <- maybeEvalToken
+  t <- nextEToken
   case t of
-    Just (ETCharacter { etChar = '=', etCatCode = CCOther },_) -> return () -- consumed
-    Just (t,v) | isImplicitSpace v -> readEquals -- consumed
-               | otherwise -> unreadEToken t -- not consumed
+    Just (ETCharacter { etChar = '=', etCatCode = CCOther }) -> return () -- consume equals
+    Just (ETCharacter { etCatCode = CCSpace }) -> readEquals -- consume a space, and read more
+    Just t -> do
+      v <- meaningWithoutExpansion t
+      case v of
+        Right v | isImplicitSpace v -> readEquals -- consume a space, and read more
+        _ -> unreadEToken t
     Nothing -> return ()
 
 -- read a number between 0.."10FFFF excluding "D800.."DFFF, and convert it to a Char

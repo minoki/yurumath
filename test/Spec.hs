@@ -333,6 +333,27 @@ arithtest1 = TestCase $ assertEqual "Arithmetic" expected (runMathList True "\\c
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 0 MVItalic SMSymbol . T.singleton) "200000000000"
 
+letsyntax = TestCase $ assertEqual "\\let syntax" expected $ runMessage $ unlines
+            ["\\futurelet\\isp{ }" -- \isp = implicit space
+            ,"\\let\\ieq==" -- \ieq = implicit equals
+            ,"\\def\\esp{ }" -- \esp = expansion is a space
+            ,"\\def\\eeq{=}" -- \eeq = expansion is an equals
+            ,"\\let\\foo\\isp\\relax"
+            ,"\\message{\\meaning\\foo}" -- \foo should be \relax
+            ,"\\let\\foo\\esp\\relax"
+            ,"\\message{\\meaning\\foo}" -- \foo should be a macro
+            ,"\\let\\foo\\isp\\ieq\\relax"
+            ,"\\message{\\meaning\\foo}" -- \foo should be an equals
+            ,"\\let\\foo\\isp\\eeq\\relax"
+            ,"\\message{\\meaning\\foo}" -- \foo should be a macro
+            ]
+  where
+    expected = Right ["\\relax"
+                     ,"macro:-> "
+                     ,"the character ="
+                     ,"macro:->="
+                     ]
+
 looptest1 = TestCase $ assertEqual "Prevent Infinite Loop" expected (runMathList True "\\newcommand\\loop\\loop \\loop")
   where
     expected = Left "recursion too deep"
@@ -375,6 +396,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Math 3" mtest3
                  ,TestLabel "Math 4" mtest4
                  ,TestLabel "Arithmetic 1" arithtest1
+                 ,TestLabel "\\let syntax" letsyntax
                  ,TestLabel "Loop 1" looptest1
                  ,TestLabel "Loop 2" looptest2
                  ,TestLabel "Loop 3" looptest3

@@ -364,20 +364,20 @@ localState = localStates . lens head setter
 
 class (IsExpandable e, Monad m) => DoExpand e m where
   doExpand               :: e -> ExpansionToken -> m [ExpansionToken] -- normal expansion
-  doTotallyExpand        :: e -> Maybe (ExpansionToken -> m [ExpansionToken]) -- in the context of \edef, including \message, \expanded, etc
+  doExpandInEdef         :: e -> Maybe (ExpansionToken -> m [ExpansionToken]) -- expansion in the context of \edef, including \message, \expanded, etc
   evalBooleanConditional :: e -> Maybe (m Bool) -- used by \unless
-  doTotallyExpand _ = Nothing
+  doExpandInEdef _ = Nothing
 
 instance (Monad m) => DoExpand (Union '[]) m where
   doExpand               = typesExhausted
-  doTotallyExpand        = typesExhausted
+  doExpandInEdef         = typesExhausted
   evalBooleanConditional = typesExhausted
 
 instance (DoExpand e m, DoExpand (Union (Delete e es)) m, Typeable e) => DoExpand (Union (e : es)) m where
   doExpand               = (doExpand :: e -> ExpansionToken -> m [ExpansionToken])
                            @> (doExpand :: Union (Delete e es) -> ExpansionToken -> m [ExpansionToken])
-  doTotallyExpand        = (doTotallyExpand :: e -> Maybe (ExpansionToken -> m [ExpansionToken]))
-                           @> (doTotallyExpand :: Union (Delete e es) -> Maybe (ExpansionToken -> m [ExpansionToken]))
+  doExpandInEdef         = (doExpandInEdef :: e -> Maybe (ExpansionToken -> m [ExpansionToken]))
+                           @> (doExpandInEdef :: Union (Delete e es) -> Maybe (ExpansionToken -> m [ExpansionToken]))
   evalBooleanConditional = (evalBooleanConditional :: e -> Maybe (m Bool))
                            @> (evalBooleanConditional :: Union (Delete e es) -> Maybe (m Bool))
 

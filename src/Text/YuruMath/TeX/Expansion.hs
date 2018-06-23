@@ -99,7 +99,7 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
           m <- use (localState . definitionAt name)
           case m of
             Left e -> -- expandable
-              case doTotallyExpand e of
+              case doExpandInEdef e of
                 Nothing -> do
                   r <- doExpand e t
                   unreadETokens (etDepth t + 1) r

@@ -378,8 +378,8 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
     Ecsstring -> csstringCommand
     EUchar -> ucharCommand
     Eifcase -> ifcaseCommand
-  doTotallyExpand Eunexpanded = Just (\_ -> unexpandedCommand) -- \unexpanded in \edef
-  doTotallyExpand _ = Nothing
+  doExpandInEdef Eunexpanded = Just (\_ -> unexpandedCommand) -- \unexpanded in \edef
+  doExpandInEdef _ = Nothing
   evalBooleanConditional _ = Nothing
 
 instance Meaning CommonExpandable where

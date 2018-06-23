@@ -474,8 +474,8 @@ instance IsExpandable Macro where
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand Macro m where
   doExpand m _ = map toEToken <$> doMacro m
-  doTotallyExpand m | macroIsProtected m = Just (\t -> return [t])
-                    | otherwise = Nothing
+  doExpandInEdef m | macroIsProtected m = Just (\t -> return [t])
+                   | otherwise = Nothing
   evalBooleanConditional _ = Nothing
 
 -- LaTeX 2e

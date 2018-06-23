@@ -151,7 +151,7 @@ instance IsExpandable MathExpandable where
   isConditional _ = False
 
 instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExpand MathExpandable m where
-  doExpand Mmathstyle = mathstyleCommand
+  doExpand Mmathstyle _ = mathstyleCommand
   evalBooleanConditional _ = Nothing
 
 --

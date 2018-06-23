@@ -220,6 +220,16 @@ etest14 = TestCase $ assertEqual "\\expanded" expected $ runMessage $ concat
                      ,"bazbaz"
                      ]
 
+etest15 = TestCase $ assertEqual "inserted \\relax" expected $ runMessage $ concat
+          ["\\let\\endif=\\fi"
+          ,"\\message{\\unexpanded\\expandafter{\\ifodd1\\expandafter\\expandafter\\fi}}"
+          ,"\\message{\\unexpanded\\expandafter{\\ifodd1\\expandafter\\expandafter\\endif}}"
+          ]
+  where
+    expected = Right ["\\relax \\relax \\fi "
+                     ,"\\relax \\relax \\endif "
+                     ]
+
 macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 1 MVItalic SMSymbol . T.singleton) "Y"
@@ -339,6 +349,10 @@ looptest4 = TestCase $ assertEqual "Prevent Infinite Loop (math active)" expecte
   where
     expected = Left "recursion too deep"
 
+looptest5 = TestCase $ assertEqual "Prevent Infinite Loop (inserted \\relax)" expected $ runMessage "\\if\\expanded{\\fi}"
+  where
+    expected = Left "recursion too deep"
+
 tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 1" etest1
                  ,TestLabel "Expansion 2" etest2
@@ -354,6 +368,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 12 (\\detokenize)" etest12
                  ,TestLabel "Expansion 13 (\\strcmp)" etest13
                  ,TestLabel "Expansion 14 (\\expanded)" etest14
+                 ,TestLabel "Expansion 15 (inserted \\relax)" etest15
                  ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2
@@ -364,6 +379,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Loop 2" looptest2
                  ,TestLabel "Loop 3" looptest3
                  ,TestLabel "Loop 4" looptest4
+                 ,TestLabel "Loop 5" looptest5
                  ]
 
 main = runTestTT tests

@@ -99,12 +99,12 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
           m <- use (localState . definitionAt name)
           case m of
             Left e -> -- expandable
-              case doTotallyExpand t e of
+              case doTotallyExpand e of
                 Nothing -> do
-                  r <- doExpand e
+                  r <- doExpand e t
                   unreadETokens (etDepth t + 1) r
                   loop depth revTokens
-                Just m -> do r <- m
+                Just m -> do r <- m t
                              -- the result should be balanced text
                              loop depth (reverse r ++ revTokens)
             Right v | isUndefined v -> throwError $ "Undefined control sequence (" ++ show name ++ ")"
@@ -241,12 +241,12 @@ readKeywordArguments keywords = doRead mempty $ map (\(k,v) -> (k,(k,v))) keywor
 
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]
-expandOnce et@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
+expandOnce t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
   m <- use (localState . definitionAt name)
   case m of
-    Left e -> doExpand e
-    _ -> return [et]
-expandOnce et = return [et]
+    Left e -> doExpand e t
+    _ -> return [t] -- TODO: Should say 'Undefined control sequence' if the command is undefined
+expandOnce t = return [t]
 
 -- used by number reading, \if and \ifcat argument, general text
 evalToken :: (MonadTeXState s m, MonadError String m) => m (ExpansionToken,NValue s)
@@ -266,7 +266,7 @@ maybeEvalToken = do
                    return $ Just (ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = NControlSeq "relax" }, injectCommonValue Relax)
         Left e -> do
           -- Other expandable command: Just expand it
-          r <- doExpand e
+          r <- doExpand e t
           unreadETokens (etDepth t + 1) r
           maybeEvalToken
         Right v -> return $ Just (t,v) -- non-expandable commands are not executed
@@ -284,7 +284,7 @@ evalToValue = do
       m <- use (localState . definitionAt name)
       case m of
         Left e -> do
-          r <- doExpand e
+          r <- doExpand e t
           unreadETokens (etDepth t + 1) r
           evalToValue
         Right v -> return (Just (t,v))

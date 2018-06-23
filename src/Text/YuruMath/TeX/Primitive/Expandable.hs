@@ -103,8 +103,11 @@ romannumeralCommand = do
   -- Should guard against big input?
   stringToEToken . showRomannumeral <$> readGeneralInt
 
-elseCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-elseCommand = do
+insertedRelax :: ExpansionToken
+insertedRelax = ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = NControlSeq "relax" }
+
+elseCommand :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
+elseCommand self = do
   cs <- use conditionals
   case cs of
     CondTruthy:css -> do
@@ -117,15 +120,21 @@ elseCommand = do
       skipUntilFi 0
       assign conditionals css
       return []
-    CondTest:_ -> throwError "internal error: \\else expansion in conditional"
+    CondTest:_ -> do
+      -- \else in a conditional test: insert a \relax
+      -- For example, single-step expansion of '\ifodd1\else\fi' yields '\relax \else \fi '
+      return [insertedRelax,self]
     _ -> throwError "Extra \\else"
 
-fiCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-fiCommand = do
+fiCommand :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
+fiCommand self = do
   cs <- use conditionals
   case cs of
     [] -> throwError "Extra \\fi"
-    CondTest:_ -> throwError "internal error: \\fi expansion in conditional"
+    CondTest:_ -> do
+      -- \fi in a conditional test: insert a \relax
+      -- For example, single-step expansion of '\ifodd1\fi' yields '\relax \fi '
+      return [insertedRelax,self]
     _:css -> do
       -- \iftrue ... >>>\fi<<<
       -- OR
@@ -133,8 +142,8 @@ fiCommand = do
       assign conditionals css
       return []
 
-orCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-orCommand = do
+orCommand :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
+orCommand self = do
   cs <- use conditionals
   case cs of
     CondCase:css -> do
@@ -142,7 +151,10 @@ orCommand = do
       skipUntilFi 0
       assign conditionals css
       return []
-    CondTest:_ -> throwError "internal error: \\or expansion in conditional"
+    CondTest:_ -> do
+      -- \or in a conditional test: insert a \relax
+      -- For example, single-step expansion of '\ifcase0\or\fi' yields '\relax \or \fi '
+      return [insertedRelax,self]
     _ -> throwError "Extra \\or"
 
 newtype ConditionalMarkerCommand = ConditionalMarkerCommand ConditionalMarker
@@ -159,9 +171,10 @@ instance IsExpandable ConditionalMarkerCommand where
   isConditionalMarker (ConditionalMarkerCommand x) = Just x
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand ConditionalMarkerCommand m where
-  doExpand (ConditionalMarkerCommand Eelse) = elseCommand
-  doExpand (ConditionalMarkerCommand Efi)   = fiCommand
-  doExpand (ConditionalMarkerCommand Eor)   = orCommand
+  doExpand (ConditionalMarkerCommand m) = case m of
+    Eelse -> elseCommand
+    Efi   -> fiCommand
+    Eor   -> orCommand
   evalBooleanConditional _ = Nothing
 
 instance Meaning ConditionalMarkerCommand where
@@ -347,25 +360,26 @@ instance IsExpandable CommonExpandable where
   isConditionalMarker _ = Nothing
 
 instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (NValue s)) => DoExpand CommonExpandable m where
-  doExpand Eexpandafter = expandafterCommand
-  doExpand Enoexpand = noexpandCommand
-  doExpand Ecsname = csnameCommand
-  doExpand Estring = stringCommand
-  doExpand Enumber = numberCommand
-  doExpand Eromannumeral = romannumeralCommand
-  doExpand Ethe = theCommand
-  doExpand Emeaning = meaningCommand
-  doExpand Eunless = unlessCommand
-  doExpand Eunexpanded = unexpandedCommand
-  doExpand Edetokenize = detokenizeCommand
-  doExpand Estrcmp = strcmpCommand
-  doExpand Eexpanded = expandedCommand
-  doExpand Ebegincsname = begincsnameCommand
-  doExpand Ecsstring = csstringCommand
-  doExpand EUchar = ucharCommand
-  doExpand Eifcase = ifcaseCommand
-  doTotallyExpand _ Eunexpanded = Just unexpandedCommand -- \unexpanded in \edef
-  doTotallyExpand _ _ = Nothing
+  doExpand cmd _ = case cmd of
+    Eexpandafter -> expandafterCommand
+    Enoexpand -> noexpandCommand
+    Ecsname -> csnameCommand
+    Estring -> stringCommand
+    Enumber -> numberCommand
+    Eromannumeral -> romannumeralCommand
+    Ethe -> theCommand
+    Emeaning -> meaningCommand
+    Eunless -> unlessCommand
+    Eunexpanded -> unexpandedCommand
+    Edetokenize -> detokenizeCommand
+    Estrcmp -> strcmpCommand
+    Eexpanded -> expandedCommand
+    Ebegincsname -> begincsnameCommand
+    Ecsstring -> csstringCommand
+    EUchar -> ucharCommand
+    Eifcase -> ifcaseCommand
+  doTotallyExpand Eunexpanded = Just (\_ -> unexpandedCommand) -- \unexpanded in \edef
+  doTotallyExpand _ = Nothing
   evalBooleanConditional _ = Nothing
 
 instance Meaning CommonExpandable where
@@ -442,7 +456,7 @@ evalCommonBoolean Eifdefined = ifdefinedCommand
 evalCommonBoolean Eifcsname = ifcsnameCommand
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand CommonBoolean m where
-  doExpand e = expandBooleanConditional (evalCommonBoolean e)
+  doExpand e _ = expandBooleanConditional (evalCommonBoolean e)
   evalBooleanConditional e = Just (evalCommonBoolean e)
 
 expandableDefinitions :: SubList '[ConditionalMarkerCommand, CommonExpandable, CommonBoolean] set => Map.Map Text (Union set)

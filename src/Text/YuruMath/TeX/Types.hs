@@ -52,7 +52,8 @@ data TeXToken = TTCommandName !CommandName
               deriving (Eq,Show)
 
 data ExpansionCommandNameFlavor = ECNFPlain
-                                | ECNFIsRelax -- prefixed by \noexpand, or inserted \relax by \else, \fi
+                                | ECNFIsRelax  -- inserted \relax by \else, \fi
+                                | ECNFNoexpand -- prefixed by \noexpand
                                 deriving (Eq,Show)
 
 data ExpansionToken = ETCommandName

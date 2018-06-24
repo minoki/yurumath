@@ -124,25 +124,28 @@ futureletCommand = do
   v <- meaningWithoutExpansion t2
   texAssign (definitionAt name) v
 
+mapChar :: (Char -> Char) -> ExpansionToken -> ExpansionToken
+mapChar f t@(ETCharacter { etChar = c })
+  | let d = f c, d /= '\0' = t { etChar = d }
+mapChar f t@(ETCommandName { etName = NActiveChar c })
+  | let d = f c, d /= '\0' = t { etFlavor = ECNFPlain, etName = NActiveChar d } -- strip 'isrelax' flag or 'noexpand' flag
+mapChar f t@(ETCommandName { etFlavor = ECNFIsRelax })
+  = t { etFlavor = ECNFPlain } -- strip 'isrelax' flag
+mapChar f t@(ETCommandName { etFlavor = ECNFNoexpand })
+  = t { etFlavor = ECNFPlain } -- strip 'noexpand' flag
+mapChar _ t = t
+
 uppercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 uppercaseCommand = do
   text <- readUnexpandedGeneralTextE
   toUpper <- ucCodeFn
-  let makeUpper et@(ETCharacter { etChar = c }) | d <- toUpper c, d /= '\0' = et { etChar = d }
-      makeUpper et@(ETCommandName { etName = NActiveChar c }) | d <- toUpper c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
-      makeUpper et@(ETCommandName { etFlavor = ECNFIsRelax }) = et { etFlavor = ECNFPlain } -- strip 'isrelax' flag by \noexpand
-      makeUpper et = et
-  unreadTokens' (map makeUpper text)
+  unreadTokens' (map (mapChar toUpper) text)
 
 lowercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 lowercaseCommand = do
   text <- readUnexpandedGeneralTextE
   toLower <- lcCodeFn
-  let makeLower et@(ETCharacter { etChar = c }) | d <- toLower c, d /= '\0' = et { etChar = d }
-      makeLower et@(ETCommandName { etName = NActiveChar c }) | d <- toLower c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
-      makeLower et@(ETCommandName { etFlavor = ECNFIsRelax }) = et { etFlavor = ECNFPlain } -- strip 'isrelax' flag by \noexpand
-      makeLower et = et
-  unreadTokens' (map makeLower text)
+  unreadTokens' (map (mapChar toLower) text)
 
 -- \chardef<control sequence><equals><number>
 chardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)

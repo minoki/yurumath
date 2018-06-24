@@ -268,6 +268,8 @@ expandOnce t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
   case m of
     Left e -> doExpand e t
     _ -> return [t] -- TODO: Should say 'Undefined control sequence' if the command is undefined
+expandOnce t@(ETCommandName { etFlavor = ECNFNoexpand, etName = name }) = do
+  return [t { etFlavor = ECNFPlain }]
 expandOnce t = return [t]
 
 -- Do a repeated expansion of the token and return the resulting unexpandable token and its meaning
@@ -292,8 +294,12 @@ nextExpandedToken = loop
             -- TODO: raise an error if undefined
             Right v -> return $ Just (t,v)
 
-        -- a token whose meaning is \relax (result of \noexpand, or inserted by \else, \fi or \or)
+        -- a token whose meaning is \relax (inserted by \else, \fi or \or)
         Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
+          return $ Just (t,injectCommonValue Relax)
+
+        -- a token yielded by \noexpand
+        Just t@(ETCommandName { etFlavor = ECNFNoexpand, etName = name }) -> do
           return $ Just (t,injectCommonValue Relax)
 
         -- non-active character
@@ -797,6 +803,7 @@ meaningWithoutExpansion t = do
   case t of
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> use (localState . definitionAt name)
     ETCommandName { etFlavor = ECNFIsRelax, etName = name } -> return (Right (injectCommonValue Relax))
+    ETCommandName { etFlavor = ECNFNoexpand, etName = name } -> return (Right (injectCommonValue Relax))
     ETCharacter { etChar = c, etCatCode = cc } -> return (Right (injectCommonValue $ Character c cc))
 
 -- Reads an explicit or implicit `{' (character with category code 2), and enters a new group

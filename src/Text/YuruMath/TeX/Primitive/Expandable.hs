@@ -12,7 +12,6 @@ module Text.YuruMath.TeX.Primitive.Expandable
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Expansion
-import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
@@ -63,16 +62,11 @@ begincsnameCommand = do
 stringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 stringCommand = do
   t <- required nextUnexpandedToken
-  case t of
-    ETCommandName { etName = NControlSeq name } -> do
-      ech <- use (localState . escapechar)
-      return $ if isUnicodeScalarValue ech
-               then stringToEToken (chr ech : T.unpack name)
-               else stringToEToken (T.unpack name)
-    ETCommandName { etName = NActiveChar c } ->
-      return $ stringToEToken [c]
+  stringToEToken <$> case t of
+    ETCommandName { etName = name } ->
+      showMessageStringM $ showCommandName name -- without a space appended
     ETCharacter { etChar = c } ->
-      return $ stringToEToken [c]
+      return [c]
 
 -- LuaTeX extension: \csstring
 csstringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]

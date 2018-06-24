@@ -4,6 +4,7 @@
 module Text.YuruMath.TeX.Expansion where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
+import Text.YuruMath.TeX.Meaning
 import qualified Text.YuruMath.TeX.Tokenizer as Tok (nextToken)
 import Text.YuruMath.TeX.State
 import Data.Int
@@ -97,7 +98,11 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
         ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
           m <- use (localState . definitionAt name)
           case m of
-            Left e -> -- expandable
+            -- undefined
+            Nothing -> undefinedControlSequence name
+
+            -- expandable
+            Just (Left e) ->
               case doExpandInEdef e of
                 Nothing -> do
                   r <- doExpand e t
@@ -106,8 +111,10 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
                 Just m -> do r <- m t
                              -- the result should be balanced text
                              loop depth (reverse r ++ revTokens)
-            Right v | isUndefined v -> throwError $ "Undefined control sequence (" ++ show name ++ ")"
-                    | otherwise -> loop depth (t : revTokens) -- unexpandable
+
+            -- non-expandable
+            Just (Right v) -> loop depth (t : revTokens) -- unexpandable
+
         -- character, \noexpand-ed name, inserted \relax
         t -> loop depth (t : revTokens) -- noexpand flag should be stripped later
 
@@ -146,7 +153,7 @@ readUnexpandedOneOptionalSpace = do
     Just t -> do
       v <- meaningWithoutExpansion t
       case v of
-        Right v | isImplicitSpace v -> return () -- consume a space
+        Just (Right v) | isImplicitSpace v -> return () -- consume a space
         _ -> unreadToken t
     Nothing -> return ()
 
@@ -191,7 +198,7 @@ readUnexpandedEquals = do
     Just t -> do
       v <- meaningWithoutExpansion t
       case v of
-        Right v | isImplicitSpace v -> readUnexpandedEquals -- consume a space, and read more
+        Just (Right v) | isImplicitSpace v -> readUnexpandedEquals -- consume a space, and read more
         _ -> unreadToken t
     Nothing -> return ()
 
@@ -261,13 +268,18 @@ readKeywordArguments keywords = doRead mempty $ map (\(k,v) -> (k,(k,v))) keywor
           doRead (acc <> v) [a | a <- argSpec, fst a /= w]
         _ -> return acc
 
+undefinedControlSequence :: (MonadTeXState s m, MonadError String m) => CommandName -> m a
+undefinedControlSequence name = do
+  throwErrorMessage ("Undefined contorl sequence: " <> showCommandName name)
+
 -- used by \expandafter
 expandOnce :: (MonadTeXState s m, MonadError String m, DoExpand (Expandable s) m) => ExpansionToken -> m [ExpansionToken]
 expandOnce t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
   m <- use (localState . definitionAt name)
   case m of
-    Left e -> doExpand e t
-    _ -> return [t] -- TODO: Should say 'Undefined control sequence' if the command is undefined
+    Nothing -> undefinedControlSequence name
+    Just (Left e) -> doExpand e t
+    Just (Right _) -> return [t]
 expandOnce t@(ETCommandName { etFlavor = ECNFNoexpand, etName = name }) = do
   return [t { etFlavor = ECNFPlain }]
 expandOnce t = return [t]
@@ -284,15 +296,17 @@ nextExpandedToken = loop
         Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
           m <- use (localState . definitionAt name)
           case m of
+            -- undefined
+            Nothing -> undefinedControlSequence name
+
             -- expandable
-            Left e -> do
+            Just (Left e) -> do
               r <- doExpand e t
               unreadTokens (etDepth t + 1) r
               loop
 
             -- non-expandable
-            -- TODO: raise an error if undefined
-            Right v -> return $ Just (t,v)
+            Just (Right v) -> return $ Just (t,v)
 
         -- a token whose meaning is \relax (inserted by \else, \fi or \or)
         Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
@@ -745,24 +759,26 @@ skipUntilElse :: (MonadTeXState s m, MonadError String m) => Int -> m Bool
 skipUntilElse !level = do
   x <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case x of
-    Left c | Just m <- isConditionalMarker c -> case m of
-               Eor | level == 0 -> throwError "Extra \\or"
-               Eelse | level == 0 -> return True
-               Efi | level == 0 -> return False
-                   | otherwise -> skipUntilElse (level - 1)
-               _ -> skipUntilElse level -- Inner \else, \or
-           | isConditional c -> skipUntilElse (level + 1)
+    Just (Left c)
+      | Just m <- isConditionalMarker c -> case m of
+          Eor | level == 0 -> throwError "Extra \\or"
+          Eelse | level == 0 -> return True
+          Efi | level == 0 -> return False
+              | otherwise -> skipUntilElse (level - 1)
+          _ -> skipUntilElse level -- Inner \else, \or
+      | isConditional c -> skipUntilElse (level + 1)
     _ -> skipUntilElse level
 
 skipUntilFi :: (MonadTeXState s m, MonadError String m) => Int -> m ()
 skipUntilFi !level = do
   x <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case x of
-    Left c | isConditionalMarker c == Just Efi
-             -> if level == 0
-                then return ()
-                else skipUntilFi (level - 1)
-           | isConditional c -> skipUntilFi (level + 1)
+    Just (Left c)
+      | isConditionalMarker c == Just Efi
+        -> if level == 0
+           then return ()
+           else skipUntilFi (level - 1)
+      | isConditional c -> skipUntilFi (level + 1)
     _ -> skipUntilFi level
 
 data SkipUntilOr = FoundOr
@@ -773,13 +789,14 @@ skipUntilOr :: (MonadTeXState s m, MonadError String m) => Int -> m SkipUntilOr
 skipUntilOr !level = do
   x <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case x of
-    Left c | Just m <- isConditionalMarker c -> case m of
-               Eor | level == 0 -> return FoundOr
-               Eelse | level == 0 -> return FoundElse
-               Efi | level == 0 -> return FoundFi
-                   | otherwise -> skipUntilOr (level - 1)
-               _ -> skipUntilOr level -- Inner \else, \or
-           | isConditional c -> skipUntilOr (level + 1)
+    Just (Left c)
+      | Just m <- isConditionalMarker c -> case m of
+          Eor | level == 0 -> return FoundOr
+          Eelse | level == 0 -> return FoundElse
+          Efi | level == 0 -> return FoundFi
+              | otherwise -> skipUntilOr (level - 1)
+          _ -> skipUntilOr level -- Inner \else, \or
+      | isConditional c -> skipUntilOr (level + 1)
     _ -> skipUntilOr level
 
 doBooleanConditional :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
@@ -802,9 +819,9 @@ meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => E
 meaningWithoutExpansion t = do
   case t of
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> use (localState . definitionAt name)
-    ETCommandName { etFlavor = ECNFIsRelax, etName = name } -> return (Right (injectCommonValue Relax))
-    ETCommandName { etFlavor = ECNFNoexpand, etName = name } -> return (Right (injectCommonValue Relax))
-    ETCharacter { etChar = c, etCatCode = cc } -> return (Right (injectCommonValue $ Character c cc))
+    ETCommandName { etFlavor = ECNFIsRelax, etName = name } -> return $ nonexpandableToValue Relax
+    ETCommandName { etFlavor = ECNFNoexpand, etName = name } -> return $ nonexpandableToValue Relax
+    ETCharacter { etChar = c, etCatCode = cc } -> return $ nonexpandableToValue $ Character c cc
 
 -- Reads an explicit or implicit `{' (character with category code 2), and enters a new group
 readLBrace :: forall s m. (MonadTeXState s m, MonadError String m) => m ()

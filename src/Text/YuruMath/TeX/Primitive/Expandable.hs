@@ -36,9 +36,9 @@ noexpandCommand = do
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
       m <- use (localState . definitionAt name)
       return $ case m of
-        Left _ -> [t { etFlavor = ECNFNoexpand }] -- expandable
-        Right c | isUndefined c -> [t { etFlavor = ECNFNoexpand }] -- undefined
-        Right _ -> [t] -- not expandable
+        Nothing        -> [t { etFlavor = ECNFNoexpand }] -- undefined
+        Just (Left _)  -> [t { etFlavor = ECNFNoexpand }] -- expandable
+        Just (Right _) -> [t] -- not expandable
     _ -> return [t]
 
 csnameCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
@@ -273,9 +273,7 @@ ifinnerCommand = uses mode isInnerMode
 ifdefinedCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdefinedCommand = do
   t <- required nextUnexpandedToken >>= meaningWithoutExpansion
-  return $ case t of
-             Left _ -> False
-             Right v -> isUndefined v
+  return $ t /= Nothing
 
 -- e-TeX extension: \ifcsname
 ifcsnameCommand :: (MonadTeXState s m, MonadError String m) => m Bool
@@ -290,7 +288,7 @@ unlessCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 unlessCommand = do
   test <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case test of
-    Left c | Just c <- evalBooleanConditional c -> expandBooleanConditional (not <$> c)
+    Just (Left c) | Just c <- evalBooleanConditional c -> expandBooleanConditional (not <$> c)
     _ -> throwError "\\unless must be followed by a boolean conditional command"
     -- You can't use `\\unless' before `XXX'.
 

@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 module Text.YuruMath.TeX.Interaction where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Meaning

@@ -495,13 +495,11 @@ newcommandFamily f = do
                        throwError $ "LaTeX Error: The name \\" ++ T.unpack name ++ " is illegal"
     _ -> return ()
   v <- use (localState . definitionAt name)
-  let isUndefined | Right r <- v
-                  , Just v <- toCommonValue r = case v of
-                      Relax -> True -- TODO: Issue a warning?
-                      Undefined _ -> True
-                      _ -> False
-                  | otherwise = False
-  f name isUndefined $ do
+  let isUndefinedOrRelax = case v of
+        Nothing -> True
+        Just (Right r) -> toCommonValue r == Just Relax
+        _ -> False
+  f name isUndefinedOrRelax $ do
     numOfArgs <- case numOfArgs of
                    Nothing -> return 0
                    Just [TTCharacter c CCOther]
@@ -533,16 +531,16 @@ newcommandFamily f = do
                                                    } : replicate (numOfArgs - 1) (StandardMandatory long)
                                 , macroReplacement = repText
                                 }
-    assign (localState . definitionAt name) (Left $ liftUnion macro)
+    assign (localState . definitionAt name) (expandableToValue macro)
 
 newcommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => m ()
-newcommandCommand = newcommandFamily $ \name isUndefined doDefine -> do
-  unless isUndefined $ throwError $ "LaTeX Error: The name " ++ show name ++ " is already defined"
+newcommandCommand = newcommandFamily $ \name isUndefinedOrRelax doDefine -> do
+  unless isUndefinedOrRelax $ throwError $ "LaTeX Error: The name " ++ show name ++ " is already defined"
   doDefine
 
 renewcommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => m ()
-renewcommandCommand = newcommandFamily $ \name isUndefined doDefine -> do
-  when isUndefined $ throwError $ "LaTeX Error: The name " ++ show name ++ " undefined"
+renewcommandCommand = newcommandFamily $ \name isUndefinedOrRelax doDefine -> do
+  when isUndefinedOrRelax $ throwError $ "LaTeX Error: The name " ++ show name ++ " undefined"
   doDefine
 
 providecommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => m ()
@@ -597,8 +595,8 @@ defCommand _defcmdname !prefix = do
                     , macroReplacement = repText
                     }
   if prefixGlobal prefix
-    then assign (localStates . mapped . definitionAt name) (Left $ liftUnion macro)
-    else assign (localState . definitionAt name) (Left $ liftUnion macro)
+    then assign (localStates . mapped . definitionAt name) (expandableToValue macro)
+    else assign (localState . definitionAt name) (expandableToValue macro)
 
 edefCommand :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => String -> MacroDefPrefix -> m ()
 edefCommand _defcmdname !prefix = do
@@ -612,8 +610,8 @@ edefCommand _defcmdname !prefix = do
                     , macroReplacement = repText
                     }
   if prefixGlobal prefix
-    then assign (localStates . mapped . definitionAt name) (Left $ liftUnion macro)
-    else assign (localState . definitionAt name) (Left $ liftUnion macro)
+    then assign (localStates . mapped . definitionAt name) (expandableToValue macro)
+    else assign (localState . definitionAt name) (expandableToValue macro)
 
 doPrefix :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Meaning (NValue s)) => String -> MacroDefPrefix -> m ()
 doPrefix name !prefix = do

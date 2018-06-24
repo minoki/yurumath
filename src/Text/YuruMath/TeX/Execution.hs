@@ -153,8 +153,8 @@ chardefCommand = do
   name <- readCommandName
   readEquals
   c <- readUnicodeScalarValue
-  let w = injectCommonValue $ DefinedCharacter c
-  texAssign (definitionAt name) (Right w)
+  let w = DefinedCharacter c
+  texAssign (definitionAt name) (nonexpandableToValue w)
 
 -- \mathchardef<control sequence><equals><15-bit number>
 mathchardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
@@ -162,8 +162,8 @@ mathchardefCommand = do
   name <- readCommandName
   readEquals
   v <- readIntBetween 0 0x8000 -- "Bad math code (" ++ show v ++ ")"
-  let w = injectCommonValue $ DefinedMathCharacter (MathCode (fromIntegral v))
-  texAssign (definitionAt name) (Right w)
+  let w = DefinedMathCharacter (MathCode (fromIntegral v))
+  texAssign (definitionAt name) (nonexpandableToValue w)
 
 -- \Umathchardef<control sequence><equals><3-bit number><8-bit number><21-bit number>
 umathchardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
@@ -171,7 +171,7 @@ umathchardefCommand = do
   name <- readCommandName
   readEquals
   w <- readUMathCodeTriplet
-  texAssign (definitionAt name) (Right $ injectCommonValue $ DefinedMathCharacter w)
+  texAssign (definitionAt name) (nonexpandableToValue $ DefinedMathCharacter w)
 
 -- \Umathcharnumdef<control sequence><equals><32-bit number>
 umathcharnumdefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
@@ -179,7 +179,7 @@ umathcharnumdefCommand = do
   name <- readCommandName
   readEquals
   w <- readUMathCode32
-  texAssign (definitionAt name) (Right $ injectCommonValue $ DefinedMathCharacter w)
+  texAssign (definitionAt name) (nonexpandableToValue $ DefinedMathCharacter w)
 
 -- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
 
@@ -338,7 +338,7 @@ countdefCommand = do
   name <- readCommandName
   readEquals
   index <- readRegIndex
-  texAssign (definitionAt name) (Right $ liftUnion $ CountReg index)
+  texAssign (definitionAt name) (nonexpandableToValue $ CountReg index)
 
 -- \dimendef-ed token
 setDimenReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
@@ -361,7 +361,7 @@ dimendefCommand = do
   name <- readCommandName
   readEquals
   index <- readRegIndex
-  texAssign (definitionAt name) (Right $ liftUnion $ DimenReg index)
+  texAssign (definitionAt name) (nonexpandableToValue $ DimenReg index)
 
 -- \skipdef-ed token
 setSkipReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
@@ -384,7 +384,7 @@ skipdefCommand = do
   name <- readCommandName
   readEquals
   index <- readRegIndex
-  texAssign (definitionAt name) (Right $ liftUnion $ SkipReg index)
+  texAssign (definitionAt name) (nonexpandableToValue $ SkipReg index)
 
 -- \muskipdef-ed token
 setMuskipReg :: (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
@@ -407,7 +407,7 @@ muskipdefCommand = do
   name <- readCommandName
   readEquals
   index <- readRegIndex
-  texAssign (definitionAt name) (Right $ liftUnion $ MuskipReg index)
+  texAssign (definitionAt name) (nonexpandableToValue $ MuskipReg index)
 
 advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 advanceCommand !global = do

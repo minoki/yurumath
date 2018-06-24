@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,6 +20,7 @@ import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
 import Control.Lens.Lens (Lens',lens)
+import Control.Lens.At (at)
 import Data.OpenUnion
 import Data.OpenUnion.Internal ((@!>))
 import TypeFun.Data.List (Delete,Elem)
@@ -174,7 +176,6 @@ data CommonValue = Character !Char !CatCode       -- character with category cod
                  | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
                  | IntegerConstant !Int
                  | Relax                          -- \relax
-                 | Undefined !CommandName
                  | Endcsname                      -- \endcsname
                  deriving (Show)
 
@@ -184,7 +185,6 @@ instance Eq CommonValue where
   DefinedMathCharacter c == DefinedMathCharacter c' = c == c'
   IntegerConstant x      == IntegerConstant x'      = x == x'
   Relax                  == Relax                   = True
-  Undefined _            == Undefined _             = True
   Endcsname              == Endcsname               = True
   _                      == _                       = False
 
@@ -204,11 +204,6 @@ instance (Eq (Union s), Elem CommonValue s) => IsNValue (Union s) where
 isImplicitSpace :: (IsNValue v) => v -> Bool
 isImplicitSpace v = case toCommonValue v of
   Just (Character _ CCSpace) -> True
-  _ -> False
-
-isUndefined :: (IsNValue v) => v -> Bool
-isUndefined v = case toCommonValue v of
-  Just (Undefined _) -> True
   _ -> False
 
 data Mode = HorizontalMode
@@ -286,19 +281,25 @@ data CommonState localstate
     , _conditionals       :: [ConditionalKind]
     }
 
-class (IsExpandable (Union (ExpandableSetT localstate)), IsNValue (Union (NValueSetT localstate))) => IsLocalState localstate where
+class (IsExpandable (Union (ExpandableSetT localstate)), IsNValue (Union (NValueSetT localstate)), Elem CommonValue (NValueSetT localstate)) => IsLocalState localstate where
   type ExpandableSetT localstate :: [*]
   type NValueSetT localstate :: [*] -- the set of non-expandable values
   commonLocalState :: Lens' localstate (CommonLocalState (ExpandableSetT localstate) (NValueSetT localstate))
 
 type ExpandableT localstate = Union (ExpandableSetT localstate)
 type NValueT localstate = Union (NValueSetT localstate) -- the type of non-expandable values
-type ValueT localstate = Either (ExpandableT localstate) (NValueT localstate)
+type DefinedValueT localstate = Either (ExpandableT localstate) (NValueT localstate)
+type ValueT localstate = Maybe (DefinedValueT localstate)
+
+expandableToValue :: (Elem a e, Typeable a) => a -> Maybe (Either (Union e) (Union n))
+expandableToValue x = Just (Left (liftUnion x))
+nonexpandableToValue :: (Elem a n, Typeable a) => a -> Maybe (Either (Union e) (Union n))
+nonexpandableToValue x = Just (Right (liftUnion x))
 
 definitionAt  :: (IsLocalState localstate) => CommandName -> Lens' localstate (ValueT localstate)
 scopeType     :: (IsLocalState localstate) => Lens' localstate ScopeType
-controlSeqDef :: (IsLocalState localstate) => Lens' localstate (Map.Map Text (ValueT localstate))
-activeDef     :: (IsLocalState localstate) => Lens' localstate (Map.Map Char (ValueT localstate))
+controlSeqDef :: (IsLocalState localstate) => Lens' localstate (Map.Map Text (DefinedValueT localstate))
+activeDef     :: (IsLocalState localstate) => Lens' localstate (Map.Map Char (DefinedValueT localstate))
 catcodeMap    :: (IsLocalState localstate) => Lens' localstate (Map.Map Char CatCode)
 lccodeMap, uccodeMap :: (IsLocalState localstate) => Lens' localstate (Map.Map Char Char)
 mathcodeMap   :: (IsLocalState localstate) => Lens' localstate (Map.Map Char MathCode)
@@ -328,12 +329,8 @@ thinmuskip    = commonLocalState . lens _thinmuskip  (\s v -> s { _thinmuskip = 
 medmuskip     = commonLocalState . lens _medmuskip   (\s v -> s { _medmuskip = v })
 thickmuskip   = commonLocalState . lens _thickmuskip (\s v -> s { _thickmuskip = v })
 
-definitionAt cn@(NControlSeq name) = controlSeqDef . lens getter setter
-  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) name
-        setter s v = Map.insert name v s
-definitionAt cn@(NActiveChar c) = activeDef . lens getter setter
-  where getter = Map.findWithDefault (Right (injectCommonValue $ Undefined cn)) c
-        setter s v = Map.insert c v s
+definitionAt cn@(NControlSeq name) = controlSeqDef . at name
+definitionAt cn@(NActiveChar c) = activeDef . at c
 
 class (IsLocalState (LocalState state)) => IsState state where
   type LocalState state
@@ -430,7 +427,6 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonVa
   doExecute (DefinedMathCharacter _) = return () -- dummy
   doExecute (IntegerConstant _)      = throwError $ "Unexpected integer constant."
   doExecute Relax                    = return () -- do nothing
-  doExecute (Undefined _)            = throwError $ "Undefined control sequence."
   doExecute Endcsname                = throwError "Extra \\endcsname"
   getQuantity (DefinedCharacter x) = QInteger (return $ fromIntegral $ ord x)
   getQuantity (DefinedMathCharacter m) = case m of
@@ -452,7 +448,7 @@ instance Show ConditionalMarker where
   show Efi = "\\fi"
   show Eor = "\\or"
 
-instance (IsExpandable (Union ecommand), IsNValue (Union value)) => IsLocalState (CommonLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsNValue (Union value), Elem CommonValue value) => IsLocalState (CommonLocalState ecommand value) where
   type ExpandableSetT (CommonLocalState ecommand value) = ecommand
   type NValueSetT (CommonLocalState ecommand value) = value
   commonLocalState = id

@@ -8,6 +8,7 @@ module Text.YuruMath.TeX.Meaning
   (MessageString(..)
   ,MessageContext(..)
   ,showMessageStringM
+  ,throwErrorMessage
   ,Meaning(..)
   ,controlSequence
   ,showCommandName
@@ -53,6 +54,12 @@ showMessageStringM m = do
   cm <- use (localState . catcodeMap)
   return $ runMessageString m (MessageContext e cm)
 
+throwErrorMessage :: (MonadState s m, IsState s, MonadError String m) => MessageString -> m a
+throwErrorMessage m = do
+  e <- use (localState . escapechar)
+  cm <- use (localState . catcodeMap)
+  throwError $ runMessageString m (MessageContext e cm)
+
 class Meaning a where
   meaningString :: a -> MessageString
 
@@ -67,13 +74,12 @@ can'tUseThisCommandInCurrentMode value = do
         InternalVerticalMode -> "internal vertical mode"
         MathMode -> "math mode"
         DisplayMathMode -> "display math mode"
-  throwError $ "You can't use `" ++ name ++ "' in " ++ modeStr
+  throwError $ "You can't use `" <> name <> "' in " <> modeStr
 
 invalidPrefix :: (Meaning a, MonadTeXState s m, MonadError String m) => String -> a -> m b
 invalidPrefix prefixName v = do
   -- You can't use a prefix with ...
-  message <- showMessageStringM $ "You can't use a prefix (" <> controlSequence prefixName <> ") with `" <> meaningString v <> "'"
-  throwError message
+  throwErrorMessage $ "You can't use a prefix (" <> controlSequence prefixName <> ") with `" <> meaningString v <> "'"
 
 prependEscapechar :: Int -> String -> String
 prependEscapechar e s | isUnicodeScalarValue e = chr e : s
@@ -114,6 +120,10 @@ instance (Meaning a, Meaning b) => Meaning (Either a b) where
   meaningString (Left x) = meaningString x
   meaningString (Right y) = meaningString y
 
+instance (Meaning a) => Meaning (Maybe a) where
+  meaningString Nothing = "undefined"
+  meaningString (Just x) = meaningString x
+
 instance Meaning CommonValue where
   meaningString (Character c cc) = fromString (ccstring ++ [' ',c])
     where ccstring = case cc of
@@ -145,5 +155,4 @@ instance Meaning CommonValue where
   meaningString (IntegerConstant x)
     = fromString ("integer constant " ++ show x)
   meaningString Relax = controlSequence "relax"
-  meaningString (Undefined _) = "undefined"
   meaningString Endcsname = controlSequence "endcsname"

@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 module Text.YuruMath.TeX.Math.State
   (IsMathLocalState(..)
   ,IsMathState(..)
@@ -13,6 +15,7 @@ import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Math.List
 import Control.Lens.Lens
 import Data.OpenUnion (Union)
+import TypeFun.Data.List (Elem)
 
 class (IsLocalState localstate) => IsMathLocalState localstate where
   famParam          :: Lens' localstate Int
@@ -53,12 +56,12 @@ initialMathState !isDisplay !commonState
               , _currentMathStyle = Just $ if isDisplay then DisplayStyle else TextStyle
               }
 
-instance (IsExpandable (Union ecommand), IsNValue (Union value)) => IsLocalState (MathLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsNValue (Union value), Elem CommonValue value) => IsLocalState (MathLocalState ecommand value) where
   type ExpandableSetT (MathLocalState ecommand value) = ecommand
   type NValueSetT (MathLocalState ecommand value) = value
   commonLocalState = lens _mCommonLocalState (\s v -> s { _mCommonLocalState = v })
 
-instance (IsExpandable (Union ecommand), IsNValue (Union value)) => IsMathLocalState (MathLocalState ecommand value) where
+instance (IsExpandable (Union ecommand), IsNValue (Union value), Elem CommonValue value) => IsMathLocalState (MathLocalState ecommand value) where
   famParam          = lens _famParam          (\s v -> s { _famParam = v })
   currentVariant    = lens _currentVariant    (\s v -> s { _currentVariant = v })
   currentSymbolMode = lens _currentSymbolMode (\s v -> s { _currentSymbolMode = v })

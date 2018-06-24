@@ -137,10 +137,10 @@ testDelimiter (d:ds) = do
           r <- testDelimiter ds
           if r
             then return True -- consumed
-            else do unreadEToken et
+            else do unreadToken et
                     return False
       | otherwise -> do
-          unreadEToken et
+          unreadToken et
           return False
 
 testLBrace :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> m Bool
@@ -155,7 +155,7 @@ testLBrace !consumeSpace = do
           -- TODO: Issue a warning
           testLBrace consumeSpace
     Just et -> do
-      unreadEToken et
+      unreadToken et
       return False
 
 readRequiredDelimiter :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> [TeXToken] -> m ()
@@ -223,7 +223,7 @@ testOptionalToken !consume !t = do
           -- TODO: Issue a warning
           testOptionalToken consume t
     Just et | fromEToken et == t -> return True
-            | otherwise -> do unreadEToken et
+            | otherwise -> do unreadToken et
                               return False
 
 testStar :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> m Bool
@@ -259,7 +259,7 @@ readUntilBeginGroup !long revTokens = do
   case t of
     Nothing -> throwError "Unexpected end of input when reading an argument"
     Just t@(ETCharacter { etCatCode = CCBeginGroup }) -> do
-      unreadEToken t
+      unreadToken t
       return (reverse revTokens)
     Just t@(ETCharacter { etCatCode = CCEndGroup }) -> throwError "Argument of <macro> has an extra }"
     Just (ETCommandName { etName = NControlSeq "par" })
@@ -296,7 +296,7 @@ expectExplicitLBrace :: (MonadTeXState s m, MonadError String m) => m ()
 expectExplicitLBrace = do
   t <- required nextUnexpandedToken
   case t of
-    ETCharacter { etCatCode = CCBeginGroup } -> unreadEToken t
+    ETCharacter { etCatCode = CCBeginGroup } -> unreadToken t
     _ -> throwError ("Expected `{', but got " ++ show t) -- Use of \foo doesn't match its definition.
 
 readParam :: (MonadTeXState s m, MonadError String m) => MacroParamSpec -> m [TeXToken]

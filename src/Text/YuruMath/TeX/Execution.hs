@@ -120,7 +120,7 @@ futureletCommand = do
   name <- readCommandName
   t1 <- required nextUnexpandedToken
   t2 <- required nextUnexpandedToken
-  unreadETokens' [t1,t2]
+  unreadTokens' [t1,t2]
   v <- meaningWithoutExpansion t2
   texAssign (definitionAt name) v
 
@@ -132,7 +132,7 @@ uppercaseCommand = do
       makeUpper et@(ETCommandName { etName = NActiveChar c }) | d <- toUpper c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
       makeUpper et@(ETCommandName { etFlavor = ECNFIsRelax }) = et { etFlavor = ECNFPlain } -- strip 'isrelax' flag by \noexpand
       makeUpper et = et
-  unreadETokens' (map makeUpper text)
+  unreadTokens' (map makeUpper text)
 
 lowercaseCommand :: (MonadTeXState s m, MonadError String m) => m ()
 lowercaseCommand = do
@@ -142,7 +142,7 @@ lowercaseCommand = do
       makeLower et@(ETCommandName { etName = NActiveChar c }) | d <- toLower c, d /= '\0' = et { etFlavor = ECNFPlain, etName = NActiveChar d }
       makeLower et@(ETCommandName { etFlavor = ECNFIsRelax }) = et { etFlavor = ECNFPlain } -- strip 'isrelax' flag by \noexpand
       makeLower et = et
-  unreadETokens' (map makeLower text)
+  unreadTokens' (map makeLower text)
 
 -- \chardef<control sequence><equals><number>
 chardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)

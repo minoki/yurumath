@@ -36,16 +36,16 @@ nextUnexpandedToken = do
       assign esPendingTokenList ts
       return (Just t)
 
-unreadETokens' :: (MonadState s m, IsState s, MonadError String m) => [ExpansionToken] -> m ()
-unreadETokens' ts = do
+unreadTokens' :: (MonadState s m, IsState s, MonadError String m) => [ExpansionToken] -> m ()
+unreadTokens' ts = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
   maxDepth <- use esMaxDepth
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (ts ++ ts')
 
-unreadETokens :: (MonadState s m, IsState s, MonadError String m) => Int -> [ExpansionToken] -> m ()
-unreadETokens !depth ts = do
+unreadTokens :: (MonadState s m, IsState s, MonadError String m) => Int -> [ExpansionToken] -> m ()
+unreadTokens !depth ts = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
   maxDepth <- use esMaxDepth
@@ -53,8 +53,8 @@ unreadETokens !depth ts = do
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (map (\t -> t { etDepth = depth }) ts ++ ts')
 
-unreadEToken :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m ()
-unreadEToken t = do
+unreadToken :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m ()
+unreadToken t = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
   maxDepth <- use esMaxDepth
@@ -101,7 +101,7 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
               case doExpandInEdef e of
                 Nothing -> do
                   r <- doExpand e t
-                  unreadETokens (etDepth t + 1) r
+                  unreadTokens (etDepth t + 1) r
                   loop depth revTokens
                 Just m -> do r <- m t
                              -- the result should be balanced text
@@ -146,7 +146,7 @@ readOneOptionalSpace = do
       v <- meaningWithoutExpansion t
       case v of
         Right v | isImplicitSpace v -> return () -- consume a space
-        _ -> unreadEToken t
+        _ -> unreadToken t
     Nothing -> return ()
 
 readOptionalSpaces :: (MonadTeXState s m, MonadError String m) => m ()
@@ -159,7 +159,7 @@ readOptionalSpaces = do
       v <- meaningWithoutExpansion t
       case v of
         Right v | isImplicitSpace v -> readOptionalSpaces -- consume a space, and read more
-        _ -> unreadEToken t
+        _ -> unreadToken t
     Nothing -> return ()
 
 -- <equals> ::= <optional spaces> | <optional spaces>'='12
@@ -173,7 +173,7 @@ readEquals = do
       v <- meaningWithoutExpansion t
       case v of
         Right v | isImplicitSpace v -> readEquals -- consume a space, and read more
-        _ -> unreadEToken t
+        _ -> unreadToken t
     Nothing -> return ()
 
 -- read a number between 0.."10FFFF excluding "D800.."DFFF, and convert it to a Char
@@ -200,9 +200,9 @@ readKeyword xs = do
               r <- loop xs
               if r
                 then return True
-                else do unreadEToken t
+                else do unreadToken t
                         return False
-        Just t -> do unreadEToken t
+        Just t -> do unreadToken t
                      return False
         Nothing -> return False
 
@@ -225,9 +225,9 @@ readOneOfKeywordsV keywords = do
           k <- loop [(xs,v) | (x:xs,v) <- keywords, x == c || x == toLower c]
           case k of
             Just _ -> return k
-            Nothing -> do unreadEToken t
+            Nothing -> do unreadToken t
                           return Nothing
-        Just t -> do unreadEToken t
+        Just t -> do unreadToken t
                      return Nothing
         Nothing -> return Nothing
 
@@ -266,7 +266,7 @@ nextExpandedToken = loop
             -- expandable
             Left e -> do
               r <- doExpand e t
-              unreadETokens (etDepth t + 1) r
+              unreadTokens (etDepth t + 1) r
               loop
 
             -- non-expandable
@@ -312,7 +312,7 @@ readOptionalSigns !s = do
     ETCharacter { etChar = '+', etCatCode = CCOther } -> readOptionalSigns s
     ETCharacter { etChar = '-', etCatCode = CCOther } -> readOptionalSigns (-s)
     _ | isImplicitSpace v -> readOptionalSigns s -- space: ignored
-      | otherwise -> unreadEToken t >> return s
+      | otherwise -> unreadToken t >> return s
 
 readUnsignedDecimalInteger :: forall s m. (MonadTeXState s m, MonadError String m) => Char -> m Integer
 readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
@@ -324,7 +324,7 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readRest (10 * x + fromIntegral (digitToInt c))
         Just (t,v) | isImplicitSpace v -> return x -- space: consumed
-                   | otherwise -> unreadEToken t >> return x
+                   | otherwise -> unreadToken t >> return x
         Nothing -> return x
 
 readUnsignedOctal :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
@@ -342,7 +342,7 @@ readUnsignedOctal = do
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isOctDigit c -> readRest (8 * x + fromIntegral (digitToInt c))
         Just (t,v) | isImplicitSpace v -> return x -- consumed
-                   | otherwise -> unreadEToken t >> return x
+                   | otherwise -> unreadToken t >> return x
         Nothing -> return x
 
 readUnsignedHex :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
@@ -366,7 +366,7 @@ readUnsignedHex = do
           | isHexDigit c && isAsciiUpper c ->
               readRest (16 * x + fromIntegral (digitToInt c))
         Just (t,v) | isImplicitSpace v -> return x -- consumed
-                   | otherwise -> unreadEToken t >> return x
+                   | otherwise -> unreadToken t >> return x
         Nothing -> return x
     isUpperHexDigit c = isHexDigit c && (isDigit c || isAsciiUpper c)
 
@@ -445,7 +445,7 @@ readUnsignedDecimalFraction c
         Just (t@ETCharacter { etChar = ',', etCatCode = CCOther },_) -> readFractionPart x 0
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readIntegerPart (10 * x + fromIntegral (digitToInt c))
-        Just (t,_) -> unreadEToken t >> return (fromInteger x)
+        Just (t,_) -> unreadToken t >> return (fromInteger x)
         Nothing -> return (fromInteger x)
     readFractionPart :: Integer -> Int -> m Rational
     readFractionPart !intPart !expPart = do
@@ -453,7 +453,7 @@ readUnsignedDecimalFraction c
       case m of
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
-        Just (t,_) -> unreadEToken t >> return (intPart % 10^expPart)
+        Just (t,_) -> unreadToken t >> return (intPart % 10^expPart)
         Nothing -> return (intPart % 10^expPart)
 
 class DimenRead f where
@@ -524,7 +524,7 @@ readDimensionF = do
                                   return (sp (factor * fromInteger v))
         QDimension getDimen -> scaleByRational factor <$> getDimen
         QGlue getGlue -> (scaleByRational factor . glueSpace) <$> getGlue
-        _ -> do unreadEToken t
+        _ -> do unreadToken t
                 true <- readKeyword "true"
                 let physicalUnits = [("pt",pt)
                                     ,("pc",pc)
@@ -600,7 +600,7 @@ readGlue = do
   (t,v) <- required nextExpandedToken
   applySign <$> case getQuantity v of
     QGlue getGlue -> getGlue
-    _ -> do unreadEToken t
+    _ -> do unreadToken t
             dimen <- readDimension
             plus <- readKeyword "plus"
             stretch <- if plus
@@ -623,7 +623,7 @@ readMuGlue = do
   (t,v) <- required nextExpandedToken
   applySign <$> case getQuantity v of
     QMuGlue getMuGlue -> getMuGlue
-    _ -> do unreadEToken t
+    _ -> do unreadToken t
             dimen <- readMuDimension
             plus <- readKeyword "plus"
             stretch <- if plus

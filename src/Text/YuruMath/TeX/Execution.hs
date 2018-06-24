@@ -110,8 +110,8 @@ globalCommand = do
 letCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 letCommand = do
   name <- readCommandName
-  readEquals
-  readOneOptionalSpace
+  readUnexpandedEquals
+  readUnexpandedOneOptionalSpace
   v <- required nextUnexpandedToken >>= meaningWithoutExpansion
   texAssign (definitionAt name) v
 

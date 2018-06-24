@@ -136,8 +136,9 @@ readCommandName = do
     _ -> throwError $ "unexpected character token: " ++ show t
          -- or, "Missing control sequence inserted"
 
-readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
-readOneOptionalSpace = do
+-- Used by \let
+readUnexpandedOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
+readUnexpandedOneOptionalSpace = do
   t <- nextUnexpandedToken
   case t of
     Just (ETCharacter { etCatCode = CCSpace }) ->
@@ -149,30 +150,48 @@ readOneOptionalSpace = do
         _ -> unreadToken t
     Nothing -> return ()
 
+readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
+readOneOptionalSpace = do
+  t <- nextExpandedToken
+  case t of
+    Just (ETCharacter { etCatCode = CCSpace },_) ->
+      return () -- consumed
+    Just (t,v) | isImplicitSpace v -> return () -- consume a space
+               | otherwise -> unreadToken t
+    Nothing -> return ()
+
 readOptionalSpaces :: (MonadTeXState s m, MonadError String m) => m ()
 readOptionalSpaces = do
-  t <- nextUnexpandedToken
+  t <- nextExpandedToken
   case t of
-    Just (ETCharacter { etCatCode = CCSpace }) ->
+    Just (ETCharacter { etCatCode = CCSpace },_) ->
       readOptionalSpaces -- consumed, read more
-    Just t -> do
-      v <- meaningWithoutExpansion t
-      case v of
-        Right v | isImplicitSpace v -> readOptionalSpaces -- consume a space, and read more
-        _ -> unreadToken t
+    Just (t,v) | isImplicitSpace v -> readOptionalSpaces -- consume a space, and read more
+               | otherwise -> unreadToken t
     Nothing -> return ()
 
 -- <equals> ::= <optional spaces> | <optional spaces>'='12
 readEquals :: (MonadTeXState s m, MonadError String m) => m ()
 readEquals = do
+  t <- nextExpandedToken
+  case t of
+    Just (ETCharacter { etChar = '=', etCatCode = CCOther },_) -> return () -- consume equals
+    Just (ETCharacter { etCatCode = CCSpace },_) -> readEquals -- consume a space, and read more
+    Just (t,v) | isImplicitSpace v -> readEquals -- consume a space, and read more
+               | otherwise -> unreadToken t
+    Nothing -> return ()
+
+-- Used by \let
+readUnexpandedEquals :: (MonadTeXState s m, MonadError String m) => m ()
+readUnexpandedEquals = do
   t <- nextUnexpandedToken
   case t of
     Just (ETCharacter { etChar = '=', etCatCode = CCOther }) -> return () -- consume equals
-    Just (ETCharacter { etCatCode = CCSpace }) -> readEquals -- consume a space, and read more
+    Just (ETCharacter { etCatCode = CCSpace }) -> readUnexpandedEquals -- consume a space, and read more
     Just t -> do
       v <- meaningWithoutExpansion t
       case v of
-        Right v | isImplicitSpace v -> readEquals -- consume a space, and read more
+        Right v | isImplicitSpace v -> readUnexpandedEquals -- consume a space, and read more
         _ -> unreadToken t
     Nothing -> return ()
 
@@ -193,8 +212,8 @@ readKeyword xs = do
   where
     loop [] = return True
     loop (x:xs) = do
-      t <- nextUnexpandedToken
-      case t of
+      t <- nextExpandedToken
+      case fst <$> t of
         Just t@(ETCharacter { etChar = c })
           | x == c || x == toLower c -> do
               r <- loop xs
@@ -219,8 +238,8 @@ readOneOfKeywordsV keywords = do
     loop [] = return Nothing
     loop keywords | Just v <- lookup "" keywords = return (Just v)
     loop keywords = do
-      t <- nextUnexpandedToken
-      case t of
+      t <- nextExpandedToken
+      case fst <$> t of
         Just t@(ETCharacter { etChar = c }) -> do
           k <- loop [(xs,v) | (x:xs,v) <- keywords, x == c || x == toLower c]
           case k of

@@ -207,8 +207,8 @@ iffalseCommand = return False
 -- \if: test character codes
 ifCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifCommand = do
-  t1 <- fst <$> evalToken
-  t2 <- fst <$> evalToken
+  t1 <- fst <$> required nextExpandedToken
+  t2 <- fst <$> required nextExpandedToken
   let toChar (ETCharacter { etChar = c }) = Just c
       toChar (ETCommandName { etName = NActiveChar c }) = Just c
       toChar (ETCommandName { etName = NControlSeq _ }) = Nothing
@@ -217,8 +217,8 @@ ifCommand = do
 -- \ifcat: test category codes
 ifcatCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifcatCommand = do
-  t1 <- fst <$> evalToken
-  t2 <- fst <$> evalToken
+  t1 <- fst <$> required nextExpandedToken
+  t2 <- fst <$> required nextExpandedToken
   let toCC (ETCharacter { etCatCode = cc }) = Just cc
       toCC (ETCommandName { etName = NActiveChar _ }) = Just CCActive
       toCC (ETCommandName { etName = NControlSeq _ }) = Nothing
@@ -234,7 +234,7 @@ ifnumCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifnumCommand = do
   x <- readNumber
   readOptionalSpaces
-  (rel,_) <- evalToken
+  (rel,_) <- required nextExpandedToken
   y <- readNumber
   case rel of
     ETCharacter { etChar = '<', etCatCode = CCOther } -> return $ x < y
@@ -246,7 +246,7 @@ ifdimCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdimCommand = do
   x <- readDimension
   readOptionalSpaces
-  (rel,_) <- evalToken
+  (rel,_) <- required nextExpandedToken
   y <- readDimension
   case rel of
     ETCharacter { etChar = '<', etCatCode = CCOther } -> return $ x < y

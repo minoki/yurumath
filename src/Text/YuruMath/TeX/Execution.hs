@@ -99,7 +99,7 @@ texAssign setter !value = return (WillAssign setter value)
 
 globalCommand :: (MonadTeXState s m, MonadError String m, Meaning (NValue s)) => m ()
 globalCommand = do
-  (et,v) <- evalToken
+  (et,v) <- required nextExpandedToken
   case toCommonValue v of
     Just Relax -> globalCommand -- ignore \relax
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
@@ -408,7 +408,7 @@ muskipdefCommand = do
 
 advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 advanceCommand !global = do
-  (et,v) <- evalToken
+  (et,v) <- required nextExpandedToken
   case doAdvance v of
     Just m -> do n <- m
                  readOptionalKeyword "by"
@@ -417,7 +417,7 @@ advanceCommand !global = do
 
 multiplyCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 multiplyCommand !global = do
-  (et,v) <- evalToken
+  (et,v) <- required nextExpandedToken
   case doMultiply v of
     Just m -> do n <- m
                  readOptionalKeyword "by"
@@ -426,7 +426,7 @@ multiplyCommand !global = do
 
 divideCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 divideCommand !global = do
-  (et,v) <- evalToken
+  (et,v) <- required nextExpandedToken
   case doDivide v of
     Just m -> do n <- m
                  readOptionalKeyword "by"

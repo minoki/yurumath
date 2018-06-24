@@ -69,7 +69,7 @@ parseExpression name !level = parseTerm >>= readAddOp
   where
     readAddOp :: q -> m q
     readAddOp !acc = do
-      et <- maybeEvalToken
+      et <- nextExpandedToken
       case et of
         Just (t,v) ->
           case t of
@@ -92,7 +92,7 @@ parseExpression name !level = parseTerm >>= readAddOp
 
     readMulOp :: q -> m q
     readMulOp !acc = do
-      et <- maybeEvalToken
+      et <- nextExpandedToken
       case et of
         Just (t,v) ->
           case t of
@@ -110,7 +110,7 @@ parseExpression name !level = parseTerm >>= readAddOp
 
     parseFactor :: m q
     parseFactor = do
-      (t,v) <- evalToken
+      (t,v) <- required nextExpandedToken
       case t of
         ETCharacter { etChar = '(', etCatCode = CCOther } ->
           parseExpression name (level + 1)
@@ -119,7 +119,7 @@ parseExpression name !level = parseTerm >>= readAddOp
 
 parseIntegerFactor :: (MonadTeXState s m, MonadError String m) => String -> Int -> m Integer
 parseIntegerFactor name !level = do
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   case t of
     ETCharacter { etChar = '(', etCatCode = CCOther } ->
       parseExpression name (level + 1)

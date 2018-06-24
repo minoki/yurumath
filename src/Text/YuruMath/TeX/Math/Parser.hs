@@ -74,7 +74,7 @@ type MonadMathState state m
 
 readMathToken :: forall m state. (MonadMathState state m, MonadError String m) => m (Maybe (ExpansionToken,MathToken m))
 readMathToken = do
-  v <- evalToValue
+  v <- nextExpandedToken
   case v of
     Nothing -> return Nothing -- end of input
     Just (et,v) -> doMathToken et v

@@ -617,7 +617,7 @@ edefCommand _defcmdname !prefix = do
 
 doPrefix :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Meaning (NValue s)) => String -> MacroDefPrefix -> m ()
 doPrefix name !prefix = do
-  (et,v) <- evalToken
+  (et,v) <- required nextExpandedToken
   case toCommonValue v of
     Just Relax -> doPrefix name prefix -- ignore \relax
     Just (Character _ CCSpace) -> doPrefix name prefix -- ignore spaces

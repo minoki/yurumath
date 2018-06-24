@@ -37,7 +37,7 @@ tokenizeAllString input = runExcept (evalStateT tokenizeAll (initialState input)
 
 expandAll :: (MonadTeXState s m, MonadError String m) => m [NValue s]
 expandAll = do
-  t <- evalToValue
+  t <- nextExpandedToken
   case t of
     Nothing -> return []
     Just (_,v) -> (v:) <$> expandAll

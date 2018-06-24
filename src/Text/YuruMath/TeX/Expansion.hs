@@ -9,7 +9,6 @@ import Text.YuruMath.TeX.State
 import Data.Int
 import Data.Char
 import Data.Ratio
-import Data.Maybe
 import Data.Bits
 import qualified Data.Text as T
 import Data.Monoid ((<>))
@@ -252,51 +251,37 @@ expandOnce t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
     _ -> return [t] -- TODO: Should say 'Undefined control sequence' if the command is undefined
 expandOnce t = return [t]
 
--- used by number reading, \if and \ifcat argument, general text
-evalToken :: (MonadTeXState s m, MonadError String m) => m (ExpansionToken,NValue s)
-evalToken = required maybeEvalToken
+-- Do a repeated expansion of the token and return the resulting unexpandable token and its meaning
+nextExpandedToken :: forall s m. (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,NValue s))
+nextExpandedToken = loop
+  where
+    loop :: m (Maybe (ExpansionToken,NValue s))
+    loop = do
+      t <- nextEToken
+      case t of
+        -- a command name
+        Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
+          m <- use (localState . definitionAt name)
+          case m of
+            -- expandable
+            Left e -> do
+              r <- doExpand e t
+              unreadETokens (etDepth t + 1) r
+              loop
 
-maybeEvalToken :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,NValue s))
-maybeEvalToken = do
-  et <- nextEToken
-  case et of
-    Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
-      m <- use (localState . definitionAt name)
-      cs <- use conditionals
-      case m of
-        Left e | isJust (isConditionalMarker e), CondTest:_ <- cs -> do
-                   -- \else, \or, \fi in conditional test: Insert \relax with a special flavor
-                   unreadEToken t
-                   return $ Just (ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = NControlSeq "relax" }, injectCommonValue Relax)
-        Left e -> do
-          -- Other expandable command: Just expand it
-          r <- doExpand e t
-          unreadETokens (etDepth t + 1) r
-          maybeEvalToken
-        Right v -> return $ Just (t,v) -- non-expandable commands are not executed
-    Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
-      return $ Just (t,injectCommonValue Relax)
-    Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
-      return $ Just (t,injectCommonValue $ Character c cc)
-    Nothing -> return Nothing
+            -- non-expandable
+            -- TODO: raise an error if undefined
+            Right v -> return $ Just (t,v)
 
-evalToValue :: (MonadTeXState s m, MonadError String m) => m (Maybe (ExpansionToken,NValue s))
-evalToValue = do
-  et <- nextEToken
-  case et of
-    Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
-      m <- use (localState . definitionAt name)
-      case m of
-        Left e -> do
-          r <- doExpand e t
-          unreadETokens (etDepth t + 1) r
-          evalToValue
-        Right v -> return (Just (t,v))
-    Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
-      return (Just (t,injectCommonValue Relax))
-    Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
-      return (Just (t,injectCommonValue $ Character c cc))
-    Nothing -> return Nothing
+        -- a token whose meaning is \relax (result of \noexpand, or inserted by \else, \fi or \or)
+        Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
+          return $ Just (t,injectCommonValue Relax)
+
+        -- non-active character
+        Just t@(ETCharacter { etChar = c, etCatCode = cc }) ->
+          return $ Just (t,injectCommonValue $ Character c cc)
+
+        Nothing -> return Nothing
 
 required :: (MonadError String m) => m (Maybe a) -> m a
 required m = do a <- m
@@ -307,7 +292,7 @@ required m = do a <- m
 -- used by \csname and \ifcsname
 readUntilEndcsname :: (MonadTeXState s m, MonadError String m) => [Char] -> m [Char]
 readUntilEndcsname revName = do
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   case toCommonValue v of
     Just Endcsname -> return (reverse revName)
     _ -> case t of
@@ -322,7 +307,7 @@ stringToEToken = map charToEToken
 -- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   case t of
     ETCharacter { etChar = '+', etCatCode = CCOther } -> readOptionalSigns s
     ETCharacter { etChar = '-', etCatCode = CCOther } -> readOptionalSigns (-s)
@@ -334,7 +319,7 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
   where
     readRest :: Integer -> m Integer
     readRest !x = do
-      m <- maybeEvalToken
+      m <- nextExpandedToken
       case m of
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readRest (10 * x + fromIntegral (digitToInt c))
@@ -344,7 +329,7 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
 
 readUnsignedOctal :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedOctal = do
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   case t of
     ETCharacter { etChar = c, etCatCode = CCOther }
       | isOctDigit c -> readRest (fromIntegral (digitToInt c))
@@ -352,7 +337,7 @@ readUnsignedOctal = do
   where
     readRest :: Integer -> m Integer
     readRest !x = do
-      m <- maybeEvalToken
+      m <- nextExpandedToken
       case m of
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isOctDigit c -> readRest (8 * x + fromIntegral (digitToInt c))
@@ -362,7 +347,7 @@ readUnsignedOctal = do
 
 readUnsignedHex :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedHex = do
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   case t of
     ETCharacter { etChar = c, etCatCode = CCOther }
       | isUpperHexDigit c -> readRest (fromIntegral (digitToInt c))
@@ -373,7 +358,7 @@ readUnsignedHex = do
   where
     readRest :: Integer -> m Integer
     readRest !x = do
-      m <- maybeEvalToken
+      m <- nextExpandedToken
       case m of
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isUpperHexDigit c -> readRest (16 * x + fromIntegral (digitToInt c))
@@ -407,7 +392,7 @@ readCharacterCode = do
 readNumber :: (MonadTeXState s m, MonadError String m) => m Integer
 readNumber = do
   sign <- readOptionalSigns 1
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   (fromIntegral sign *) <$> case t of
     ETCharacter { etChar = '\'', etCatCode = CCOther } -> readUnsignedOctal
     ETCharacter { etChar = '"', etCatCode = CCOther } -> readUnsignedHex
@@ -454,7 +439,7 @@ readUnsignedDecimalFraction c
   where
     readIntegerPart :: Integer -> m Rational
     readIntegerPart !x = do
-      m <- maybeEvalToken
+      m <- nextExpandedToken
       case m of
         Just (t@ETCharacter { etChar = '.', etCatCode = CCOther },_) -> readFractionPart x 0
         Just (t@ETCharacter { etChar = ',', etCatCode = CCOther },_) -> readFractionPart x 0
@@ -464,7 +449,7 @@ readUnsignedDecimalFraction c
         Nothing -> return (fromInteger x)
     readFractionPart :: Integer -> Int -> m Rational
     readFractionPart !intPart !expPart = do
-      m <- maybeEvalToken
+      m <- nextExpandedToken
       case m of
         Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
@@ -512,7 +497,7 @@ readDimensionF = do
   let applySign | sign > 0 = id
                 | otherwise = negateDim
   -- read <internal dimen> or <factor> or <internal glue>
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   applySign <$> case t of
     ETCharacter { etChar = '\'', etCatCode = CCOther } ->
       (fromInteger <$> readUnsignedOctal) >>= doUnit readDimenUnit
@@ -533,7 +518,7 @@ readDimensionF = do
       -- read <unit of measure>
       readOptionalSpaces
       -- "em" | "ex" | "true"<physical unit> | <physical unit> | <internal integer> | <internal dimen> | <internal glue>
-      (t,v) <- evalToken
+      (t,v) <- required nextExpandedToken
       case getQuantity v of
         QInteger getInteger -> do v <- getInteger
                                   return (sp (factor * fromInteger v))
@@ -579,7 +564,7 @@ readMuDimensionF = do
   let applySign | sign > 0 = id
                 | otherwise = negateDim
   -- read <factor> or <internal muglue>
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   applySign <$> case t of
     ETCharacter { etChar = '\'', etCatCode = CCOther } ->
       (fromInteger <$> readUnsignedOctal) >>= doUnit readMuUnit
@@ -599,7 +584,7 @@ readMuDimensionF = do
       muKeyword <- readKeyword "mu"
       if muKeyword
         then readOneOptionalSpace >> return (mu factor)
-        else do (t,v) <- evalToken
+        else do (t,v) <- required nextExpandedToken
                 case getQuantity v of
                   QMuGlue getMuGlue -> (scaleByRational factor . glueSpace) <$> getMuGlue
                   _ -> throwError "Illegal unit of measure"
@@ -612,7 +597,7 @@ readGlue = do
   sign <- readOptionalSigns 1
   let applySign | sign > 0 = id
                 | otherwise = negateQ
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   applySign <$> case getQuantity v of
     QGlue getGlue -> getGlue
     _ -> do unreadEToken t
@@ -635,7 +620,7 @@ readMuGlue = do
   sign <- readOptionalSigns 1
   let applySign | sign > 0 = id
                 | otherwise = negateQ
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   applySign <$> case getQuantity v of
     QMuGlue getMuGlue -> getMuGlue
     _ -> do unreadEToken t
@@ -674,7 +659,7 @@ instance QuantityRead (Glue MuDimen) where
 -- \the, \showthe
 theString :: (MonadTeXState s m, MonadError String m) => String -> m String
 theString name = do
-  (t,v) <- evalToken
+  (t,v) <- required nextExpandedToken
   case getQuantity v of
     QInteger getInteger ->
       do show <$> getInteger
@@ -801,7 +786,7 @@ readLBrace = loop
   where
     loop :: m ()
     loop = do
-      (t,v) <- evalToken
+      (t,v) <- required nextExpandedToken
       case toCommonValue v of
         Just (Character _ CCSpace) -> loop -- ignore spaces
         Just (Character _ CCBeginGroup) -> do
@@ -813,7 +798,7 @@ readFillerAndLBrace !createScope = loop
   where
     loop :: m ()
     loop = do
-      (t,v) <- evalToken
+      (t,v) <- required nextExpandedToken
       case toCommonValue v of
         Just (Character _ CCBeginGroup)
           | createScope -> enterGroup ScopeByBrace -- explicit or implict left brace

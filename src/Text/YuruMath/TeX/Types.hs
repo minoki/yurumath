@@ -329,8 +329,8 @@ thinmuskip    = commonLocalState . lens _thinmuskip  (\s v -> s { _thinmuskip = 
 medmuskip     = commonLocalState . lens _medmuskip   (\s v -> s { _medmuskip = v })
 thickmuskip   = commonLocalState . lens _thickmuskip (\s v -> s { _thickmuskip = v })
 
-definitionAt cn@(NControlSeq name) = controlSeqDef . at name
-definitionAt cn@(NActiveChar c) = activeDef . at c
+definitionAt (NControlSeq name) = controlSeqDef . at name
+definitionAt (NActiveChar c) = activeDef . at c
 
 class (IsLocalState (LocalState state)) => IsState state where
   type LocalState state
@@ -357,7 +357,7 @@ mode               :: (IsState state) => Lens' state Mode
 localStates        = commonState . lens _localStates        (\s v -> s { _localStates = v })
 mode               = commonState . lens _mode               (\s v -> s { _mode = v })
 localState = localStates . lens head setter
-  where setter [] x = error "Invalid local state"
+  where setter [] _ = error "Invalid local state"
         setter (_:xs) x = x:xs
 
 class (IsExpandable e, Monad m) => DoExpand e m where

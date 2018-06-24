@@ -92,8 +92,8 @@ readMathToken = do
       where just v = Just (et,v)
     doCommonValue :: ExpansionToken -> CommonValue -> m (Maybe (ExpansionToken,MathToken m))
     doCommonValue et v = case v of
-      Character c CCBeginGroup   -> return $ Just (et,MTLBrace)
-      Character c CCEndGroup     -> return $ Just (et,MTRBrace)
+      Character _ CCBeginGroup   -> return $ Just (et,MTLBrace)
+      Character _ CCEndGroup     -> return $ Just (et,MTRBrace)
       Character _ CCMathShift -> do
         m <- use mode
         if m == DisplayMathMode
@@ -102,10 +102,10 @@ readMathToken = do
                     Just (ETCharacter { etCatCode = CCMathShift }) -> return $ Just (et,MTStopDisplay)
                     _ -> throwError "Display math should end with $$."
           else return $ Just (et,MTStopInline)
-      Character c CCAlignmentTab -> throwError "alignment tab: not implemented yet"
-      Character c CCSup          -> return $ Just (et,MTSup)
-      Character c CCSub          -> return $ Just (et,MTSub)
-      Character c CCSpace        -> readMathToken -- do nothing
+      Character _ CCAlignmentTab -> throwError "alignment tab: not implemented yet"
+      Character _ CCSup          -> return $ Just (et,MTSup)
+      Character _ CCSub          -> return $ Just (et,MTSub)
+      Character _ CCSpace        -> readMathToken -- do nothing
       Character c CCLetter       -> return $ Just (et,MTChar c)
       Character c CCOther        -> return $ Just (et,MTChar c)
       Character _ cc             -> throwError $ "Unexpected " ++ show cc ++ " character" -- endline, param, ignored, active, comment, invalid

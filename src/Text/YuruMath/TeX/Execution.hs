@@ -99,7 +99,7 @@ texAssign setter !value = return (WillAssign setter value)
 
 globalCommand :: (MonadTeXState s m, MonadError String m, Meaning (NValue s)) => m ()
 globalCommand = do
-  (et,v) <- required nextExpandedToken
+  (_,v) <- required nextExpandedToken
   case toCommonValue v of
     Just Relax -> globalCommand -- ignore \relax
     Just (Character _ CCSpace) -> globalCommand -- ignore spaces
@@ -129,9 +129,9 @@ mapChar f t@(ETCharacter { etChar = c })
   | let d = f c, d /= '\0' = t { etChar = d }
 mapChar f t@(ETCommandName { etName = NActiveChar c })
   | let d = f c, d /= '\0' = t { etFlavor = ECNFPlain, etName = NActiveChar d } -- strip 'isrelax' flag or 'noexpand' flag
-mapChar f t@(ETCommandName { etFlavor = ECNFIsRelax })
+mapChar _ t@(ETCommandName { etFlavor = ECNFIsRelax })
   = t { etFlavor = ECNFPlain } -- strip 'isrelax' flag
-mapChar f t@(ETCommandName { etFlavor = ECNFNoexpand })
+mapChar _ t@(ETCommandName { etFlavor = ECNFNoexpand })
   = t { etFlavor = ECNFPlain } -- strip 'noexpand' flag
 mapChar _ t = t
 

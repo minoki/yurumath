@@ -37,8 +37,6 @@ default-extensions:
 ghc-options:
 - -Wall
 - -Wno-name-shadowing # intentional
-- -Wno-unused-imports # temporary
-- -Wno-unused-matches # temporary
 
 library:
   source-dirs: src

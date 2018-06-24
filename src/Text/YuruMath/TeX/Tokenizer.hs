@@ -185,21 +185,21 @@ parseSuperscriptNotation !c2 (c3:c4:css)
       _ -> throwError "^^^^ needs four hex digits"
 
 -- TeX3: ^^xx
-parseSuperscriptNotation c2 (x1:x2:css)
+parseSuperscriptNotation _c2 (x1:x2:css)
   | isLowerHexDigit x1 && isLowerHexDigit x2 =
       Just $ Right (chr (16 * digitToInt x1 + digitToInt x2), css)
 
 -- ^^X, like ^^M, ^^?
-parseSuperscriptNotation c2 (d:css)
+parseSuperscriptNotation _c2 (d:css)
   -- TODO: If d == '\n', then return <endlinechar> `xor` 0x40
   | ord d < 0x80 = Just $ Right (chr (ord d `xor` 0x40), css)
 
-parseSuperscriptNotation c2 _ = Nothing
+parseSuperscriptNotation _c2 _ = Nothing
 
 doComment :: String -> String
 doComment [] = []
 doComment ('\n':xs) = xs -- strip end line character
-doComment (x:xs) = doComment xs
+doComment (_:xs) = doComment xs
 
 isLowerHexDigit :: Char -> Bool
 isLowerHexDigit c = isHexDigit c && isLower c

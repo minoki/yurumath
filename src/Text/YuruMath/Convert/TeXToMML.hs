@@ -13,7 +13,7 @@ toMML :: forall a. MathStyle -> MathList a -> [MathML]
 toMML = doList
   where
     doList :: MathStyle -> MathList a -> [MathML]
-    doList !style [] = []
+    doList !_style [] = []
     doList style (IAtom atom : xs) = doAtom style atom : doList style xs
     doList _ (IStyleChange style : xs) = doList style xs -- TODO: Emit <mstyle> with scriptlevel and displaystyle attributes
     doList style (IGenFrac gf num den : xs) = gfrac : doList style xs
@@ -89,30 +89,30 @@ toMML = doList
              (Just xs, Just ys) -> munderover $ nucleus <> fromList xs <> fromList ys
 
     doNucleus :: MathStyle -> AtomType -> MathField a -> MathML
-    doNucleus !style !atomType MFEmpty = mrow mempty
-    doNucleus style AOrd (MFSymbol { symbolVariant = v, symbolContent = content })
+    doNucleus !_style !_atomType MFEmpty = mrow mempty
+    doNucleus _style AOrd (MFSymbol { symbolVariant = v, symbolContent = content })
       = makeMathIdentifier v content -- TODO: Handle numeric literal (<mn>)
-    doNucleus style atomType (MFSymbol { symbolVariant = v, symbolContent = content })
+    doNucleus _style atomType (MFSymbol { symbolVariant = _v, symbolContent = content })
       | atomType `elem` [AOp,ABin,ARel,AOpen,AClose,APunct]
       = mo $ toMathML content
-    doNucleus style atomType (MFSymbol { symbolVariant = v, symbolContent = content })
+    doNucleus _style _atomType (MFSymbol { symbolVariant = _v, symbolContent = content })
       -- atomType == AInner,AOver,AUnder,AAcc,ARad,AVcent,ARoot
       = mo $ toMathML content
 
-    doNucleus style atomType (MFSubList xs) = fromList $ doList style xs
-    doNucleus style atomType _ = mrow mempty -- not supported yet
+    doNucleus style _atomType (MFSubList xs) = fromList $ doList style xs
+    doNucleus _style _atomType _ = mrow mempty -- not supported yet
 
     doField :: MathStyle -> MathField a -> Maybe [MathML]
-    doField !style MFEmpty = Nothing
-    doField style (MFSymbol { symbolVariant = v, symbolContent = content })
+    doField !_style MFEmpty = Nothing
+    doField _style (MFSymbol { symbolVariant = v, symbolContent = content })
       = Just [makeMathIdentifier v content] -- TODO: Handle numeric literal (<mn>)
-    doField style (MFBox {}) = Nothing -- ignored for now
+    doField _style (MFBox {}) = Nothing -- ignored for now
     doField style (MFSubList xs) = Just $ doList style xs
 
     doDelimiter (DelimiterCode 0) = []
     doDelimiter delim = [mo {- stretchy="true" -} $ toMathML (delimiterSlotSmall delim)] -- expected size?
 
-    doSizedDelimiter dimen (DelimiterCode 0) = []
+    doSizedDelimiter _dimen (DelimiterCode 0) = []
     doSizedDelimiter dimen delim = [mo ! A.maxsize (toValue $ showDimension dimen) ! A.minsize (toValue $ showDimension dimen) $ toMathML (delimiterSlotSmall delim)]
 
 fromList :: [MathML] -> MathML

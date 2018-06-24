@@ -41,7 +41,6 @@ unreadTokens' :: (MonadState s m, IsState s, MonadError String m) => [ExpansionT
 unreadTokens' ts = do
   limit <- use esMaxPendingToken
   ts' <- use esPendingTokenList
-  maxDepth <- use esMaxDepth
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (ts ++ ts')
 
@@ -113,7 +112,7 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
                              loop depth (reverse r ++ revTokens)
 
             -- non-expandable
-            Just (Right v) -> loop depth (t : revTokens) -- unexpandable
+            Just (Right _) -> loop depth (t : revTokens) -- unexpandable
 
         -- character, \noexpand-ed name, inserted \relax
         t -> loop depth (t : revTokens) -- noexpand flag should be stripped later
@@ -280,7 +279,7 @@ expandOnce t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) = do
     Nothing -> undefinedControlSequence name
     Just (Left e) -> doExpand e t
     Just (Right _) -> return [t]
-expandOnce t@(ETCommandName { etFlavor = ECNFNoexpand, etName = name }) = do
+expandOnce t@(ETCommandName { etFlavor = ECNFNoexpand }) = do
   return [t { etFlavor = ECNFPlain }]
 expandOnce t = return [t]
 
@@ -309,11 +308,11 @@ nextExpandedToken = loop
             Just (Right v) -> return $ Just (t,v)
 
         -- a token whose meaning is \relax (inserted by \else, \fi or \or)
-        Just t@(ETCommandName { etFlavor = ECNFIsRelax, etName = name }) -> do
+        Just t@(ETCommandName { etFlavor = ECNFIsRelax }) -> do
           return $ Just (t,injectCommonValue Relax)
 
         -- a token yielded by \noexpand
-        Just t@(ETCommandName { etFlavor = ECNFNoexpand, etName = name }) -> do
+        Just t@(ETCommandName { etFlavor = ECNFNoexpand }) -> do
           return $ Just (t,injectCommonValue Relax)
 
         -- non-active character
@@ -360,7 +359,7 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
     readRest !x = do
       m <- nextExpandedToken
       case m of
-        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
+        Just (ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readRest (10 * x + fromIntegral (digitToInt c))
         Just (t,v) | isImplicitSpace v -> return x -- space: consumed
                    | otherwise -> unreadToken t >> return x
@@ -368,7 +367,7 @@ readUnsignedDecimalInteger !c = readRest (fromIntegral (digitToInt c))
 
 readUnsignedOctal :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedOctal = do
-  (t,v) <- required nextExpandedToken
+  (t,_) <- required nextExpandedToken
   case t of
     ETCharacter { etChar = c, etCatCode = CCOther }
       | isOctDigit c -> readRest (fromIntegral (digitToInt c))
@@ -378,7 +377,7 @@ readUnsignedOctal = do
     readRest !x = do
       m <- nextExpandedToken
       case m of
-        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
+        Just (ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isOctDigit c -> readRest (8 * x + fromIntegral (digitToInt c))
         Just (t,v) | isImplicitSpace v -> return x -- consumed
                    | otherwise -> unreadToken t >> return x
@@ -386,7 +385,7 @@ readUnsignedOctal = do
 
 readUnsignedHex :: forall s m. (MonadTeXState s m, MonadError String m) => m Integer
 readUnsignedHex = do
-  (t,v) <- required nextExpandedToken
+  (t,_) <- required nextExpandedToken
   case t of
     ETCharacter { etChar = c, etCatCode = CCOther }
       | isUpperHexDigit c -> readRest (fromIntegral (digitToInt c))
@@ -399,9 +398,9 @@ readUnsignedHex = do
     readRest !x = do
       m <- nextExpandedToken
       case m of
-        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
+        Just (ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isUpperHexDigit c -> readRest (16 * x + fromIntegral (digitToInt c))
-        Just (t@ETCharacter { etChar = c, etCatCode = CCLetter },_)
+        Just (ETCharacter { etChar = c, etCatCode = CCLetter },_)
           | isHexDigit c && isAsciiUpper c ->
               readRest (16 * x + fromIntegral (digitToInt c))
         Just (t,v) | isImplicitSpace v -> return x -- consumed
@@ -480,9 +479,9 @@ readUnsignedDecimalFraction c
     readIntegerPart !x = do
       m <- nextExpandedToken
       case m of
-        Just (t@ETCharacter { etChar = '.', etCatCode = CCOther },_) -> readFractionPart x 0
-        Just (t@ETCharacter { etChar = ',', etCatCode = CCOther },_) -> readFractionPart x 0
-        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
+        Just (ETCharacter { etChar = '.', etCatCode = CCOther },_) -> readFractionPart x 0
+        Just (ETCharacter { etChar = ',', etCatCode = CCOther },_) -> readFractionPart x 0
+        Just (ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readIntegerPart (10 * x + fromIntegral (digitToInt c))
         Just (t,_) -> unreadToken t >> return (fromInteger x)
         Nothing -> return (fromInteger x)
@@ -490,7 +489,7 @@ readUnsignedDecimalFraction c
     readFractionPart !intPart !expPart = do
       m <- nextExpandedToken
       case m of
-        Just (t@ETCharacter { etChar = c, etCatCode = CCOther },_)
+        Just (ETCharacter { etChar = c, etCatCode = CCOther },_)
           | isDigit c -> readFractionPart (10 * intPart + fromIntegral (digitToInt c)) (expPart + 1)
         Just (t,_) -> unreadToken t >> return (intPart % 10^expPart)
         Nothing -> return (intPart % 10^expPart)
@@ -623,7 +622,7 @@ readMuDimensionF = do
       muKeyword <- readKeyword "mu"
       if muKeyword
         then readOneOptionalSpace >> return (mu factor)
-        else do (t,v) <- required nextExpandedToken
+        else do (_,v) <- required nextExpandedToken
                 case getQuantity v of
                   QMuGlue getMuGlue -> (scaleByRational factor . glueSpace) <$> getMuGlue
                   _ -> throwError "Illegal unit of measure"
@@ -819,8 +818,8 @@ meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => E
 meaningWithoutExpansion t = do
   case t of
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> use (localState . definitionAt name)
-    ETCommandName { etFlavor = ECNFIsRelax, etName = name } -> return $ nonexpandableToValue Relax
-    ETCommandName { etFlavor = ECNFNoexpand, etName = name } -> return $ nonexpandableToValue Relax
+    ETCommandName { etFlavor = ECNFIsRelax }   -> return $ nonexpandableToValue Relax
+    ETCommandName { etFlavor = ECNFNoexpand }  -> return $ nonexpandableToValue Relax
     ETCharacter { etChar = c, etCatCode = cc } -> return $ nonexpandableToValue $ Character c cc
 
 -- Reads an explicit or implicit `{' (character with category code 2), and enters a new group

@@ -159,7 +159,7 @@ testLBrace !consumeSpace = do
       return False
 
 readRequiredDelimiter :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> [TeXToken] -> m ()
-readRequiredDelimiter !consumeSpace [] = return ()
+readRequiredDelimiter !_consumeSpace [] = return ()
 readRequiredDelimiter !consumeSpace d@(d0:ds) = do
   et <- nextUnexpandedToken
   case et of
@@ -170,7 +170,7 @@ readRequiredDelimiter !consumeSpace d@(d0:ds) = do
       | consumeSpace == WarnIfConsumedSpaces -> do
           -- TODO: Issue warning
           readRequiredDelimiter consumeSpace d
-    Just et -> throwError "Unexpected token"
+    Just _ -> throwError "Unexpected token"
   where
     rest [] = return ()
     rest (d0:ds) = do
@@ -261,7 +261,7 @@ readUntilBeginGroup !long revTokens = do
     Just t@(ETCharacter { etCatCode = CCBeginGroup }) -> do
       unreadToken t
       return (reverse revTokens)
-    Just t@(ETCharacter { etCatCode = CCEndGroup }) -> throwError "Argument of <macro> has an extra }"
+    Just (ETCharacter { etCatCode = CCEndGroup }) -> throwError "Argument of <macro> has an extra }"
     Just (ETCommandName { etName = NControlSeq "par" })
       | long == ShortParam -> throwError "Paragraph ended before argument was complete"
     Just t -> readUntilBeginGroup long (fromEToken t : revTokens)
@@ -372,7 +372,7 @@ doMacro m = do
       when lbrace expectExplicitLBrace
   args <- mapM readParam (macroParamSpec m)
   let doReplace [] = return []
-      doReplace (TTCharacter c CCParam : xs) = case xs of
+      doReplace (TTCharacter _ CCParam : xs) = case xs of
         TTCharacter d CCOther : xss
           | isDigit d
           , d /= '0'
@@ -480,7 +480,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand Macro m w
 
 -- LaTeX 2e
 -- \newcommand, \renewcommand, \providecommand
-newcommandFamily :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => (CommandName -> Bool -> m () -> m a) -> m a
+newcommandFamily :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => (CommandName -> Bool -> m () -> m a) -> m a
 newcommandFamily f = do
   star       <- testStar ConsumeSpaces
   name       <- readArgument ShortParam
@@ -533,17 +533,17 @@ newcommandFamily f = do
                                 }
     assign (localState . definitionAt name) (expandableToValue macro)
 
-newcommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => m ()
+newcommandCommand :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => m ()
 newcommandCommand = newcommandFamily $ \name isUndefinedOrRelax doDefine -> do
   unless isUndefinedOrRelax $ throwError $ "LaTeX Error: The name " ++ show name ++ " is already defined"
   doDefine
 
-renewcommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => m ()
+renewcommandCommand :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => m ()
 renewcommandCommand = newcommandFamily $ \name isUndefinedOrRelax doDefine -> do
   when isUndefinedOrRelax $ throwError $ "LaTeX Error: The name " ++ show name ++ " undefined"
   doDefine
 
-providecommandCommand :: (Elem Macro set, Union set ~ Expandable s, MonadTeXState s m, MonadError String m) => m ()
+providecommandCommand :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m) => m ()
 providecommandCommand = newcommandFamily $ \_name isUndefined doDefine -> do
   when isUndefined doDefine
 
@@ -615,7 +615,7 @@ edefCommand _defcmdname !prefix = do
 
 doPrefix :: (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Meaning (NValue s)) => String -> MacroDefPrefix -> m ()
 doPrefix name !prefix = do
-  (et,v) <- required nextExpandedToken
+  (_,v) <- required nextExpandedToken
   case toCommonValue v of
     Just Relax -> doPrefix name prefix -- ignore \relax
     Just (Character _ CCSpace) -> doPrefix name prefix -- ignore spaces

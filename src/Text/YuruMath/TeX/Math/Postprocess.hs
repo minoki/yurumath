@@ -46,7 +46,7 @@ doNonScript :: forall a. MathStyle -> MathList a -> MathList a
 doNonScript = doList
   where
     doList :: MathStyle -> MathList a -> MathList a
-    doList !style [] = []
+    doList !_style [] = []
     doList !style (IGlue MGNonscript : xs)
       | isScriptOrSmaller style = doList style (stripGlueOrKern xs)
       | otherwise = doList style xs
@@ -59,9 +59,9 @@ doNonScript = doList
     doAtom = doEachFieldWithStyle doField
 
     doField :: MathStyle -> MathField a -> MathField a
-    doField !style f@(MFBox {}) = f -- TODO
+    doField !_style f@(MFBox {}) = f -- TODO
     doField !style (MFSubList xs) = MFSubList (doList style xs)
-    doField !style field = field
+    doField !_style field = field
 
 -- Assume that the choice is already done
 nextAtomTypeInList :: MathList a -> Maybe AtomType
@@ -110,22 +110,22 @@ pairSizedOpenClose xs = doList xs
   where
     doList :: MathList a -> MathList a
     doList [] = []
-    doList (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { nucleusField = MFSubList [ISizedDelimiter dimen delim] } }) : xs)
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { nucleusField = MFSubList [ISizedDelimiter dimen _delim] } }) : xs)
       = case findClosing dimen xs of
           FoundNoMatch rest -> {- no closing paren found -} IAtom (doAtom atom) : doList rest
           FoundClosing content closing rest -> mkImplicitGroup (doAtom atom) content closing : doList rest
-    doList (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { nucleusField = MFSubList [ISizedDelimiter dimen delim] } }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
+    doList (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { nucleusField = MFSubList [ISizedDelimiter _dimen _delim] } }) : xs) = IAtom (doAtom atom) : doList xs -- unmatched parenthesis
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs
     doList (IGenFrac gf num den : xs) = IGenFrac gf (doList num) (doList den) : doList xs
     doList (x : xs) = x : doList xs
 
     findClosing :: Dimen -> MathList a -> ClosingParen a
-    findClosing dimen [] = FoundNoMatch []
-    findClosing dimen (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { nucleusField = MFSubList [ISizedDelimiter dimen2 delim] } }) : xs)
+    findClosing _dimen [] = FoundNoMatch []
+    findClosing dimen (IAtom atom@(AtomWithScripts { atomNucleus = OpenAtom { nucleusField = MFSubList [ISizedDelimiter dimen2 _delim] } }) : xs)
       = case findClosing dimen2 xs of
           FoundNoMatch rest -> {- no closing paren found -} FoundNoMatch (IAtom (doAtom atom) : rest)
           FoundClosing content closing rest -> onFirstList (mkImplicitGroup (doAtom atom) content closing :) (findClosing dimen rest)
-    findClosing dimen (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { nucleusField = MFSubList [ISizedDelimiter dimen' delim] } }) : xs)
+    findClosing dimen (IAtom atom@(AtomWithScripts { atomNucleus = CloseAtom { nucleusField = MFSubList [ISizedDelimiter dimen' _delim] } }) : xs)
       | dimen == dimen'
       = FoundClosing [] (doAtom atom) xs
     findClosing dimen (IAtom atom : xs)
@@ -193,7 +193,7 @@ textSymbol = doList
   where
     doList :: MathList a -> MathList a
     doList [] = []
-    doList (IAtom atom@(AtomWithScripts { atomNucleus = OrdAtom { nucleusField = MFSymbol fam var SMText text }, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })
+    doList (IAtom (AtomWithScripts { atomNucleus = OrdAtom { nucleusField = MFSymbol fam var SMText text }, atomSuperscript = MFEmpty, atomSubscript = MFEmpty })
             : IAtom nextAtom@(AtomWithScripts { atomNucleus = OrdAtom { nucleusField = MFSymbol fam' var' SMText text' } }) : xs)
       | fam == fam', var == var' = doList (IAtom nextAtom { atomNucleus = OrdAtom { nucleusField = MFSymbol fam var SMText (text <> text') } } : xs)
     doList (IAtom atom : xs) = IAtom (doAtom atom) : doList xs

@@ -26,8 +26,8 @@ fromEToken :: ExpansionToken -> TeXToken
 fromEToken (ETCommandName { etName = name }) = TTCommandName name -- etFlavor is ignored
 fromEToken (ETCharacter { etChar = c, etCatCode = cc }) = TTCharacter c cc
 
-nextEToken :: (MonadState s m, IsState s, MonadError String m) => m (Maybe ExpansionToken)
-nextEToken = do
+nextUnexpandedToken :: (MonadState s m, IsState s, MonadError String m) => m (Maybe ExpansionToken)
+nextUnexpandedToken = do
   pending <- use esPendingTokenList
   case pending of
     [] -> do t <- Tok.nextToken
@@ -66,7 +66,7 @@ readUntilEndGroupE :: (MonadState s m, IsState s, MonadError String m) => ParamL
 readUntilEndGroupE !long = loop (0 :: Int) []
   where
     loop !depth revTokens = do
-      t <- nextEToken
+      t <- nextUnexpandedToken
       case t of
         Nothing -> throwError "unexpected end of input when reading an argument"
         Just t@(ETCharacter { etCatCode = CCEndGroup })
@@ -87,7 +87,7 @@ edefReadUntilEndGroupE = loop (0 :: Int) []
   where
     loop :: Int -> [ExpansionToken] -> m [ExpansionToken]
     loop !depth revTokens = do
-      t <- required nextEToken
+      t <- required nextUnexpandedToken
       case t of
         ETCharacter { etCatCode = CCEndGroup }
           | depth == 0 -> return (reverse revTokens)
@@ -117,7 +117,7 @@ edefReadUntilEndGroup = map fromEToken <$> edefReadUntilEndGroupE
 -- reads undelimited macro argument
 readArgument :: (MonadState s m, IsState s, MonadError String m) => ParamLong -> m [TeXToken]
 readArgument !long = do
-  t <- nextEToken
+  t <- nextUnexpandedToken
   case t of
     Nothing -> throwError "unexpected end of input when expecting an argument"
     Just (ETCharacter { etCatCode = CCSpace }) -> readArgument long
@@ -130,7 +130,7 @@ readArgument !long = do
 -- reads a control sequence or an active character
 readCommandName :: (MonadState s m, IsState s, MonadError String m) => m CommandName
 readCommandName = do
-  t <- required nextEToken
+  t <- required nextUnexpandedToken
   case t of
     ETCommandName { etName = name } -> return name
     _ -> throwError $ "unexpected character token: " ++ show t
@@ -138,7 +138,7 @@ readCommandName = do
 
 readOneOptionalSpace :: (MonadTeXState s m, MonadError String m) => m ()
 readOneOptionalSpace = do
-  t <- nextEToken
+  t <- nextUnexpandedToken
   case t of
     Just (ETCharacter { etCatCode = CCSpace }) ->
       return () -- consumed
@@ -151,7 +151,7 @@ readOneOptionalSpace = do
 
 readOptionalSpaces :: (MonadTeXState s m, MonadError String m) => m ()
 readOptionalSpaces = do
-  t <- nextEToken
+  t <- nextUnexpandedToken
   case t of
     Just (ETCharacter { etCatCode = CCSpace }) ->
       readOptionalSpaces -- consumed, read more
@@ -165,7 +165,7 @@ readOptionalSpaces = do
 -- <equals> ::= <optional spaces> | <optional spaces>'='12
 readEquals :: (MonadTeXState s m, MonadError String m) => m ()
 readEquals = do
-  t <- nextEToken
+  t <- nextUnexpandedToken
   case t of
     Just (ETCharacter { etChar = '=', etCatCode = CCOther }) -> return () -- consume equals
     Just (ETCharacter { etCatCode = CCSpace }) -> readEquals -- consume a space, and read more
@@ -193,7 +193,7 @@ readKeyword xs = do
   where
     loop [] = return True
     loop (x:xs) = do
-      t <- nextEToken
+      t <- nextUnexpandedToken
       case t of
         Just t@(ETCharacter { etChar = c })
           | x == c || x == toLower c -> do
@@ -219,7 +219,7 @@ readOneOfKeywordsV keywords = do
     loop [] = return Nothing
     loop keywords | Just v <- lookup "" keywords = return (Just v)
     loop keywords = do
-      t <- nextEToken
+      t <- nextUnexpandedToken
       case t of
         Just t@(ETCharacter { etChar = c }) -> do
           k <- loop [(xs,v) | (x:xs,v) <- keywords, x == c || x == toLower c]
@@ -257,7 +257,7 @@ nextExpandedToken = loop
   where
     loop :: m (Maybe (ExpansionToken,NValue s))
     loop = do
-      t <- nextEToken
+      t <- nextUnexpandedToken
       case t of
         -- a command name
         Just t@(ETCommandName { etFlavor = ECNFPlain, etName = name }) -> do
@@ -372,7 +372,7 @@ readUnsignedHex = do
 
 readCharacterCode :: (MonadTeXState s m, MonadError String m) => m Integer
 readCharacterCode = do
-  t <- required nextEToken -- without expansion
+  t <- required nextUnexpandedToken -- without expansion
   readOneOptionalSpace
   case t of
     ETCommandName { etName = NControlSeq name } -> case T.unpack name of
@@ -718,7 +718,7 @@ showRomannumeral !x
 -- True if encountered \else, False if encountered \fi
 skipUntilElse :: (MonadTeXState s m, MonadError String m) => Int -> m Bool
 skipUntilElse !level = do
-  x <- required nextEToken >>= meaningWithoutExpansion
+  x <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case x of
     Left c | Just m <- isConditionalMarker c -> case m of
                Eor | level == 0 -> throwError "Extra \\or"
@@ -731,7 +731,7 @@ skipUntilElse !level = do
 
 skipUntilFi :: (MonadTeXState s m, MonadError String m) => Int -> m ()
 skipUntilFi !level = do
-  x <- required nextEToken >>= meaningWithoutExpansion
+  x <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case x of
     Left c | isConditionalMarker c == Just Efi
              -> if level == 0
@@ -746,7 +746,7 @@ data SkipUntilOr = FoundOr
 
 skipUntilOr :: (MonadTeXState s m, MonadError String m) => Int -> m SkipUntilOr
 skipUntilOr !level = do
-  x <- required nextEToken >>= meaningWithoutExpansion
+  x <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case x of
     Left c | Just m <- isConditionalMarker c -> case m of
                Eor | level == 0 -> return FoundOr

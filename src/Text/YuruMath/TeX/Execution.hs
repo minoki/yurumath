@@ -112,14 +112,14 @@ letCommand = do
   name <- readCommandName
   readEquals
   readOneOptionalSpace
-  v <- required nextEToken >>= meaningWithoutExpansion
+  v <- required nextUnexpandedToken >>= meaningWithoutExpansion
   texAssign (definitionAt name) v
 
 futureletCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 futureletCommand = do
   name <- readCommandName
-  t1 <- required nextEToken
-  t2 <- required nextEToken
+  t1 <- required nextUnexpandedToken
+  t2 <- required nextUnexpandedToken
   unreadETokens' [t1,t2]
   v <- meaningWithoutExpansion t2
   texAssign (definitionAt name) v

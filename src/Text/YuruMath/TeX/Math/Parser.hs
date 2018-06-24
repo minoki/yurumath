@@ -97,7 +97,7 @@ readMathToken = do
       Character _ CCMathShift -> do
         m <- use mode
         if m == DisplayMathMode
-          then do et' <- nextEToken -- without expansion
+          then do et' <- nextUnexpandedToken -- without expansion
                   case et' of
                     Just (ETCharacter { etCatCode = CCMathShift }) -> return $ Just (et,MTStopDisplay)
                     _ -> throwError "Display math should end with $$."

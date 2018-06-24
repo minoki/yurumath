@@ -55,7 +55,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s,
     contentS <- showMessageStringM $ mconcat (map showToken content)
     modifying outputLines (++ [contentS])
   doExecute Ishow = do
-    t <- required nextEToken
+    t <- required nextUnexpandedToken
     value <- meaningWithoutExpansion t
     line <- showMessageStringM $ case t of
               ETCommandName { etName = name } -> showCommandName name <> "=" <> meaningString value

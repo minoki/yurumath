@@ -129,7 +129,7 @@ noValueMarker = [TTCharacter '-' CCLetter
 testDelimiter :: (MonadTeXState s m, MonadError String m) => [TeXToken] -> m Bool
 testDelimiter [] = return True
 testDelimiter (d:ds) = do
-  et <- nextEToken
+  et <- nextUnexpandedToken
   case et of
     Nothing -> return False
     Just et
@@ -145,7 +145,7 @@ testDelimiter (d:ds) = do
 
 testLBrace :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> m Bool
 testLBrace !consumeSpace = do
-  et <- nextEToken
+  et <- nextUnexpandedToken
   case et of
     Nothing -> return False
     Just (ETCharacter { etCatCode = CCBeginGroup }) -> return True
@@ -161,7 +161,7 @@ testLBrace !consumeSpace = do
 readRequiredDelimiter :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> [TeXToken] -> m ()
 readRequiredDelimiter !consumeSpace [] = return ()
 readRequiredDelimiter !consumeSpace d@(d0:ds) = do
-  et <- nextEToken
+  et <- nextUnexpandedToken
   case et of
     Nothing -> throwError "Unexpected end of input"
     Just et | fromEToken et == d0 -> rest ds
@@ -174,7 +174,7 @@ readRequiredDelimiter !consumeSpace d@(d0:ds) = do
   where
     rest [] = return ()
     rest (d0:ds) = do
-      et <- nextEToken
+      et <- nextUnexpandedToken
       case et of
         Nothing -> throwError "Unexpected end of input"
         Just et | fromEToken et == d0 -> rest ds
@@ -198,7 +198,7 @@ readDelimitedArgument !long !delimiter = unArgToken <$> loop
       r <- testDelimiter delimiter
       if r
         then return []
-        else do et <- nextEToken
+        else do et <- nextUnexpandedToken
                 case et of
                   Nothing -> throwError "Unexpected end of input while reading argument"
                   Just (ETCommandName { etName = NControlSeq "par" })
@@ -214,7 +214,7 @@ readDelimitedArgument !long !delimiter = unArgToken <$> loop
 -- Reads an optional token (like '*' or '[') without gobbling any spaces
 testOptionalToken :: (MonadTeXState s m, MonadError String m) => ConsumeSpace -> TeXToken -> m Bool
 testOptionalToken !consume !t = do
-  et <- nextEToken
+  et <- nextUnexpandedToken
   case et of
     Nothing -> return False
     Just (ETCharacter { etCatCode = CCSpace })
@@ -241,7 +241,7 @@ readUntilEndGroup' :: (MonadTeXState s m, MonadError String m) => ParamLong -> m
 readUntilEndGroup' !long = loop (0 :: Int) []
   where
     loop !depth revTokens = do
-      t <- nextEToken
+      t <- nextUnexpandedToken
       case t of
         Nothing -> throwError "unexpected end of input when reading an argument"
         Just t@(ETCharacter { etCatCode = CCEndGroup })
@@ -255,7 +255,7 @@ readUntilEndGroup' !long = loop (0 :: Int) []
 
 readUntilBeginGroup :: (MonadTeXState s m, MonadError String m) => ParamLong -> [TeXToken] -> m [TeXToken]
 readUntilBeginGroup !long revTokens = do
-  t <- nextEToken
+  t <- nextUnexpandedToken
   case t of
     Nothing -> throwError "Unexpected end of input when reading an argument"
     Just t@(ETCharacter { etCatCode = CCBeginGroup }) -> do
@@ -270,7 +270,7 @@ readBalanced :: (MonadTeXState s m, MonadError String m) => ParamLong -> TeXToke
 readBalanced !long !c1 !c2 = unArgToken <$> loop (0 :: Int)
   where
     loop !depth = do
-      et <- nextEToken
+      et <- nextUnexpandedToken
       case et of
         Nothing -> throwError "Unexpected end of input"
         Just (ETCommandName { etName = NControlSeq "par" })
@@ -287,14 +287,14 @@ readBalanced !long !c1 !c2 = unArgToken <$> loop (0 :: Int)
 
 readExplicitLBrace :: (MonadTeXState s m, MonadError String m) => m ()
 readExplicitLBrace = do
-  t <- required nextEToken
+  t <- required nextUnexpandedToken
   case t of
     ETCharacter { etCatCode = CCBeginGroup } -> return ()
     _ -> throwError ("Expected `{', but got " ++ show t) -- Use of \foo doesn't match its definition.
 
 expectExplicitLBrace :: (MonadTeXState s m, MonadError String m) => m ()
 expectExplicitLBrace = do
-  t <- required nextEToken
+  t <- required nextUnexpandedToken
   case t of
     ETCharacter { etCatCode = CCBeginGroup } -> unreadEToken t
     _ -> throwError ("Expected `{', but got " ++ show t) -- Use of \foo doesn't match its definition.
@@ -562,12 +562,12 @@ readParameterText !long = do
              xs -> (ParamDelimiter [] False, parseRest xs)
   where
     readParameterTextToken !i = do
-      t <- required nextEToken -- without expansion
+      t <- required nextUnexpandedToken -- without expansion
       case t of
         ETCharacter { etCatCode = CCBeginGroup } -> return []
         ETCharacter { etCatCode = CCEndGroup } -> throwError "Unexpected `}' while reading parameter text"
         ETCharacter { etCatCode = CCParam } -> do
-          t <- required nextEToken
+          t <- required nextUnexpandedToken
           case t of
             -- #1 .. #9
             ETCharacter { etChar = c, etCatCode = CCOther }

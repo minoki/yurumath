@@ -25,13 +25,13 @@ import TypeFun.Data.List (SubList)
 
 expandafterCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 expandafterCommand = do
-  t1 <- required nextEToken
-  t2 <- required nextEToken
+  t1 <- required nextUnexpandedToken
+  t2 <- required nextUnexpandedToken
   (t1:) <$> expandOnce t2
 
 noexpandCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 noexpandCommand = do
-  t <- required nextEToken
+  t <- required nextUnexpandedToken
   case t of
     ETCommandName { etFlavor = ECNFPlain, etName = name } -> do
       m <- use (localState . definitionAt name)
@@ -62,7 +62,7 @@ begincsnameCommand = do
 
 stringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 stringCommand = do
-  t <- required nextEToken
+  t <- required nextUnexpandedToken
   case t of
     ETCommandName { etName = NControlSeq name } -> do
       ech <- use (localState . escapechar)
@@ -77,7 +77,7 @@ stringCommand = do
 -- LuaTeX extension: \csstring
 csstringCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 csstringCommand = do
-  t <- required nextEToken
+  t <- required nextUnexpandedToken
   return $ case t of
     ETCommandName { etName = NControlSeq name } ->
       stringToEToken (T.unpack name)
@@ -95,7 +95,7 @@ theCommand = stringToEToken <$> theString "\\the"
 
 meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (NValue s)) => m [ExpansionToken]
 meaningCommand = do
-  value <- required nextEToken >>= meaningWithoutExpansion
+  value <- required nextUnexpandedToken >>= meaningWithoutExpansion
   stringToEToken <$> showMessageStringM (meaningString value)
 
 romannumeralCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
@@ -226,8 +226,8 @@ ifcatCommand = do
 
 ifxCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifxCommand = do
-  t1 <- required nextEToken >>= meaningWithoutExpansion
-  t2 <- required nextEToken >>= meaningWithoutExpansion
+  t1 <- required nextUnexpandedToken >>= meaningWithoutExpansion
+  t2 <- required nextUnexpandedToken >>= meaningWithoutExpansion
   return $ t1 == t2
 
 ifnumCommand :: (MonadTeXState s m, MonadError String m) => m Bool
@@ -272,7 +272,7 @@ ifinnerCommand = uses mode isInnerMode
 -- e-TeX extension: \ifdefined
 ifdefinedCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdefinedCommand = do
-  t <- required nextEToken >>= meaningWithoutExpansion
+  t <- required nextUnexpandedToken >>= meaningWithoutExpansion
   return $ case t of
              Left _ -> False
              Right v -> isUndefined v
@@ -288,7 +288,7 @@ ifcsnameCommand = do
 -- e-TeX extension: \unless
 unlessCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 unlessCommand = do
-  test <- required nextEToken >>= meaningWithoutExpansion
+  test <- required nextUnexpandedToken >>= meaningWithoutExpansion
   case test of
     Left c | Just c <- evalBooleanConditional c -> expandBooleanConditional (not <$> c)
     _ -> throwError "\\unless must be followed by a boolean conditional command"

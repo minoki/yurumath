@@ -5,6 +5,7 @@ import Text.YuruMath.TeX.Expansion (showDimension)
 import Text.YuruMath.TeX.Math.List
 import Text.YuruMath.Builder.MathML3
 import Text.YuruMath.Builder.MathML3.Attributes as A
+import Data.String
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Semigroup ((<>))
@@ -63,7 +64,18 @@ toMML = doList
                       Nothing -> mrow mempty
                       Just xs -> fromList xs
 
-    -- doAtomNucleus style (atom@AccAtom {}) = _
+    doAtomNucleus style (atom@AccAtom { atomAccent = acc@(AccentTopBottom {}) })
+      = let nucleus = doNucleus (makeCramped style) AAcc (nucleusField atom)
+            under = mathcodeToMML (accentBottomFixed acc) <$> accentBottom acc
+            over = mathcodeToMML (accentTopFixed acc) <$> accentTop acc
+        in case (under,over) of
+             (Nothing, Nothing) -> nucleus -- should not occur
+             (Just x , Nothing) -> munder ! A.accentunder "true" $ nucleus <> x
+             (Nothing, Just y ) -> mover ! A.accent "true" $ nucleus <> y
+             (Just x , Just y ) -> munderover ! A.accent "true" ! A.accentunder "true" $ nucleus <> x <> y
+      where mathcodeToMML {-fixed-} True m = mo ! A.stretchy "false" $ fromString [mathcharSlot m] -- family?
+            mathcodeToMML {-fixed-} False m = mo $ fromString [mathcharSlot m] -- family?
+    -- TODO: overlay accent
 
     doAtomNucleus style atom
       = doNucleus (nucleusStyle (atomNucleusType atom) style) (atomNucleusType atom) (nucleusField atom)

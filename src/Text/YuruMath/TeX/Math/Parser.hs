@@ -42,7 +42,7 @@ data MathToken m where
   MTSub        :: MathToken m
   MTRadical    :: !DelimiterCode -> MathToken m
   MTRoot       :: !DelimiterCode -> MathToken m
-  MTAccent     :: !MathCode -> MathToken m
+  MTAccent     :: !MathAccent -> !(Maybe Int) -> MathToken m
   MTLimitsSpec :: !LimitsSpec -> MathToken m
   MTSetStyle   :: !MathStyle -> MathToken m -- \displaystyle, \textstyle, etc
   MTLeft       :: !DelimiterOptions -> !DelimiterCode -> MathToken m
@@ -202,13 +202,38 @@ readMathToken = do
       Mmathaccent -> do
         x <- readIntBetween 0 0x7FFF
         let value = fromIntegral $ x .&. 0x0FFF
-        return $ MTAccent $ MathCode value
+        return $ MTAccent (mkTopAccent True (MathCode value)) Nothing
 
-      -- \Umathaccent<0-7><0-"FF"><0-"10FFFF><math field>
+      -- \Umathaccent ("fixed" | "bottom"<optional "fixed"> | "top"<optional "fixed"> | "overlay"<optional "fixed"> | <empty>)<0-7><0-"FF"><0-"10FFFF> ("fraction"<number>)?
+      -- \Umathaccent "both" <optional "fixed"><0-7><0-"FF"><0-"10FFFF> <optional "fixed"><0-7><0-"FF"><0-"10FFFF>
+      --  ...<math field>
       MUmathaccent -> do
-        -- TODO: handle optional keywords ("both" "bottom" "top" "overlay" "fixed")
-        code <- readUMathCodeTriplet
-        return $ MTAccent code
+        m <- readOneOfKeywordsV
+             [("fixed"
+              ,mkTopAccent True <$> readUMathCodeTriplet
+              )
+             ,("both"
+              ,mkBothAccent <$> readKeyword "fixed" <*> readUMathCodeTriplet
+                <*> readKeyword "fixed" <*> readUMathCodeTriplet
+              )
+             ,("bottom"
+              ,mkBottomAccent <$> readKeyword "fixed" <*> readUMathCodeTriplet
+              )
+             ,("top"
+              ,mkTopAccent <$> readKeyword "fixed" <*> readUMathCodeTriplet
+              )
+             ,("overlay"
+              ,mkOverlayAccent <$> readKeyword "fixed" <*> readUMathCodeTriplet
+              )
+             ]
+        a <- case m of
+               Just m -> m
+               Nothing -> mkTopAccent False <$> readUMathCodeTriplet
+        fraction <- readKeyword "fraction"
+        mfraction <- if fraction
+                     then Just <$> readGeneralInt
+                     else pure Nothing
+        return $ MTAccent a mfraction
 
       MUsuperscript -> return MTSup
       MUsubscript -> return MTSub
@@ -492,9 +517,9 @@ readMathMaterial = loop []
               else throwError "Double subscript"
 
           -- \mathaccent<15-bit number><math field> or \Umathaccent<...><math field>
-          MTAccent code -> do
+          MTAccent a fraction -> do
             content <- withMathStyle makeCramped readMathField
-            doAtom $ withEmptyScripts $ (mkAtomNucleus AAcc content) { atomAccentCharacter = code }
+            doAtom $ withEmptyScripts $ (mkAtomNucleus AAcc content) { atomAccent = a, atomAccentFraction = fraction }
 
           -- \radical<27-bit number><math field> or \Uradical<...><math field>
           MTRadical code -> do

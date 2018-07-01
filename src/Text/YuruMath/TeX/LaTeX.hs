@@ -174,7 +174,26 @@ latexDefinitions = Map.fromList
   ,("vdots",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathPunct 0 '\x22EE')
   ,("ddots",Right $ liftUnion $ DefinedMathCharacter $ mkUMathCode MathPunct 0 '\x22F1')
 
-  -- TODO: Accents
+  -- Accents
+  ,("grave",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"300 ")
+  ,("acute",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"301 ")
+  ,("hat",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"302 ")
+  ,("tilde",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"303 ")
+  ,("bar",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"304 ")
+  ,("overbar",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"305 ")
+  ,("breve",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"306 ")
+  ,("dot",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"307 ")
+  ,("ddot",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"308 ")
+  ,("ovhook",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"309 ")
+  ,("ocirc",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"30A ")
+  ,("check",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"30C ")
+  ,("candra",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"310 ")
+  ,("vec",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"20D7 ")
+  ,("dddot",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"20DB ")
+  ,("ddddot",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent fixed 0 0 \"20DC ")
+  ,("widehat",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent 0 0 \"302 ")
+  ,("widetilde",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Umathaccent 0 0 \"303 ")
+
   -- TODO: Radicals
   ,("sqrtsign",Left $ liftUnion $ mkSimpleMacroWithString [] "\\Uradical \"0 \"221A ")
 

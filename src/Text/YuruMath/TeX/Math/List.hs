@@ -9,6 +9,11 @@ module Text.YuruMath.TeX.Math.List
   ,MathField(..)
   ,isEmptyField
   ,BinForm(..)
+  ,MathAccent(..)
+  ,mkTopAccent
+  ,mkBottomAccent
+  ,mkBothAccent
+  ,mkOverlayAccent
   ,AtomNucleus(..)
   ,AtomWithScripts(..)
   ,withEmptyScripts
@@ -109,6 +114,43 @@ data BinForm = BinInfix
              | BinPostfix
              deriving (Eq,Show)
 
+data MathAccent = AccentTopBottom { accentTopFixed :: !Bool
+                                  , accentTop :: !(Maybe MathCode)
+                                  , accentBottomFixed :: !Bool
+                                  , accentBottom :: !(Maybe MathCode)
+                                  }
+                | AccentOverlay { accentOverlayFixed :: !Bool
+                                , accentOverlay :: !MathCode
+                                }
+                deriving (Eq,Show)
+
+mkTopAccent :: Bool -> MathCode -> MathAccent
+mkTopAccent fixed code
+  = AccentTopBottom { accentTopFixed = fixed
+                    , accentTop = Just code
+                    , accentBottomFixed = False
+                    , accentBottom = Nothing
+                    }
+mkBottomAccent :: Bool -> MathCode -> MathAccent
+mkBottomAccent fixed code
+  = AccentTopBottom { accentTopFixed = False
+                    , accentTop = Nothing
+                    , accentBottomFixed = fixed
+                    , accentBottom = Just code
+                    }
+mkBothAccent :: Bool -> MathCode -> Bool -> MathCode -> MathAccent
+mkBothAccent fixedT codeT fixedB codeB
+  = AccentTopBottom { accentTopFixed = fixedT
+                    , accentTop = Just codeT
+                    , accentBottomFixed = fixedB
+                    , accentBottom = Just codeB
+                    }
+mkOverlayAccent :: Bool -> MathCode -> MathAccent
+mkOverlayAccent fixed code
+  = AccentOverlay { accentOverlayFixed = fixed
+                  , accentOverlay = code
+                  }
+
 data AtomNucleus a
   = OrdAtom   { nucleusField    :: !(MathField a) }
   | OpAtom    { nucleusField    :: !(MathField a)
@@ -129,7 +171,8 @@ data AtomNucleus a
   | OverAtom  { nucleusField    :: !(MathField a) }
   | UnderAtom { nucleusField    :: !(MathField a) }
   | AccAtom   { nucleusField    :: !(MathField a)
-              , atomAccentCharacter :: !MathCode -- specific to Acc atom
+              , atomAccent      :: !MathAccent -- specific to Acc atom
+              , atomAccentFraction :: !(Maybe Int) -- specific to Acc atom
               }
   | RadAtom   { nucleusField    :: !(MathField a)
               , atomDelimiter   :: !DelimiterCode -- specific to Rad atom
@@ -197,7 +240,8 @@ mkAtomNucleus !atomType !nucleus = case atomType of
   AOver  -> OverAtom  { nucleusField    = nucleus }
   AUnder -> UnderAtom { nucleusField    = nucleus }
   AAcc   -> AccAtom   { nucleusField    = nucleus
-                      , atomAccentCharacter = MathCode 0 -- specific to Acc atom
+                      , atomAccent      = AccentTopBottom False Nothing False Nothing -- specific to Acc atom
+                      , atomAccentFraction = Nothing -- specific to Acc atom
                       }
   ARad   -> RadAtom   { nucleusField    = nucleus
                       , atomDelimiter   = DelimiterCode (-1) -- specific to Rad atom

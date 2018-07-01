@@ -77,6 +77,14 @@ toMML = doList
             mathcodeToMML {-fixed-} False m = mo $ fromString [mathcharSlot m] -- family?
     -- TODO: overlay accent
 
+    doAtomNucleus style (atom@OverAtom {})
+      = let nucleus = doNucleus (makeCramped style) AOver (nucleusField atom)
+        in mover ! A.accent "true" $ nucleus <> mo "\x203E" -- U+203E OVERLINE or U+0305 COMBINING OVERLINE
+
+    doAtomNucleus style (atom@UnderAtom {})
+      = let nucleus = doNucleus (makeCramped style) AUnder (nucleusField atom)
+        in munder ! A.accent "true" $ nucleus <> mo "_" -- U+005F LOW LINE or U+0332 COMBINING LOW LINE
+
     doAtomNucleus style atom
       = doNucleus (nucleusStyle (atomNucleusType atom) style) (atomNucleusType atom) (nucleusField atom)
 

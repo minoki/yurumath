@@ -5,11 +5,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Text.YuruMath.TeX.Execution
   (CountReg
   ,DimenReg
   ,SkipReg
   ,MuskipReg
+  ,ToksReg
   ,readRegIndex
   ,Assignment
   ,runLocal
@@ -79,6 +81,13 @@ newtype MuskipReg = MuskipReg Int
 
 muskipRegAt :: (IsLocalState localstate) => Int -> Lens' localstate (Glue MuDimen)
 muskipRegAt !index = muskipReg . at index . non zeroQ
+
+-- \toksdef-ed value
+newtype ToksReg = ToksReg Int
+  deriving (Eq,Show)
+
+toksRegAt :: (IsLocalState localstate) => Int -> Lens' localstate [TeXToken]
+toksRegAt !index = toksReg . at index . non []
 
 data Assignment s where
   WillAssign :: ASetter (LocalState s) (LocalState s) b b -> !b -> Assignment s
@@ -409,6 +418,43 @@ muskipdefCommand = do
   index <- readRegIndex
   texAssign (definitionAt name) (nonexpandableToValue $ MuskipReg index)
 
+-- \toksdef-ed token
+-- <token variable><equals><general text>
+-- or <token variable><equals><filler><token variable>
+setToksReg :: forall s m. (MonadTeXState s m, MonadError String m) => Int -> m (Assignment s)
+setToksReg !index = do
+  readEquals
+  value <- doReadTokenList
+  texAssign (toksRegAt index) value
+  where
+    doReadTokenList :: m [TeXToken]
+    doReadTokenList = do
+      (_,v) <- required nextExpandedToken
+      case toCommonValue v of
+        Just (Character _ CCBeginGroup)
+          -> map fromEToken <$> readUntilEndGroupE LongParam -- <general text>
+        Just (Character _ CCSpace) -> doReadTokenList -- optional spaces: ignoed
+        Just Relax -> doReadTokenList -- \relax: ignored
+        _ | QToks getTokenList <- getQuantity v -> do
+              getTokenList
+          | otherwise -> throwError "Unexpected token while reading token list" -- Missing { inserted.
+
+-- \toks command
+toksSet :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+toksSet = readRegIndex >>= setToksReg
+
+toksGet :: (MonadTeXState s m, MonadError String m) => m [TeXToken]
+toksGet = do
+  index <- readRegIndex
+  use (localState . toksRegAt index)
+
+toksdefCommand :: (MonadTeXState s m, MonadError String m, Elem ToksReg (NValueSet s)) => m (Assignment s)
+toksdefCommand = do
+  name <- readCommandName
+  readEquals
+  index <- readRegIndex
+  texAssign (definitionAt name) (nonexpandableToValue $ ToksReg index)
+
 advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 advanceCommand !global = do
   (et,v) <- required nextExpandedToken
@@ -512,6 +558,8 @@ data CommonExecutable = Eglobal
                       | Eskipdef
                       | Emuskip
                       | Emuskipdef
+                      | Etoks
+                      | Etoksdef
                       | Eadvance
                       | Emultiply
                       | Edivide
@@ -561,6 +609,14 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MuskipRe
   doDivide (MuskipReg i)    = Just $ runArithmetic $ divideQuantity (muskipRegAt i)
   getQuantity (MuskipReg i) = QMuGlue $ use (localState . muskipRegAt i)
 
+instance Meaning ToksReg where
+  meaningString (ToksReg i) = controlSequence "toks" <> fromString (show i)
+
+instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute ToksReg m where
+  doExecute (ToksReg i) = runLocal $ setToksReg i
+  doGlobal (ToksReg i) = Just $ runGlobal $ setToksReg i
+  getQuantity (ToksReg i) = QToks $ use (localState . toksRegAt i)
+
 instance Meaning CommonExecutable where
   meaningString Eglobal = controlSequence "global"
   meaningString Elet = controlSequence "let"
@@ -592,11 +648,13 @@ instance Meaning CommonExecutable where
   meaningString Eskipdef = controlSequence "skipdef"
   meaningString Emuskip = controlSequence "muskip"
   meaningString Emuskipdef = controlSequence "muskipdef"
+  meaningString Etoks = controlSequence "toks"
+  meaningString Etoksdef = controlSequence "toksdef"
   meaningString Eadvance = controlSequence "advance"
   meaningString Emultiply = controlSequence "multiply"
   meaningString Edivide = controlSequence "divide"
 
-instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValueSet s), Elem DimenReg (NValueSet s), Elem SkipReg (NValueSet s), Elem MuskipReg (NValueSet s), Meaning (NValue s)) => DoExecute CommonExecutable m where
+instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValueSet s), Elem DimenReg (NValueSet s), Elem SkipReg (NValueSet s), Elem MuskipReg (NValueSet s), Elem ToksReg (NValueSet s), Meaning (NValue s)) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand
   doExecute Elet             = runLocal letCommand
   doExecute Efuturelet       = runLocal futureletCommand
@@ -627,6 +685,8 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValue
   doExecute Eskipdef         = runLocal skipdefCommand
   doExecute Emuskip          = runLocal muskipSet
   doExecute Emuskipdef       = runLocal muskipdefCommand
+  doExecute Etoks            = runLocal toksSet
+  doExecute Etoksdef         = runLocal toksdefCommand
   doExecute Eadvance         = advanceCommand False
   doExecute Emultiply        = multiplyCommand False
   doExecute Edivide          = divideCommand False
@@ -656,6 +716,8 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValue
   doGlobal Eskipdef         = Just $ runGlobal skipdefCommand
   doGlobal Emuskip          = Just $ runGlobal muskipSet
   doGlobal Emuskipdef       = Just $ runGlobal muskipdefCommand
+  doGlobal Etoks            = Just $ runGlobal toksSet
+  doGlobal Etoksdef         = Just $ runGlobal toksdefCommand
   doGlobal Eadvance         = Just $ advanceCommand True
   doGlobal Emultiply        = Just $ multiplyCommand True
   doGlobal Edivide          = Just $ divideCommand True
@@ -696,9 +758,10 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValue
   getQuantity Edimen       = QDimension dimenGet
   getQuantity Eskip        = QGlue skipGet
   getQuantity Emuskip      = QMuGlue muskipGet
+  getQuantity Etoks        = QToks toksGet
   getQuantity _            = NotQuantity
 
-executableDefinitions :: (SubList '[CommonValue,CommonExecutable,CountReg,DimenReg,SkipReg,MuskipReg] set) => Map.Map Text (Union set)
+executableDefinitions :: (SubList '[CommonValue,CommonExecutable,CountReg,DimenReg,SkipReg,MuskipReg,ToksReg] set) => Map.Map Text (Union set)
 executableDefinitions = Map.fromList
   [("relax",          liftUnion Relax)
   ,("endcsname",      liftUnion Endcsname)
@@ -732,6 +795,8 @@ executableDefinitions = Map.fromList
   ,("skipdef",        liftUnion Eskipdef)
   ,("muskip",         liftUnion Emuskip)
   ,("muskipdef",      liftUnion Emuskipdef)
+  ,("toks",           liftUnion Etoks)
+  ,("toksdef",        liftUnion Etoksdef)
   ,("advance",        liftUnion Eadvance)
   ,("multiply",       liftUnion Emultiply)
   ,("divide",         liftUnion Edivide)

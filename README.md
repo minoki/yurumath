@@ -87,7 +87,7 @@ Some commands are from e-TeX or XeTeX/LuaTeX.
 - `\catcode`, `\lccode`, `\uccode`, `\mathcode`, `\Umathcode`, `\Umathcodenum`, `\delcode`, `\Udelcode`, `\Udelcodenum`
 - `\begingroup`, `\endgroup`
 - `\endlinechar`, `\escapechar`
-- `\count`, `\countdef`, `\dimen`, `\dimendef`, `\skip`, `\skipdef`, `\muskip`, `\muskipdef`
+- `\count`, `\countdef`, `\dimen`, `\dimendef`, `\skip`, `\skipdef`, `\muskip`, `\muskipdef`, `\toks`, `\toksdef`
 - `\advance`, `\multiply`, `\divide`
 - `\numexpr`, `\dimexpr`, `\glueexpr`, `\muexpr`
 - `\gluestretch`, `\glueshrink`, `\gluestretchorder`, `\glueshrinkorder`, `\mutoglue`, `\gluetomu`

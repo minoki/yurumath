@@ -85,7 +85,7 @@ numberCommand = do
   stringToEToken . show <$> readNumber
 
 theCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
-theCommand = stringToEToken <$> theString "\\the"
+theCommand = map toEToken <$> theString "\\the"
 
 meaningCommand :: (MonadTeXState s m, MonadError String m, Meaning (Expandable s), Meaning (NValue s)) => m [ExpansionToken]
 meaningCommand = do
@@ -371,6 +371,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
     EUchar -> ucharCommand
     Eifcase -> ifcaseCommand
   doExpandInEdef Eunexpanded = Just (\_ -> unexpandedCommand) -- \unexpanded in \edef
+  doExpandInEdef Ethe = Just (\_ -> theCommand)
   doExpandInEdef _ = Nothing
   evalBooleanConditional _ = Nothing
 

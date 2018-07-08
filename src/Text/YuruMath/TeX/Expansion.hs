@@ -342,6 +342,11 @@ stringToEToken = map charToEToken
   where charToEToken ' ' = ETCharacter { etDepth = 0, etChar = ' ', etCatCode = CCSpace }
         charToEToken x   = ETCharacter { etDepth = 0, etChar = x, etCatCode = CCOther }
 
+stringToToken :: String -> [TeXToken]
+stringToToken = map charToToken
+  where charToToken ' ' = TTCharacter ' ' CCSpace
+        charToToken x   = TTCharacter x CCOther
+
 -- <optional signs> ::= <optional spaces> | <optional signs><plus or minus><optional spaces>
 readOptionalSigns :: (MonadTeXState s m, MonadError String m) => Int -> m Int
 readOptionalSigns !s = do
@@ -695,20 +700,21 @@ instance QuantityRead (Glue MuDimen) where
   readQuantity = readMuGlue
 
 -- \the, \showthe
-theString :: (MonadTeXState s m, MonadError String m) => String -> m String
+theString :: (MonadTeXState s m, MonadError String m) => String -> m [TeXToken]
 theString name = do
   (t,v) <- required nextExpandedToken
   case getQuantity v of
     QInteger getInteger ->
-      do show <$> getInteger
+      (stringToToken . show) <$> getInteger
     QDimension getDimension ->
-      do showDimension <$> getDimension
-    QGlue getGlue ->
-      do Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getGlue
-         return $ showDimension x ++ showSS " plus " stretch ++ showSS " minus " shrink
-    QMuGlue getMuGlue ->
-      do Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getMuGlue
-         return $ showMuDimension x ++ showMuSS " plus " stretch ++ showMuSS " minus " shrink
+      (stringToToken . showDimension) <$> getDimension
+    QGlue getGlue -> do
+      Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getGlue
+      return $ stringToToken $ showDimension x ++ showSS " plus " stretch ++ showSS " minus " shrink
+    QMuGlue getMuGlue -> do
+      Glue { glueSpace = x, glueStretch = stretch, glueShrink = shrink } <- getMuGlue
+      return $ stringToToken $ showMuDimension x ++ showMuSS " plus " stretch ++ showMuSS " minus " shrink
+    QToks getTokenList -> getTokenList
     _ -> throwError $ "You can't use `" ++ show t ++ "' after " ++ name
 
 showDimension :: Dimen -> String

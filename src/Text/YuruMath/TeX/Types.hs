@@ -258,6 +258,7 @@ data CommonLocalState ecommand value
     , _dimenReg      :: !(Map.Map Int Dimen)
     , _skipReg       :: !(Map.Map Int (Glue Dimen))
     , _muskipReg     :: !(Map.Map Int (Glue MuDimen))
+    , _toksReg       :: !(Map.Map Int [TeXToken])
     -- TODO: box registers
     , _thinmuskip    :: !(Glue MuDimen)
     , _medmuskip     :: !(Glue MuDimen)
@@ -309,6 +310,7 @@ countReg      :: (IsLocalState localstate) => Lens' localstate (Map.Map Int Inte
 dimenReg      :: (IsLocalState localstate) => Lens' localstate (Map.Map Int Dimen)
 skipReg       :: (IsLocalState localstate) => Lens' localstate (Map.Map Int (Glue Dimen))
 muskipReg     :: (IsLocalState localstate) => Lens' localstate (Map.Map Int (Glue MuDimen))
+toksReg       :: (IsLocalState localstate) => Lens' localstate (Map.Map Int [TeXToken])
 thinmuskip, medmuskip, thickmuskip :: IsLocalState localstate => Lens' localstate (Glue MuDimen)
 
 scopeType     = commonLocalState . lens _scopeType   (\s v -> s { _scopeType = v})
@@ -325,6 +327,7 @@ countReg      = commonLocalState . lens _countReg    (\s v -> s { _countReg = v 
 dimenReg      = commonLocalState . lens _dimenReg    (\s v -> s { _dimenReg = v })
 skipReg       = commonLocalState . lens _skipReg     (\s v -> s { _skipReg = v })
 muskipReg     = commonLocalState . lens _muskipReg   (\s v -> s { _muskipReg = v })
+toksReg       = commonLocalState . lens _toksReg     (\s v -> s { _toksReg = v })
 thinmuskip    = commonLocalState . lens _thinmuskip  (\s v -> s { _thinmuskip = v })
 medmuskip     = commonLocalState . lens _medmuskip   (\s v -> s { _medmuskip = v })
 thickmuskip   = commonLocalState . lens _thickmuskip (\s v -> s { _thickmuskip = v })
@@ -385,6 +388,7 @@ data QuantityGetter f
   | QGlue (f (Glue Dimen))     -- <internal glue>
   | QMuGlue (f (Glue MuDimen)) -- <internal muglue>
   -- Note: there is no <internal mudimen>
+  | QToks (f [TeXToken])
   | NotQuantity
 
 class (Eq c, Monad m) => DoExecute c m where

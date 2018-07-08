@@ -63,7 +63,8 @@ instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s,
               ETCharacter {} -> meaningString value
     modifying outputLines (++ ["> " ++ line])
   doExecute Ishowthe = do
-    str <- theString "\\showthe"
+    content <- theString "\\showthe"
+    str <- showMessageStringM (mconcat $ map showToken content)
     modifying outputLines (++ ["> " ++ str])
   doExecute Ishowtokens = do
     content <- readUnexpandedGeneralText

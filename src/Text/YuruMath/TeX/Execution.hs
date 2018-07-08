@@ -156,6 +156,10 @@ lowercaseCommand = do
   toLower <- lcCodeFn
   unreadTokens' (map (mapChar toLower) text)
 
+ignorespacesCommand :: (MonadTeXState s m, MonadError String m) => m ()
+ignorespacesCommand = do
+  readOptionalSpaces
+
 -- \chardef<control sequence><equals><number>
 chardefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
 chardefCommand = do
@@ -533,6 +537,7 @@ data CommonExecutable = Eglobal
                       | Efuturelet
                       | Euppercase
                       | Elowercase
+                      | Eignorespaces
                       | Echardef
                       | Emathchardef
                       | EUmathchardef
@@ -623,6 +628,7 @@ instance Meaning CommonExecutable where
   meaningString Efuturelet = controlSequence "futurelet"
   meaningString Euppercase = controlSequence "uppercase"
   meaningString Elowercase = controlSequence "lowercase"
+  meaningString Eignorespaces = controlSequence "ignorespaces"
   meaningString Echardef = controlSequence "chardef"
   meaningString Emathchardef = controlSequence "mathchardef"
   meaningString EUmathchardef = controlSequence "Umathchardef"
@@ -677,6 +683,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValue
   doExecute Elowercase       = lowercaseCommand
   doExecute Ebegingroup      = begingroupCommand
   doExecute Eendgroup        = endgroupCommand
+  doExecute Eignorespaces    = ignorespacesCommand
   doExecute Ecount           = runLocal countSet
   doExecute Ecountdef        = runLocal countdefCommand
   doExecute Edimen           = runLocal dimenSet
@@ -770,6 +777,7 @@ executableDefinitions = Map.fromList
   ,("futurelet",      liftUnion Efuturelet)
   ,("uppercase",      liftUnion Euppercase)
   ,("lowercase",      liftUnion Elowercase)
+  ,("ignorespaces",   liftUnion Eignorespaces)
   ,("chardef",        liftUnion Echardef)
   ,("mathchardef",    liftUnion Emathchardef)
   ,("Umathchardef",   liftUnion EUmathchardef)

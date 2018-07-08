@@ -80,7 +80,7 @@ Some commands are from e-TeX or XeTeX/LuaTeX.
 ### Non-expandable commands
 
 - `\relax`, `\endcsname`, `\global`
-- `\uppercase`, `\lowercase`
+- `\uppercase`, `\lowercase`, `\ignorespaces`
 - `\let`, `\futurelet`
 - `\def`, `\edef`, `\gdef`, `\xdef`, `\outer`, `\long`, `\protected`
 - `\chardef`, `\mathchardef`, `\Umathchardef`, `\Umathcharnumdef`

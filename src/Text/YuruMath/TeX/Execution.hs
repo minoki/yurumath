@@ -16,14 +16,9 @@ module Text.YuruMath.TeX.Execution
   ,Assignment
   ,runLocal
   ,runGlobal
-  ,runArithmetic
   ,texAssign
-  ,advanceInteger
-  ,advanceQuantity
-  ,multiplyInteger
-  ,multiplyQuantity
-  ,divideInteger
-  ,divideQuantity
+  ,arithmeticInteger
+  ,arithmeticQuantity
   ,CommonExecutable(..)
   ,executableDefinitions
   ) where
@@ -99,9 +94,6 @@ runLocal m = do
 runGlobal m = do
   WillAssign setter value <- m
   assign (localStates . mapped . setter) value
-
-runArithmetic :: (MonadTeXState s m) => m (Assignment s) -> m (Bool -> m ())
-runArithmetic m = return $ \g -> if g then runGlobal m else runLocal m
 
 texAssign :: (MonadTeXState s m) => ASetter (LocalState s) (LocalState s) b b -> b -> m (Assignment s)
 texAssign setter !value = return (WillAssign setter value)
@@ -460,28 +452,34 @@ toksdefCommand = do
 advanceCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 advanceCommand !global = do
   (et,v) <- required nextExpandedToken
-  case doAdvance v of
-    Just m -> do n <- m
+  case doArithmetic v of
+    Just m -> do n <- if global
+                      then arithmeticGlobalAdvance <$> m
+                      else arithmeticLocalAdvance <$> m
                  readOptionalKeyword "by"
-                 n global
+                 n
     Nothing -> throwError $ "You can't use " ++ show et ++ " after \\advance"
 
 multiplyCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 multiplyCommand !global = do
   (et,v) <- required nextExpandedToken
-  case doMultiply v of
-    Just m -> do n <- m
+  case doArithmetic v of
+    Just m -> do n <- if global
+                      then arithmeticGlobalMultiply <$> m
+                      else arithmeticLocalMultiply <$> m
                  readOptionalKeyword "by"
-                 n global
+                 n
     Nothing -> throwError $ "You can't use " ++ show et ++ " after \\multiply"
 
 divideCommand :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 divideCommand !global = do
   (et,v) <- required nextExpandedToken
-  case doDivide v of
-    Just m -> do n <- m
+  case doArithmetic v of
+    Just m -> do n <- if global
+                      then arithmeticGlobalDivide <$> m
+                      else arithmeticLocalDivide <$> m
                  readOptionalKeyword "by"
-                 n global
+                 n
     Nothing -> throwError $ "You can't use " ++ show et ++ " after \\divide"
 
 advanceInteger :: (MonadTeXState s m, MonadError String m, IntegralB i) => Lens' (LocalState s) i -> m (Assignment s)
@@ -530,6 +528,26 @@ divideQuantity l = do
     then throwError "Divide by zero"
     else texAssign l (scaleAsInteger (`quot` arg) value)
 
+arithmeticInteger :: (MonadTeXState s m, MonadError String m, IntegralB i) => Lens' (LocalState s) i -> m (Arithmetic m)
+arithmeticInteger l = pure $ Arithmetic
+  { arithmeticLocalAdvance   = runLocal  $ advanceInteger l
+  , arithmeticGlobalAdvance  = runGlobal $ advanceInteger l
+  , arithmeticLocalMultiply  = runLocal  $ multiplyInteger l
+  , arithmeticGlobalMultiply = runGlobal $ multiplyInteger l
+  , arithmeticLocalDivide    = runLocal  $ divideInteger l
+  , arithmeticGlobalDivide   = runGlobal $ divideInteger l
+  }
+
+arithmeticQuantity :: (MonadTeXState s m, MonadError String m, QuantityRead q) => Lens' (LocalState s) q -> m (Arithmetic m)
+arithmeticQuantity l = pure $ Arithmetic
+  { arithmeticLocalAdvance   = runLocal  $ advanceQuantity l
+  , arithmeticGlobalAdvance  = runGlobal $ advanceQuantity l
+  , arithmeticLocalMultiply  = runLocal  $ multiplyQuantity l
+  , arithmeticGlobalMultiply = runGlobal $ multiplyQuantity l
+  , arithmeticLocalDivide    = runLocal  $ divideQuantity l
+  , arithmeticGlobalDivide   = runGlobal $ divideQuantity l
+  }
+
 data CommonExecutable = Eglobal
                       | Elet
                       | Efuturelet
@@ -574,9 +592,7 @@ instance Meaning CountReg where
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CountReg m where
   doExecute (CountReg i)   = runLocal $ setCountReg i
   doGlobal (CountReg i)    = Just $ runGlobal $ setCountReg i
-  doAdvance (CountReg i)   = Just $ runArithmetic $ advanceInteger (countRegAt i)
-  doMultiply (CountReg i)  = Just $ runArithmetic $ multiplyInteger (countRegAt i)
-  doDivide (CountReg i)    = Just $ runArithmetic $ divideInteger (countRegAt i)
+  doArithmetic (CountReg i) = Just $ arithmeticInteger (countRegAt i)
   getQuantity (CountReg i) = QInteger $ use (localState . countRegAt i)
 
 instance Meaning DimenReg where
@@ -585,9 +601,7 @@ instance Meaning DimenReg where
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute DimenReg m where
   doExecute (DimenReg i)   = runLocal $ setDimenReg i
   doGlobal (DimenReg i)    = Just $ runGlobal $ setDimenReg i
-  doAdvance (DimenReg i)   = Just $ runArithmetic $ advanceQuantity (dimenRegAt i)
-  doMultiply (DimenReg i)  = Just $ runArithmetic $ multiplyQuantity (dimenRegAt i)
-  doDivide (DimenReg i)    = Just $ runArithmetic $ divideQuantity (dimenRegAt i)
+  doArithmetic (DimenReg i) = Just $ arithmeticQuantity (dimenRegAt i)
   getQuantity (DimenReg i) = QDimension $ use (localState . dimenRegAt i)
 
 instance Meaning SkipReg where
@@ -596,9 +610,7 @@ instance Meaning SkipReg where
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute SkipReg m where
   doExecute (SkipReg i)   = runLocal $ setSkipReg i
   doGlobal (SkipReg i)    = Just $ runGlobal $ setSkipReg i
-  doAdvance (SkipReg i)   = Just $ runArithmetic $ advanceQuantity (skipRegAt i)
-  doMultiply (SkipReg i)  = Just $ runArithmetic $ multiplyQuantity (skipRegAt i)
-  doDivide (SkipReg i)    = Just $ runArithmetic $ divideQuantity (skipRegAt i)
+  doArithmetic (SkipReg i) = Just $ arithmeticQuantity (skipRegAt i)
   getQuantity (SkipReg i) = QGlue $ use (localState . skipRegAt i)
 
 instance Meaning MuskipReg where
@@ -607,9 +619,7 @@ instance Meaning MuskipReg where
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MuskipReg m where
   doExecute (MuskipReg i)   = runLocal $ setMuskipReg i
   doGlobal (MuskipReg i)    = Just $ runGlobal $ setMuskipReg i
-  doAdvance (MuskipReg i)   = Just $ runArithmetic $ advanceQuantity (muskipRegAt i)
-  doMultiply (MuskipReg i)  = Just $ runArithmetic $ multiplyQuantity (muskipRegAt i)
-  doDivide (MuskipReg i)    = Just $ runArithmetic $ divideQuantity (muskipRegAt i)
+  doArithmetic (MuskipReg i) = Just $ arithmeticQuantity (muskipRegAt i)
   getQuantity (MuskipReg i) = QMuGlue $ use (localState . muskipRegAt i)
 
 instance Meaning ToksReg where
@@ -729,27 +739,17 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValue
   doGlobal Emultiply        = Just $ multiplyCommand True
   doGlobal Edivide          = Just $ divideCommand True
   doGlobal _                = Nothing
-  doAdvance Eendlinechar    = Just $ runArithmetic $ advanceInteger endlinechar
-  doAdvance Eescapechar     = Just $ runArithmetic $ advanceInteger escapechar
-  doAdvance Ecount          = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceInteger $ countRegAt index)
-  doAdvance Edimen          = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ dimenRegAt index)
-  doAdvance Eskip           = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ skipRegAt index)
-  doAdvance Emuskip         = Just $ readRegIndex >>= (\index -> runArithmetic $ advanceQuantity $ muskipRegAt index)
-  doAdvance _               = Nothing
-  doMultiply Eendlinechar   = Just $ runArithmetic $ multiplyInteger endlinechar
-  doMultiply Eescapechar    = Just $ runArithmetic $ multiplyInteger escapechar
-  doMultiply Ecount         = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyInteger $ countRegAt index)
-  doMultiply Edimen         = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ dimenRegAt index)
-  doMultiply Eskip          = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ skipRegAt index)
-  doMultiply Emuskip        = Just $ readRegIndex >>= (\index -> runArithmetic $ multiplyQuantity $ muskipRegAt index)
-  doMultiply _              = Nothing
-  doDivide Eendlinechar     = Just $ runArithmetic $ divideInteger endlinechar
-  doDivide Eescapechar      = Just $ runArithmetic $ divideInteger escapechar
-  doDivide Ecount           = Just $ readRegIndex >>= (\index -> runArithmetic $ divideInteger $ countRegAt index)
-  doDivide Edimen           = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ dimenRegAt index)
-  doDivide Eskip            = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ skipRegAt index)
-  doDivide Emuskip          = Just $ readRegIndex >>= (\index -> runArithmetic $ divideQuantity $ muskipRegAt index)
-  doDivide _                = Nothing
+  doArithmetic Eendlinechar = Just $ arithmeticInteger endlinechar
+  doArithmetic Eescapechar  = Just $ arithmeticInteger escapechar
+  doArithmetic Ecount       = Just $ do index <- readRegIndex
+                                        arithmeticInteger (countRegAt index)
+  doArithmetic Edimen       = Just $ do index <- readRegIndex
+                                        arithmeticQuantity (dimenRegAt index)
+  doArithmetic Eskip        = Just $ do index <- readRegIndex
+                                        arithmeticQuantity (skipRegAt index)
+  doArithmetic Emuskip      = Just $ do index <- readRegIndex
+                                        arithmeticQuantity (muskipRegAt index)
+  doArithmetic _            = Nothing
   getQuantity Ecatcode     = QInteger catcodeGet
   getQuantity Elccode      = QInteger lccodeGet
   getQuantity Euccode      = QInteger uccodeGet

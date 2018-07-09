@@ -397,39 +397,37 @@ data QuantityGetter f
   | QToks (f [TeXToken])
   | NotQuantity
 
+data Arithmetic m = Arithmetic { arithmeticLocalAdvance   :: m ()
+                               , arithmeticGlobalAdvance  :: m ()
+                               , arithmeticLocalMultiply  :: m ()
+                               , arithmeticGlobalMultiply :: m ()
+                               , arithmeticLocalDivide    :: m ()
+                               , arithmeticGlobalDivide   :: m ()
+                               }
+
 class (Eq c, Monad m) => DoExecute c m where
-  doExecute :: c -> m ()
-  doGlobal :: c -> Maybe (m ())
-  doAdvance :: c -> Maybe (m (Bool -> m ()))
-  doMultiply :: c -> Maybe (m (Bool -> m ()))
-  doDivide :: c -> Maybe (m (Bool -> m ()))
+  doExecute    :: c -> m () -- normal execution
+  doGlobal     :: c -> Maybe (m ()) -- prefixed by \global
+  doArithmetic :: c -> Maybe (m (Arithmetic m)) -- prefixed by \advance, \multiply, or \divide
+  getQuantity  :: c -> QuantityGetter m -- get <internal integer/dimen/glue/muglue>, or prefixed by \the
   doGlobal _ = Nothing
-  doAdvance _ = Nothing
-  doMultiply _ = Nothing
-  doDivide _ = Nothing
-  getQuantity :: c -> QuantityGetter m
+  doArithmetic _ = Nothing
 
 instance (Monad m) => DoExecute (Union '[]) m where
-  doExecute = typesExhausted
-  doGlobal = typesExhausted
-  doAdvance = typesExhausted
-  doMultiply = typesExhausted
-  doDivide = typesExhausted
-  getQuantity = typesExhausted
+  doExecute    = typesExhausted
+  doGlobal     = typesExhausted
+  doArithmetic = typesExhausted
+  getQuantity  = typesExhausted
 
 instance (DoExecute c m, DoExecute (Union (Delete c cs)) m, Typeable c) => DoExecute (Union (c : cs)) m where
-  doExecute       = (doExecute :: c -> m ())
-                    @> (doExecute :: Union (Delete c cs) -> m ())
-  doGlobal        = (doGlobal :: c -> Maybe (m ()))
-                    @> (doGlobal :: Union (Delete c cs) -> Maybe (m ()))
-  doAdvance       = (doAdvance :: c -> Maybe (m (Bool -> m ())))
-                    @> (doAdvance :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
-  doMultiply      = (doMultiply :: c -> Maybe (m (Bool -> m ())))
-                    @> (doMultiply :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
-  doDivide        = (doDivide :: c -> Maybe (m (Bool -> m ())))
-                    @> (doDivide :: Union (Delete c cs) -> Maybe (m (Bool -> m ())))
-  getQuantity     = (getQuantity :: c -> QuantityGetter m)
-                    @> (getQuantity :: Union (Delete c cs) -> QuantityGetter m)
+  doExecute    = (doExecute :: c -> m ())
+                 @> (doExecute :: Union (Delete c cs) -> m ())
+  doGlobal     = (doGlobal :: c -> Maybe (m ()))
+                 @> (doGlobal :: Union (Delete c cs) -> Maybe (m ()))
+  doArithmetic = (doArithmetic :: c -> Maybe (m (Arithmetic m)))
+                 @> (doArithmetic :: Union (Delete c cs) -> Maybe (m (Arithmetic m)))
+  getQuantity  = (getQuantity :: c -> QuantityGetter m)
+                 @> (getQuantity :: Union (Delete c cs) -> QuantityGetter m)
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute CommonValue m where
   doExecute (Character _ _)          = return () -- dummy

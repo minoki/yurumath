@@ -54,7 +54,7 @@ data AtomType = AOrd   -- ordinary
               | ARad   -- radical
               | AVcent -- vcenter
               | ARoot  -- root
-              deriving (Eq,Show)
+              deriving (Eq,Show,Enum,Bounded)
 
 mathclassToAtomType :: MathClass -> AtomType
 mathclassToAtomType MathOrd   = AOrd
@@ -89,11 +89,11 @@ data MathVariant = MVNormal
                  | MVSansSerifBoldItalic
                  | MVMonospace
                  | MVFunctionName
-                 deriving (Eq,Show)
+                 deriving (Eq,Show,Enum,Bounded)
 
 data SymbolMode = SMSymbol
                 | SMText
-                deriving (Eq,Show)
+                deriving (Eq,Show,Enum,Bounded)
 
 data MathField a = MFEmpty
                  | MFSymbol { symbolFamily  :: !Word

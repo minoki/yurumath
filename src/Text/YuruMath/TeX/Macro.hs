@@ -640,19 +640,21 @@ data MacroCommand = Mdef
                   | Mnewcommand
                   | Mrenewcommand
                   | Mprovidecommand
-                  deriving (Eq,Show)
+                  deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning MacroCommand where
-  meaningString Mdef = controlSequence "def"
-  meaningString Medef = controlSequence "edef"
-  meaningString Mgdef = controlSequence "gdef"
-  meaningString Mxdef = controlSequence "xdef"
-  meaningString Mouter = controlSequence "outer"
-  meaningString Mlong = controlSequence "long"
-  meaningString Mprotected = controlSequence "protected"
-  meaningString Mnewcommand = controlSequence "newcommand"
-  meaningString Mrenewcommand = controlSequence "renewcommand"
-  meaningString Mprovidecommand = controlSequence "providecommand"
+instance IsPrimitive MacroCommand where
+  primitiveName Mdef = "def"
+  primitiveName Medef = "edef"
+  primitiveName Mgdef = "gdef"
+  primitiveName Mxdef = "xdef"
+  primitiveName Mouter = "outer"
+  primitiveName Mlong = "long"
+  primitiveName Mprotected = "protected"
+  primitiveName Mnewcommand = "newcommand"
+  primitiveName Mrenewcommand = "renewcommand"
+  primitiveName Mprovidecommand = "providecommand"
+
+instance Meaning MacroCommand
 
 instance (Elem Macro (ExpandableSet s), MonadTeXState s m, MonadError String m, Monad m, Meaning (NValue s)) => DoExecute MacroCommand m where
   doExecute Mdef       = defCommand "def" unprefixed

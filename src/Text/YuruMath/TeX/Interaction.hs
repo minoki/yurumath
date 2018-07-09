@@ -42,13 +42,15 @@ data InteractionCommand = Imessage
                         | Ishow
                         | Ishowthe
                         | Ishowtokens
-                        deriving (Eq,Show)
+                        deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning InteractionCommand where
-  meaningString Imessage = controlSequence "message"
-  meaningString Ishow = controlSequence "show"
-  meaningString Ishowthe = controlSequence "showthe"
-  meaningString Ishowtokens = controlSequence "showtokens"
+instance IsPrimitive InteractionCommand where
+  primitiveName Imessage = "message"
+  primitiveName Ishow = "show"
+  primitiveName Ishowthe = "showthe"
+  primitiveName Ishowtokens = "showtokens"
+
+instance Meaning InteractionCommand
 
 instance (Monad m, MonadTeXState s m, MonadError String m, IsInteractiveState s, Meaning (Value s)) => DoExecute InteractionCommand m where
   doExecute Imessage = do

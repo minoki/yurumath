@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Text.YuruMath.TeX.Primitive.Expandable
   (expandableDefinitions
   ,ConditionalMarkerCommand
@@ -152,13 +153,21 @@ orCommand self = do
     _ -> throwError "Extra \\or"
 
 newtype ConditionalMarkerCommand = ConditionalMarkerCommand ConditionalMarker
-  deriving (Eq)
+  deriving (Eq,Enum,Bounded)
 
 instance Show ConditionalMarkerCommand where
   show (ConditionalMarkerCommand c) = case c of
     Eelse -> "\\else"
     Efi -> "\\fi"
     Eor -> "\\or"
+
+instance IsPrimitive ConditionalMarkerCommand where
+  primitiveName (ConditionalMarkerCommand c) = case c of
+    Eelse -> "else"
+    Eor -> "or"
+    Efi -> "fi"
+
+instance Meaning ConditionalMarkerCommand
 
 instance IsExpandable ConditionalMarkerCommand where
   isConditional _     = False
@@ -170,11 +179,6 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand Condition
     Efi   -> fiCommand
     Eor   -> orCommand
   evalBooleanConditional _ = Nothing
-
-instance Meaning ConditionalMarkerCommand where
-  meaningString (ConditionalMarkerCommand Eelse) = controlSequence "else"
-  meaningString (ConditionalMarkerCommand Efi) = controlSequence "fi"
-  meaningString (ConditionalMarkerCommand Eor) = controlSequence "or"
 
 doIfCase :: (MonadTeXState s m, MonadError String m) => Integer -> m ()
 doIfCase 0 = do
@@ -345,7 +349,7 @@ data CommonExpandable = Eexpandafter
                       | EUchar
 
                       | Eifcase
-                      deriving (Eq,Show)
+                      deriving (Eq,Show,Enum,Bounded)
 
 instance IsExpandable CommonExpandable where
   isConditional e = e == Eifcase
@@ -375,24 +379,26 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
   doExpandInEdef _ = Nothing
   evalBooleanConditional _ = Nothing
 
-instance Meaning CommonExpandable where
-  meaningString Eexpandafter = controlSequence "expandafter"
-  meaningString Enoexpand = controlSequence "noexpand"
-  meaningString Ecsname = controlSequence "csname"
-  meaningString Estring = controlSequence "string"
-  meaningString Enumber = controlSequence "number"
-  meaningString Eromannumeral = controlSequence "romannumeral"
-  meaningString Ethe = controlSequence "the"
-  meaningString Emeaning = controlSequence "meaning"
-  meaningString Eunless = controlSequence "unless"
-  meaningString Eunexpanded = controlSequence "unexpanded"
-  meaningString Edetokenize = controlSequence "detokenize"
-  meaningString Estrcmp = controlSequence "strcmp" -- \strcmp rather than \pdfstrcmp
-  meaningString Eexpanded = controlSequence "expanded"
-  meaningString Ebegincsname = controlSequence "begincsname"
-  meaningString Ecsstring = controlSequence "csstring"
-  meaningString EUchar = controlSequence "Uchar"
-  meaningString Eifcase = controlSequence "ifcase"
+instance IsPrimitive CommonExpandable where
+  primitiveName Eexpandafter = "expandafter"
+  primitiveName Enoexpand = "noexpand"
+  primitiveName Ecsname = "csname"
+  primitiveName Estring = "string"
+  primitiveName Enumber = "number"
+  primitiveName Eromannumeral = "romannumeral"
+  primitiveName Ethe = "the"
+  primitiveName Emeaning = "meaning"
+  primitiveName Eunless = "unless"
+  primitiveName Eunexpanded = "unexpanded"
+  primitiveName Edetokenize = "detokenize"
+  primitiveName Estrcmp = "strcmp" -- \strcmp rather than \pdfstrcmp
+  primitiveName Eexpanded = "expanded"
+  primitiveName Ebegincsname = "begincsname"
+  primitiveName Ecsstring = "csstring"
+  primitiveName EUchar = "Uchar"
+  primitiveName Eifcase = "ifcase"
+
+instance Meaning CommonExpandable
 
 data CommonBoolean = Eiftrue
                    | Eiffalse
@@ -410,27 +416,29 @@ data CommonBoolean = Eiftrue
                    -- e-TeX extension:
                    | Eifdefined
                    | Eifcsname
-                   deriving (Eq,Show)
+                   deriving (Eq,Show,Enum,Bounded)
 
 instance IsExpandable CommonBoolean where
   isConditional _ = True
   isConditionalMarker _ = Nothing
 
-instance Meaning CommonBoolean where
-  meaningString Eiftrue = controlSequence "iftrue"
-  meaningString Eiffalse = controlSequence "iffalse"
-  meaningString Eif = controlSequence "if"
-  meaningString Eifcat = controlSequence "ifcat"
-  meaningString Eifx = controlSequence "ifx"
-  meaningString Eifnum = controlSequence "ifnum"
-  meaningString Eifdim = controlSequence "ifdim"
-  meaningString Eifodd = controlSequence "ifodd"
-  meaningString Eifhmode = controlSequence "ifhmode"
-  meaningString Eifvmode = controlSequence "ifvmode"
-  meaningString Eifmmode = controlSequence "ifmmode"
-  meaningString Eifinner = controlSequence "ifinner"
-  meaningString Eifdefined = controlSequence "ifdefined"
-  meaningString Eifcsname = controlSequence "ifcsname"
+instance IsPrimitive CommonBoolean where
+  primitiveName Eiftrue = "iftrue"
+  primitiveName Eiffalse = "iffalse"
+  primitiveName Eif = "if"
+  primitiveName Eifcat = "ifcat"
+  primitiveName Eifx = "ifx"
+  primitiveName Eifnum = "ifnum"
+  primitiveName Eifdim = "ifdim"
+  primitiveName Eifodd = "ifodd"
+  primitiveName Eifhmode = "ifhmode"
+  primitiveName Eifvmode = "ifvmode"
+  primitiveName Eifmmode = "ifmmode"
+  primitiveName Eifinner = "ifinner"
+  primitiveName Eifdefined = "ifdefined"
+  primitiveName Eifcsname = "ifcsname"
+
+instance Meaning CommonBoolean
 
 evalCommonBoolean :: (MonadTeXState s m, MonadError String m) => CommonBoolean -> m Bool
 evalCommonBoolean Eiftrue = iftrueCommand

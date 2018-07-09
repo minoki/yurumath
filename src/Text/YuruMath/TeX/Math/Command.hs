@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Text.YuruMath.TeX.Math.Command
   (MathStyleSet(..)
   ,MathAtomCommand(..)
@@ -46,17 +47,19 @@ muskipParamSet muskip = readMuGlue >>= texAssign muskip
 --
 
 newtype MathStyleSet = MathStyleSet MathStyle
-                     deriving (Eq,Show)
+                     deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning MathStyleSet where
-  meaningString (MathStyleSet DisplayStyle) = controlSequence "displaystyle"
-  meaningString (MathStyleSet CrampedDisplayStyle) = controlSequence "crampeddisplaystyle"
-  meaningString (MathStyleSet TextStyle) = controlSequence "textstyle"
-  meaningString (MathStyleSet CrampedTextStyle) = controlSequence "crampedtextstyle"
-  meaningString (MathStyleSet ScriptStyle) = controlSequence "scriptstyle"
-  meaningString (MathStyleSet CrampedScriptStyle) = controlSequence "crampedscriptstyle"
-  meaningString (MathStyleSet ScriptScriptStyle) = controlSequence "scriptscriptstyle"
-  meaningString (MathStyleSet CrampedScriptScriptStyle) = controlSequence "crampedscriptscriptstyle"
+instance IsPrimitive MathStyleSet where
+  primitiveName (MathStyleSet DisplayStyle) = "displaystyle"
+  primitiveName (MathStyleSet CrampedDisplayStyle) = "crampeddisplaystyle"
+  primitiveName (MathStyleSet TextStyle) = "textstyle"
+  primitiveName (MathStyleSet CrampedTextStyle) = "crampedtextstyle"
+  primitiveName (MathStyleSet ScriptStyle) = "scriptstyle"
+  primitiveName (MathStyleSet CrampedScriptStyle) = "crampedscriptstyle"
+  primitiveName (MathStyleSet ScriptScriptStyle) = "scriptscriptstyle"
+  primitiveName (MathStyleSet CrampedScriptScriptStyle) = "crampedscriptscriptstyle"
+
+instance Meaning MathStyleSet
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MathStyleSet m where
   doExecute = can'tUseThisCommandInCurrentMode
@@ -92,24 +95,26 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute MathAtom
 -- Setting math variant
 --
 
-newtype MathVariantSet = MathVariantSet MathVariant deriving (Eq,Show)
+newtype MathVariantSet = MathVariantSet MathVariant deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning MathVariantSet where
-  meaningString (MathVariantSet MVNormal) = controlSequence "YuruMathSetNormal"
-  meaningString (MathVariantSet MVBold) = controlSequence "YuruMathSetBold"
-  meaningString (MathVariantSet MVItalic) = controlSequence "YuruMathSetItalic"
-  meaningString (MathVariantSet MVBoldItalic) = controlSequence "YuruMathSetBoldItalic"
-  meaningString (MathVariantSet MVDoubleStruck) = controlSequence "YuruMathSetDoubleStruck"
-  meaningString (MathVariantSet MVBoldFraktur) = controlSequence "YuruMathSetBoldFraktur"
-  meaningString (MathVariantSet MVScript) = controlSequence "YuruMathSetScript"
-  meaningString (MathVariantSet MVBoldScript) = controlSequence "YuruMathSetBoldScript"
-  meaningString (MathVariantSet MVFraktur) = controlSequence "YuruMathSetFraktur"
-  meaningString (MathVariantSet MVSansSerif) = controlSequence "YuruMathSetSansSerif"
-  meaningString (MathVariantSet MVBoldSansSerif) = controlSequence "YuruMathSetBoldSansSerif"
-  meaningString (MathVariantSet MVSansSerifItalic) = controlSequence "YuruMathSetSansSerifItalic"
-  meaningString (MathVariantSet MVSansSerifBoldItalic) = controlSequence "YuruMathSetSansSerifBoldItalic"
-  meaningString (MathVariantSet MVMonospace) = controlSequence "YuruMathSetMonospace"
-  meaningString (MathVariantSet MVFunctionName) = controlSequence "YuruMathSetFunctionName"
+instance IsPrimitive MathVariantSet where
+  primitiveName (MathVariantSet MVNormal) = "YuruMathSetNormal"
+  primitiveName (MathVariantSet MVBold) = "YuruMathSetBold"
+  primitiveName (MathVariantSet MVItalic) = "YuruMathSetItalic"
+  primitiveName (MathVariantSet MVBoldItalic) = "YuruMathSetBoldItalic"
+  primitiveName (MathVariantSet MVDoubleStruck) = "YuruMathSetDoubleStruck"
+  primitiveName (MathVariantSet MVBoldFraktur) = "YuruMathSetBoldFraktur"
+  primitiveName (MathVariantSet MVScript) = "YuruMathSetScript"
+  primitiveName (MathVariantSet MVBoldScript) = "YuruMathSetBoldScript"
+  primitiveName (MathVariantSet MVFraktur) = "YuruMathSetFraktur"
+  primitiveName (MathVariantSet MVSansSerif) = "YuruMathSetSansSerif"
+  primitiveName (MathVariantSet MVBoldSansSerif) = "YuruMathSetBoldSansSerif"
+  primitiveName (MathVariantSet MVSansSerifItalic) = "YuruMathSetSansSerifItalic"
+  primitiveName (MathVariantSet MVSansSerifBoldItalic) = "YuruMathSetSansSerifBoldItalic"
+  primitiveName (MathVariantSet MVMonospace) = "YuruMathSetMonospace"
+  primitiveName (MathVariantSet MVFunctionName) = "YuruMathSetFunctionName"
+
+instance Meaning MathVariantSet
 
 instance (Monad m, MonadError String m) => DoExecute MathVariantSet m where
   doExecute _ = throwError "You can't set math variant in this mode"
@@ -121,9 +126,12 @@ instance (Monad m, MonadError String m) => DoExecute MathVariantSet m where
 
 newtype MathSymbolModeSet = MathSymbolModeSet SymbolMode deriving (Eq,Show)
 
-instance Meaning MathSymbolModeSet where
-  meaningString (MathSymbolModeSet SMSymbol) = controlSequence "YuruMathSetSymbol"
-  meaningString (MathSymbolModeSet SMText) = controlSequence "YuruMathSetText"
+instance IsPrimitive MathSymbolModeSet where
+  primitiveName (MathSymbolModeSet SMSymbol) = "YuruMathSetSymbol"
+  primitiveName (MathSymbolModeSet SMText) = "YuruMathSetText"
+  primitivesOfThisType = [MathSymbolModeSet SMSymbol, MathSymbolModeSet SMText]
+
+instance Meaning MathSymbolModeSet
 
 instance (Monad m, MonadError String m) => DoExecute MathSymbolModeSet m where
   doExecute _ = throwError "You can't set math symbol mode in this mode"
@@ -134,7 +142,7 @@ instance (Monad m, MonadError String m) => DoExecute MathSymbolModeSet m where
 --
 
 data MathExpandable = Mmathstyle -- LuaTeX extension
-                    deriving (Eq,Show)
+                    deriving (Eq,Show,Enum,Bounded)
 
 -- LuaTeX extension: \mathstyle
 mathstyleCommand :: (MonadTeXState state m, MonadError String m, IsMathState state) => m [ExpansionToken]
@@ -144,8 +152,10 @@ mathstyleCommand = do
     Just style -> stringToEToken $ show $ fromEnum style -- 0..7
     Nothing -> stringToEToken "-1" -- not in math mode
 
-instance Meaning MathExpandable where
-  meaningString Mmathstyle = controlSequence "mathstyle"
+instance IsPrimitive MathExpandable where
+  primitiveName Mmathstyle = "mathstyle"
+
+instance Meaning MathExpandable
 
 instance IsExpandable MathExpandable where
   isConditional _ = False
@@ -215,58 +225,60 @@ data MathCommands
 
   | MYuruMathSizedDelimiter -- for \big, \Big, \bigg, \Bigg
 
-  deriving (Eq,Show)
+  deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning MathCommands where
-  meaningString Mmathchar = controlSequence "mathchar"
-  meaningString Mmathaccent = controlSequence "mathaccent"
-  meaningString Mdelimiter = controlSequence "delimiter"
-  meaningString Mradical = controlSequence "radical"
-  meaningString Mdisplaylimits = controlSequence "displaylimits"
-  meaningString Mlimits = controlSequence "limits"
-  meaningString Mnolimits = controlSequence "nolimits"
-  meaningString Mmathchoice = controlSequence "mathchoice"
-  meaningString Mleft = controlSequence "left"
-  meaningString Mright = controlSequence "right"
-  meaningString Mover = controlSequence "over"
-  meaningString Matop = controlSequence "atop"
-  meaningString Mabove = controlSequence "above"
-  meaningString Moverwithdelims = controlSequence "overwithdelims"
-  meaningString Matopwithdelims = controlSequence "atopwithdelims"
-  meaningString Mabovewithdelims = controlSequence "abovewithdelims"
-  meaningString Mfam = controlSequence "fam"
-  meaningString Mthinmuskip = controlSequence "thinmuskip"
-  meaningString Mmedmuskip = controlSequence "medmuskip"
-  meaningString Mthickmuskip = controlSequence "thickmuskip"
-  meaningString Mmkern = controlSequence "mkern"
-  meaningString Mmskip = controlSequence "mskip"
-  meaningString Mnonscript = controlSequence "nonscript"
-  meaningString Mvcenter = controlSequence "vcenter"
-  meaningString Mmiddle = controlSequence "middle"
-  meaningString MUmathchar = controlSequence "Umathchar"
-  meaningString MUmathcharnum = controlSequence "Umathcharnum"
-  meaningString MUmathaccent = controlSequence "Umathaccent"
-  meaningString MUdelimiter = controlSequence "Udelimiter"
-  meaningString MUradical = controlSequence "Uradical"
-  meaningString MUroot = controlSequence "Uroot"
-  meaningString MUoverdelimiter = controlSequence "Uoverdelimiter"
-  meaningString MUunderdelimiter = controlSequence "Uunderdelimiter"
-  meaningString MUdelimiterover = controlSequence "Udelimiterover"
-  meaningString MUdelimiterunder = controlSequence "Udelimiterunder"
-  meaningString MUhextensible = controlSequence "Uhextensible"
-  meaningString MUskewed = controlSequence "Uskewed"
-  meaningString MUskewedwithdelims = controlSequence "Uskewedwithdelims"
-  meaningString MUstack = controlSequence "Ustack"
-  meaningString MUsuperscript = controlSequence "Usuperscript"
-  meaningString MUsubscript = controlSequence "Usubscript"
-  meaningString MUnosuperscript = controlSequence "Unosuperscript"
-  meaningString MUnosubscript = controlSequence "Unosubscript"
-  meaningString MUleft = controlSequence "Uleft"
-  meaningString MUmiddle = controlSequence "Umiddle"
-  meaningString MUright = controlSequence "Uright"
-  meaningString MUstopmath = controlSequence "Ustopmath"
-  meaningString MUstopdisplaymath = controlSequence "Ustopdisplaymath"
-  meaningString MYuruMathSizedDelimiter = controlSequence "YuruMathSizedDelimiter"
+instance IsPrimitive MathCommands where
+  primitiveName Mmathchar = "mathchar"
+  primitiveName Mmathaccent = "mathaccent"
+  primitiveName Mdelimiter = "delimiter"
+  primitiveName Mradical = "radical"
+  primitiveName Mdisplaylimits = "displaylimits"
+  primitiveName Mlimits = "limits"
+  primitiveName Mnolimits = "nolimits"
+  primitiveName Mmathchoice = "mathchoice"
+  primitiveName Mleft = "left"
+  primitiveName Mright = "right"
+  primitiveName Mover = "over"
+  primitiveName Matop = "atop"
+  primitiveName Mabove = "above"
+  primitiveName Moverwithdelims = "overwithdelims"
+  primitiveName Matopwithdelims = "atopwithdelims"
+  primitiveName Mabovewithdelims = "abovewithdelims"
+  primitiveName Mfam = "fam"
+  primitiveName Mthinmuskip = "thinmuskip"
+  primitiveName Mmedmuskip = "medmuskip"
+  primitiveName Mthickmuskip = "thickmuskip"
+  primitiveName Mmkern = "mkern"
+  primitiveName Mmskip = "mskip"
+  primitiveName Mnonscript = "nonscript"
+  primitiveName Mvcenter = "vcenter"
+  primitiveName Mmiddle = "middle"
+  primitiveName MUmathchar = "Umathchar"
+  primitiveName MUmathcharnum = "Umathcharnum"
+  primitiveName MUmathaccent = "Umathaccent"
+  primitiveName MUdelimiter = "Udelimiter"
+  primitiveName MUradical = "Uradical"
+  primitiveName MUroot = "Uroot"
+  primitiveName MUoverdelimiter = "Uoverdelimiter"
+  primitiveName MUunderdelimiter = "Uunderdelimiter"
+  primitiveName MUdelimiterover = "Udelimiterover"
+  primitiveName MUdelimiterunder = "Udelimiterunder"
+  primitiveName MUhextensible = "Uhextensible"
+  primitiveName MUskewed = "Uskewed"
+  primitiveName MUskewedwithdelims = "Uskewedwithdelims"
+  primitiveName MUstack = "Ustack"
+  primitiveName MUsuperscript = "Usuperscript"
+  primitiveName MUsubscript = "Usubscript"
+  primitiveName MUnosuperscript = "Unosuperscript"
+  primitiveName MUnosubscript = "Unosubscript"
+  primitiveName MUleft = "Uleft"
+  primitiveName MUmiddle = "Umiddle"
+  primitiveName MUright = "Uright"
+  primitiveName MUstopmath = "Ustopmath"
+  primitiveName MUstopdisplaymath = "Ustopdisplaymath"
+  primitiveName MYuruMathSizedDelimiter = "YuruMathSizedDelimiter"
+
+instance Meaning MathCommands
 
 instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state) => DoExecute MathCommands m where
   doExecute Mfam           = runLocal famSet

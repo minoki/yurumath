@@ -48,36 +48,38 @@ data TypesetCommand
   | TDiscretionaryHyphen -- \-
   | TUstartmath
   | TUstartdisplaymath
-  deriving (Eq,Show)
+  deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning TypesetCommand where
-  meaningString Tspecial = controlSequence "special"
-  meaningString Tpenalty = controlSequence "penalty"
-  meaningString Tkern = controlSequence "kern"
-  meaningString Tunpenalty = controlSequence "unpenalty"
-  meaningString Tunkern = controlSequence "unkern"
-  meaningString Tunskip = controlSequence "unskip"
-  meaningString Tmark = controlSequence "mark"
-  meaningString Tinsert = controlSequence "insert"
-  meaningString Tvadjust = controlSequence "vadjust"
-  meaningString Thalign = controlSequence "halign"
-  meaningString Tindent = controlSequence "indent"
-  meaningString Tnoindent = controlSequence "noindent"
-  meaningString Tvrule = controlSequence "vrule"
-  meaningString Tchar = controlSequence "char"
-  meaningString Thskip = controlSequence "hskip"
-  meaningString Thfil = controlSequence "hfil"
-  meaningString Thfill = controlSequence "hfill"
-  meaningString Thss = controlSequence "hfss"
-  meaningString Thfilneg = controlSequence "hfilneg"
-  meaningString TControlSpace = controlSequence " "
-  meaningString Traise = controlSequence "raise"
-  meaningString Tlower = controlSequence "lower"
-  meaningString TItalicCorrection = controlSequence "/"
-  meaningString Tdiscretionary = controlSequence "discretionary"
-  meaningString TDiscretionaryHyphen = controlSequence "-"
-  meaningString TUstartmath = controlSequence "Ustartmath"
-  meaningString TUstartdisplaymath = controlSequence "Ustartdisplaymath"
+instance IsPrimitive TypesetCommand where
+  primitiveName Tspecial = "special"
+  primitiveName Tpenalty = "penalty"
+  primitiveName Tkern = "kern"
+  primitiveName Tunpenalty = "unpenalty"
+  primitiveName Tunkern = "unkern"
+  primitiveName Tunskip = "unskip"
+  primitiveName Tmark = "mark"
+  primitiveName Tinsert = "insert"
+  primitiveName Tvadjust = "vadjust"
+  primitiveName Thalign = "halign"
+  primitiveName Tindent = "indent"
+  primitiveName Tnoindent = "noindent"
+  primitiveName Tvrule = "vrule"
+  primitiveName Tchar = "char"
+  primitiveName Thskip = "hskip"
+  primitiveName Thfil = "hfil"
+  primitiveName Thfill = "hfill"
+  primitiveName Thss = "hfss"
+  primitiveName Thfilneg = "hfilneg"
+  primitiveName TControlSpace = " "
+  primitiveName Traise = "raise"
+  primitiveName Tlower = "lower"
+  primitiveName TItalicCorrection = "/"
+  primitiveName Tdiscretionary = "discretionary"
+  primitiveName TDiscretionaryHyphen = "-"
+  primitiveName TUstartmath = "Ustartmath"
+  primitiveName TUstartdisplaymath = "Ustartdisplaymath"
+
+instance Meaning TypesetCommand
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute TypesetCommand m where
   doExecute = can'tUseThisCommandInCurrentMode
@@ -91,16 +93,18 @@ data BoxCommand = Bbox
                 | Bhbox
                 | Bvbox
                 | Bvtop
-                deriving (Eq,Show)
+                deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning BoxCommand where
-  meaningString Bbox = controlSequence "box"
-  meaningString Bcopy = controlSequence "copy"
-  meaningString Blastbox = controlSequence "lastbox"
-  meaningString Bvsplit = controlSequence "vsplit"
-  meaningString Bhbox = controlSequence "hbox"
-  meaningString Bvbox = controlSequence "vbox"
-  meaningString Bvtop = controlSequence "vtop"
+instance IsPrimitive BoxCommand where
+  primitiveName Bbox = "box"
+  primitiveName Bcopy = "copy"
+  primitiveName Blastbox = "lastbox"
+  primitiveName Bvsplit = "vsplit"
+  primitiveName Bhbox = "hbox"
+  primitiveName Bvbox = "vbox"
+  primitiveName Bvtop = "vtop"
+
+instance Meaning BoxCommand
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute BoxCommand m where
   doExecute _ = throwError "box commands are not implemented yet"

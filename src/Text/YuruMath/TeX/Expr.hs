@@ -24,19 +24,21 @@ data ExprCommand = Enumexpr
                  | Eglueshrinkorder
                  | Emutoglue
                  | Egluetomu
-                 deriving (Eq,Show)
+                 deriving (Eq,Show,Enum,Bounded)
 
-instance Meaning ExprCommand where
-  meaningString Enumexpr = controlSequence "numexpr"
-  meaningString Edimexpr = controlSequence "dimexpr"
-  meaningString Eglueexpr = controlSequence "glueexpr"
-  meaningString Emuexpr = controlSequence "muexpr"
-  meaningString Egluestretch = controlSequence "gluestretch"
-  meaningString Eglueshrink = controlSequence "glueshrink"
-  meaningString Egluestretchorder = controlSequence "gluestretchorder"
-  meaningString Eglueshrinkorder = controlSequence "glueshrinkorder"
-  meaningString Emutoglue = controlSequence "mutoglue"
-  meaningString Egluetomu = controlSequence "gluetomu"
+instance IsPrimitive ExprCommand where
+  primitiveName Enumexpr = "numexpr"
+  primitiveName Edimexpr = "dimexpr"
+  primitiveName Eglueexpr = "glueexpr"
+  primitiveName Emuexpr = "muexpr"
+  primitiveName Egluestretch = "gluestretch"
+  primitiveName Eglueshrink = "glueshrink"
+  primitiveName Egluestretchorder = "gluestretchorder"
+  primitiveName Eglueshrinkorder = "glueshrinkorder"
+  primitiveName Emutoglue = "mutoglue"
+  primitiveName Egluetomu = "gluetomu"
+
+instance Meaning ExprCommand
 
 -- \numexpr's rounded division:
 -- * If x * y > 0, return (floor (x % y + 1 / 2)).

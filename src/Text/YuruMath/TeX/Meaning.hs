@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DefaultSignatures #-}
 module Text.YuruMath.TeX.Meaning
   (MessageString(..)
   ,MessageContext(..)
@@ -11,6 +12,7 @@ module Text.YuruMath.TeX.Meaning
   ,throwErrorMessage
   ,Meaning(..)
   ,controlSequence
+  ,primitiveMeaningString
   ,showCommandName
   ,showToken
   ,can'tUseThisCommandInCurrentMode
@@ -62,6 +64,8 @@ throwErrorMessage m = do
 
 class Meaning a where
   meaningString :: a -> MessageString
+  default meaningString :: (IsPrimitive a) => a -> MessageString
+  meaningString = primitiveMeaningString
 
 can'tUseThisCommandInCurrentMode :: (Meaning a, MonadTeXState s m, MonadError String m) => a -> m b
 can'tUseThisCommandInCurrentMode value = do
@@ -88,6 +92,9 @@ prependEscapechar e s | isUnicodeScalarValue e = chr e : s
 controlSequence :: String -> MessageString
 controlSequence name = MessageString $
   \ctx -> prependEscapechar (_escapechar ctx) name
+
+primitiveMeaningString :: (IsPrimitive a) => a -> MessageString
+primitiveMeaningString command = controlSequence $ T.unpack $ primitiveName command
 
 -- Show a command name, without a space appended. Used by \show
 showCommandName :: CommandName -> MessageString

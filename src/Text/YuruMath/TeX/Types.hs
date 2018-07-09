@@ -152,7 +152,7 @@ data LimitsSpec = Limits
 data ConditionalMarker = Eelse -- \else
                        | Efi -- \fi
                        | Eor -- \or
-                       deriving (Eq)
+                       deriving (Eq,Enum,Bounded)
 
 class (Eq e) => IsExpandable e where
   isConditional       :: e -> Bool -- Used by \if.., \or, \else to skip conditionals
@@ -205,6 +205,12 @@ isImplicitSpace :: (IsNValue v) => v -> Bool
 isImplicitSpace v = case toCommonValue v of
   Just (Character _ CCSpace) -> True
   _ -> False
+
+class IsPrimitive a where
+  primitiveName :: a -> Text
+  primitivesOfThisType :: [a]
+  default primitivesOfThisType :: (Bounded a,Enum a) => [a]
+  primitivesOfThisType = [minBound..maxBound]
 
 data Mode = HorizontalMode
           | RestrictedHorizontalMode

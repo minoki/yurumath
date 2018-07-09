@@ -194,8 +194,6 @@ umathcharnumdefCommand = do
   w <- readUMathCode32
   texAssign (definitionAt name) (nonexpandableToValue $ DefinedMathCharacter w)
 
--- \countdef, \dimendef, \muskipdef, \skipdef, \toksdef
-
 catcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 catcodeGet = do
   slot <- readUnicodeScalarValue
@@ -568,7 +566,7 @@ data CommonExecutable = Eglobal
                       | Eadvance
                       | Emultiply
                       | Edivide
-                      deriving (Eq,Show)
+                      deriving (Eq,Show,Enum,Bounded)
 
 instance Meaning CountReg where
   meaningString (CountReg i) = controlSequence "count" <> fromString (show i)
@@ -622,43 +620,45 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExecute ToksReg 
   doGlobal (ToksReg i) = Just $ runGlobal $ setToksReg i
   getQuantity (ToksReg i) = QToks $ use (localState . toksRegAt i)
 
-instance Meaning CommonExecutable where
-  meaningString Eglobal = controlSequence "global"
-  meaningString Elet = controlSequence "let"
-  meaningString Efuturelet = controlSequence "futurelet"
-  meaningString Euppercase = controlSequence "uppercase"
-  meaningString Elowercase = controlSequence "lowercase"
-  meaningString Eignorespaces = controlSequence "ignorespaces"
-  meaningString Echardef = controlSequence "chardef"
-  meaningString Emathchardef = controlSequence "mathchardef"
-  meaningString EUmathchardef = controlSequence "Umathchardef"
-  meaningString EUmathcharnumdef = controlSequence "Umathcharnumdef"
-  meaningString Ecatcode = controlSequence "catcode"
-  meaningString Elccode = controlSequence "lccode"
-  meaningString Euccode = controlSequence "uccode"
-  meaningString Emathcode = controlSequence "mathcode"
-  meaningString Edelcode = controlSequence "delcode"
-  meaningString EUmathcode = controlSequence "Umathcode"
-  meaningString EUmathcodenum = controlSequence "Umathcodenum"
-  meaningString EUdelcode = controlSequence "Udelcode"
-  meaningString EUdelcodenum = controlSequence "Udelcodenum"
-  meaningString Ebegingroup = controlSequence "begingroup"
-  meaningString Eendgroup = controlSequence "endgroup"
-  meaningString Eendlinechar = controlSequence "endlinechar"
-  meaningString Eescapechar = controlSequence "escapechar"
-  meaningString Ecount = controlSequence "count"
-  meaningString Ecountdef = controlSequence "countdef"
-  meaningString Edimen = controlSequence "dimen"
-  meaningString Edimendef = controlSequence "dimendef"
-  meaningString Eskip = controlSequence "skip"
-  meaningString Eskipdef = controlSequence "skipdef"
-  meaningString Emuskip = controlSequence "muskip"
-  meaningString Emuskipdef = controlSequence "muskipdef"
-  meaningString Etoks = controlSequence "toks"
-  meaningString Etoksdef = controlSequence "toksdef"
-  meaningString Eadvance = controlSequence "advance"
-  meaningString Emultiply = controlSequence "multiply"
-  meaningString Edivide = controlSequence "divide"
+instance IsPrimitive CommonExecutable where
+  primitiveName Eglobal = "global"
+  primitiveName Elet = "let"
+  primitiveName Efuturelet = "futurelet"
+  primitiveName Euppercase = "uppercase"
+  primitiveName Elowercase = "lowercase"
+  primitiveName Eignorespaces = "ignorespaces"
+  primitiveName Echardef = "chardef"
+  primitiveName Emathchardef = "mathchardef"
+  primitiveName EUmathchardef = "Umathchardef"
+  primitiveName EUmathcharnumdef = "Umathcharnumdef"
+  primitiveName Ecatcode = "catcode"
+  primitiveName Elccode = "lccode"
+  primitiveName Euccode = "uccode"
+  primitiveName Emathcode = "mathcode"
+  primitiveName Edelcode = "delcode"
+  primitiveName EUmathcode = "Umathcode"
+  primitiveName EUmathcodenum = "Umathcodenum"
+  primitiveName EUdelcode = "Udelcode"
+  primitiveName EUdelcodenum = "Udelcodenum"
+  primitiveName Ebegingroup = "begingroup"
+  primitiveName Eendgroup = "endgroup"
+  primitiveName Eendlinechar = "endlinechar"
+  primitiveName Eescapechar = "escapechar"
+  primitiveName Ecount = "count"
+  primitiveName Ecountdef = "countdef"
+  primitiveName Edimen = "dimen"
+  primitiveName Edimendef = "dimendef"
+  primitiveName Eskip = "skip"
+  primitiveName Eskipdef = "skipdef"
+  primitiveName Emuskip = "muskip"
+  primitiveName Emuskipdef = "muskipdef"
+  primitiveName Etoks = "toks"
+  primitiveName Etoksdef = "toksdef"
+  primitiveName Eadvance = "advance"
+  primitiveName Emultiply = "multiply"
+  primitiveName Edivide = "divide"
+
+instance Meaning CommonExecutable
 
 instance (Monad m, MonadTeXState s m, MonadError String m, Elem CountReg (NValueSet s), Elem DimenReg (NValueSet s), Elem SkipReg (NValueSet s), Elem MuskipReg (NValueSet s), Elem ToksReg (NValueSet s), Meaning (NValue s)) => DoExecute CommonExecutable m where
   doExecute Eglobal          = globalCommand

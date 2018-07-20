@@ -174,7 +174,7 @@ instance (IsExpandable e, IsExpandable (Union (Delete e es)), Typeable e) => IsE
 data CommonValue = Character !Char !CatCode       -- character with category code
                  | DefinedCharacter !Char         -- defined with \chardef
                  | DefinedMathCharacter !MathCode -- defined with \mathchardef or \Umathchardef
-                 | IntegerConstant !Int
+                 | IntegerConstant !Int32
                  | Relax                          -- \relax
                  | Endcsname                      -- \endcsname
                  deriving (Show)

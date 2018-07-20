@@ -224,6 +224,7 @@ data MathCommands
   -- \Ustartmath, \Ustartdisplaymath: not really math commands...
 
   | MYuruMathSizedDelimiter -- for \big, \Big, \bigg, \Bigg
+  | MYuruMathInternalMathStyle
 
   deriving (Eq,Show,Enum,Bounded)
 
@@ -277,6 +278,7 @@ instance IsPrimitive MathCommands where
   primitiveName MUstopmath = "Ustopmath"
   primitiveName MUstopdisplaymath = "Ustopdisplaymath"
   primitiveName MYuruMathSizedDelimiter = "YuruMathSizedDelimiter"
+  primitiveName MYuruMathInternalMathStyle = "YuruMathInternalMathStyle"
 
 instance Meaning MathCommands
 
@@ -300,6 +302,7 @@ instance (Monad m, MonadTeXState state m, MonadError String m, IsMathState state
   getQuantity Mthinmuskip  = QMuGlue (use (localState . thinmuskip))
   getQuantity Mmedmuskip   = QMuGlue (use (localState . medmuskip))
   getQuantity Mthickmuskip = QMuGlue (use (localState . thickmuskip))
+  getQuantity MYuruMathInternalMathStyle = QInteger $ (fromIntegral . maybe (-1) fromEnum) <$> use currentMathStyle
   getQuantity _            = NotQuantity
 
 --
@@ -389,6 +392,7 @@ mathDefinitions = Map.fromList
   ,("crampedscriptscriptstyle",liftUnion (MathStyleSet CrampedScriptScriptStyle))
 
   ,("YuruMathSizedDelimiter",        liftUnion MYuruMathSizedDelimiter)
+  ,("YuruMathInternalMathStyle",     liftUnion MYuruMathInternalMathStyle)
   ,("YuruMathSetNormal",             liftUnion (MathVariantSet MVNormal))
   ,("YuruMathSetBold",               liftUnion (MathVariantSet MVBold))
   ,("YuruMathSetItalic",             liftUnion (MathVariantSet MVItalic))

@@ -15,6 +15,7 @@ import Text.YuruMath.TeX.Quantity
 import Text.YuruMath.TeX.State
 import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Typeset
+import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Math.List
 import Text.YuruMath.TeX.Math.State
 import Text.YuruMath.TeX.Math.Command
@@ -333,6 +334,7 @@ readMathToken = do
       MUhextensible    -> throwError "\\Uhextensible: not implemented yet"
       MUnosuperscript  -> throwError "\\Unosuperscript: not implemented yet"
       MUnosubscript    -> throwError "\\Unosubscript: not implemented yet"
+      MYuruMathInternalMathStyle -> can'tUseThisCommandInCurrentMode v
     doBoxCommand box = return $ MTBox False box
 
 readDelimiter :: (MonadMathState state m, MonadError String m) => m DelimiterCode

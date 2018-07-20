@@ -143,6 +143,13 @@ umathcharnumdefCommand = do
   w <- readUMathCode32
   texAssign (definitionAt name) (nonexpandableToValue $ DefinedMathCharacter w)
 
+intdefCommand :: (MonadTeXState s m, MonadError String m) => m (Assignment s)
+intdefCommand = do
+  name <- readCommandName
+  readEquals
+  value <- readInt32
+  texAssign (definitionAt name) (nonexpandableToValue $ IntegerConstant value)
+
 catcodeGet :: (MonadTeXState s m, MonadError String m) => m Integer
 catcodeGet = do
   slot <- readUnicodeScalarValue
@@ -386,6 +393,7 @@ data CommonExecutable = Eglobal
                       | Emathchardef
                       | EUmathchardef
                       | EUmathcharnumdef
+                      | EYuruMathIntDef
                       | Ecatcode
                       | Elccode
                       | Euccode
@@ -415,6 +423,7 @@ instance IsPrimitive CommonExecutable where
   primitiveName Emathchardef = "mathchardef"
   primitiveName EUmathchardef = "Umathchardef"
   primitiveName EUmathcharnumdef = "Umathcharnumdef"
+  primitiveName EYuruMathIntDef = "YuruMathIntDef"
   primitiveName Ecatcode = "catcode"
   primitiveName Elccode = "lccode"
   primitiveName Euccode = "uccode"
@@ -442,6 +451,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (NValue s)) =
   doExecute Emathchardef     = runLocal mathchardefCommand
   doExecute EUmathchardef    = runLocal umathchardefCommand
   doExecute EUmathcharnumdef = runLocal umathcharnumdefCommand
+  doExecute EYuruMathIntDef  = runLocal intdefCommand
   doExecute Ecatcode         = runLocal catcodeSet
   doExecute Elccode          = runLocal lccodeSet
   doExecute Euccode          = runLocal uccodeSet
@@ -468,6 +478,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (NValue s)) =
   doGlobal Emathchardef      = Just $ runGlobal mathchardefCommand
   doGlobal EUmathchardef     = Just $ runGlobal umathchardefCommand
   doGlobal EUmathcharnumdef  = Just $ runGlobal umathcharnumdefCommand
+  doGlobal EYuruMathIntDef   = Just $ runGlobal intdefCommand
   doGlobal Ecatcode          = Just $ runGlobal catcodeSet
   doGlobal Elccode           = Just $ runGlobal lccodeSet
   doGlobal Euccode           = Just $ runGlobal uccodeSet
@@ -513,6 +524,7 @@ executableDefinitions = Map.fromList
   ,("mathchardef",    liftUnion Emathchardef)
   ,("Umathchardef",   liftUnion EUmathchardef)
   ,("Umathcharnumdef",liftUnion EUmathcharnumdef)
+  ,("YuruMathIntDef", liftUnion EYuruMathIntDef)
   ,("catcode",        liftUnion Ecatcode)
   ,("lccode",         liftUnion Elccode)
   ,("uccode",         liftUnion Euccode)

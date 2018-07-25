@@ -242,6 +242,20 @@ etest16 = TestCase $ assertEqual "\\noexpand and \\expandafter" expected $ runMe
                      ,"FOO"
                      ]
 
+etest17 = TestCase $ assertEqual "\\if and \\ifcat" expected $ runMessage $ concat
+          ["\\catcode`\\!=13"
+          ,"\\message{\\ifcat\\noexpand~\\noexpand!Y\\else N\\fi}"
+          ,"\\let!=\\relax"
+          ,"\\message{\\ifcat\\noexpand~\\noexpand!Y\\else N\\fi}"
+          ,"\\let\\A=a"
+          ,"\\message{\\if a\\A Y\\else N\\fi}"
+          ]
+  where
+    expected = Right ["Y"
+                     ,"N"
+                     ,"Y"
+                     ]
+
 macrotest1 = TestCase $ assertEqual "Macro 1" expected (runMathList True "\\edef\\foo{\\number\"FF}\\def\\bar{255}\\ifx\\foo\\bar Y\\else N\\fi")
   where
     expected = Right $ map (IAtom . mkAtom AOrd . MFSymbol 1 MVItalic SMSymbol . T.singleton) "Y"
@@ -403,6 +417,7 @@ tests = TestList [TestLabel "Tokenization 1" ttest1
                  ,TestLabel "Expansion 14 (\\expanded)" etest14
                  ,TestLabel "Expansion 15 (inserted \\relax)" etest15
                  ,TestLabel "Expansion 16 (\\noexpand and \\expandafter)" etest16
+                 ,TestLabel "Expansion 17 (\\if and \\ifcat)" etest17
                  ,TestLabel "Macro 1" macrotest1
                  ,TestLabel "Math 1" mtest1
                  ,TestLabel "Math 2" mtest2

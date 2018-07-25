@@ -202,25 +202,25 @@ iftrueCommand = return True
 iffalseCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 iffalseCommand = return False
 
+getCharCodeAndCatCode :: (IsNValue v) => (ExpansionToken,v) -> Maybe (Char,CatCode)
+getCharCodeAndCatCode p = case p of
+  (_,v) | Just (Character c cc) <- toCommonValue v -> Just (c,cc) -- explicit or implicit character token
+  (ETCommandName { etName = NActiveChar c, etFlavor = ECNFNoexpand },_) -> Just (c,CCActive) -- \noexpand-ed active character
+  _ -> Nothing
+
 -- \if: test character codes
 ifCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifCommand = do
-  t1 <- fst <$> required nextExpandedToken
-  t2 <- fst <$> required nextExpandedToken
-  let toChar (ETCharacter { etChar = c }) = Just c
-      toChar (ETCommandName { etName = NActiveChar c }) = Just c
-      toChar (ETCommandName { etName = NControlSeq _ }) = Nothing
-  return $ toChar t1 == toChar t2
+  t1 <- required nextExpandedToken
+  t2 <- required nextExpandedToken
+  return $ fmap fst (getCharCodeAndCatCode t1) == fmap fst (getCharCodeAndCatCode t2)
 
 -- \ifcat: test category codes
 ifcatCommand :: (MonadTeXState a m, MonadError String m) => m Bool
 ifcatCommand = do
-  t1 <- fst <$> required nextExpandedToken
-  t2 <- fst <$> required nextExpandedToken
-  let toCC (ETCharacter { etCatCode = cc }) = Just cc
-      toCC (ETCommandName { etName = NActiveChar _ }) = Just CCActive
-      toCC (ETCommandName { etName = NControlSeq _ }) = Nothing
-  return $ toCC t1 == toCC t2
+  t1 <- required nextExpandedToken
+  t2 <- required nextExpandedToken
+  return $ fmap snd (getCharCodeAndCatCode t1) == fmap snd (getCharCodeAndCatCode t2)
 
 ifxCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifxCommand = do

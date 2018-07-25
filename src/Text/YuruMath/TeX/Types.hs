@@ -48,6 +48,7 @@ data CatCode = CCEscape       -- 0
 data CommandName = NControlSeq !Text
                  | NActiveChar !Char
                  deriving (Eq,Show)
+-- TODO: 'frozen' control sequences?
 
 data TeXToken = TTCommandName !CommandName
               | TTCharacter !Char !CatCode -- not CCEscape, CCEndLine, CCIgnored, CCActive, CCComment, CCInvalid
@@ -239,6 +240,17 @@ data TokenizerState = TokenizerState
                       -- , tsCurrentColumn :: !Int
                       }
 
+data InputState = InputState
+                  { _inputTokenizerState :: !TokenizerState
+                  , _inputPendingTokenList :: [ExpansionToken]
+                  }
+
+inputTokenizerState :: Lens' InputState TokenizerState
+inputTokenizerState = lens _inputTokenizerState (\s v -> s { _inputTokenizerState = v })
+
+inputPendingTokenList :: Lens' InputState [ExpansionToken]
+inputPendingTokenList = lens _inputPendingTokenList (\s v -> s { _inputPendingTokenList = v })
+
 data ScopeType = ScopeByBrace      -- { .. }
                | ScopeByBeginGroup -- \begingroup .. \endgroup
                | GlobalScope
@@ -269,7 +281,7 @@ data CommonLocalState ecommand value
     , _thinmuskip    :: !(Glue MuDimen)
     , _medmuskip     :: !(Glue MuDimen)
     , _thickmuskip   :: !(Glue MuDimen)
-    -- TODO: Use extensible variants?
+    -- TODO: Use extensible records?
     }
 
 data ConditionalKind = CondTruthy
@@ -279,13 +291,14 @@ data ConditionalKind = CondTruthy
 
 data CommonState localstate
   = CommonState
-    { _tokenizerState     :: !TokenizerState
+    { _inputStateStack    :: ![InputState] -- must be non-empty
     , _esMaxDepth         :: !Int
     , _esMaxPendingToken  :: !Int
-    , _esPendingTokenList :: [ExpansionToken]
+    -- , _esPendingTokenList :: [ExpansionToken]
+    , _conditionals       :: [ConditionalKind]
+    , _nameInProgress     :: !Bool
     , _localStates        :: [localstate] -- must be non-empty
     , _mode               :: !Mode
-    , _conditionals       :: [ConditionalKind]
     }
 
 class (IsExpandable (Union (ExpandableSetT localstate)), IsNValue (Union (NValueSetT localstate)), Elem CommonValue (NValueSetT localstate)) => IsLocalState localstate where
@@ -346,18 +359,26 @@ class (IsLocalState (LocalState state)) => IsState state where
   commonState        :: Lens' state (CommonState (LocalState state))
 
 -- tokenizer
+inputStateStack    :: (IsState state) => Lens' state [InputState]
+inputStateStack    = commonState . lens _inputStateStack (\s v -> s { _inputStateStack = v })
+inputState         :: (IsState state) => Lens' state InputState
+inputState         = inputStateStack . lens head setter
+  where setter [] _ = error "Invalid input state stack"
+        setter (_:xs) x = x:xs
 tokenizerState     :: (IsState state) => Lens' state TokenizerState
-tokenizerState     = commonState . lens _tokenizerState     (\s v -> s { _tokenizerState = v })
+tokenizerState     = inputState . inputTokenizerState
 
 -- expansion processor
 esMaxDepth         :: (IsState state) => Lens' state Int -- read-only?
 esMaxPendingToken  :: (IsState state) => Lens' state Int -- read-only?
 esPendingTokenList :: (IsState state) => Lens' state [ExpansionToken]
 conditionals       :: (IsState state) => Lens' state [ConditionalKind]
+nameInProgress     :: (IsState state) => Lens' state Bool
 esMaxDepth         = commonState . lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
 esMaxPendingToken  = commonState . lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
-esPendingTokenList = commonState . lens _esPendingTokenList (\s v -> s { _esPendingTokenList = v })
+esPendingTokenList = commonState . inputState . inputPendingTokenList
 conditionals       = commonState . lens _conditionals       (\s v -> s { _conditionals = v })
+nameInProgress     = commonState . lens _nameInProgress     (\s v -> s { _nameInProgress = v })
 
 -- others
 localStates        :: (IsState state) => Lens' state [LocalState state]

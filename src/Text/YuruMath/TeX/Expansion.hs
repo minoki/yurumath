@@ -31,8 +31,17 @@ nextUnexpandedToken :: (MonadState s m, IsState s, MonadError String m) => m (Ma
 nextUnexpandedToken = do
   pending <- use esPendingTokenList
   case pending of
-    [] -> do t <- Tok.nextToken
-             return (toEToken <$> t)
+    [] -> do
+      t <- Tok.nextToken
+      case t of
+        Nothing -> do
+          is <- use inputStateStack
+          case is of
+            _:xs@(_:_) -> do -- more in the input stack
+              assign inputStateStack xs
+              nextUnexpandedToken
+            _ -> return Nothing
+        Just t -> return (Just (toEToken t))
     t:ts -> do
       assign esPendingTokenList ts
       return (Just t)

@@ -11,56 +11,64 @@ import Control.Lens.Setter (set,assign,modifying)
 
 initialLocalState :: CommonLocalState e v
 initialLocalState = CommonLocalState
-                            { _scopeType = GlobalScope
-                            , _controlSeqDef = Map.empty
-                            , _activeDef = Map.empty
-                            , _catcodeMap = Map.empty
-                            , _lccodeMap = Map.empty
-                            , _uccodeMap = Map.empty
-                            , _mathcodeMap = Map.empty
-                            , _delcodeMap = Map.empty
-                            , _endlinechar = ord '\r'
-                            , _escapechar = ord '\\'
-                            , _countReg = Map.empty
-                            , _dimenReg = Map.empty
-                            , _skipReg = Map.empty
-                            , _muskipReg = Map.empty
-                            , _toksReg = Map.empty
-                            , _thinmuskip = Glue { glueSpace = mu 3, glueStretch = zeroQ, glueShrink = zeroQ } -- 3mu
-                            , _medmuskip = Glue { glueSpace = mu 4, glueStretch = FixedSS (mu 2), glueShrink = FixedSS (mu 4) } -- 4mu plus 2mu minus 4mu
-                            , _thickmuskip = Glue { glueSpace = mu 5, glueStretch = FixedSS (mu 5), glueShrink = zeroQ } -- 5mu plus 5mu
-                            }
+  { _scopeType = GlobalScope
+  , _controlSeqDef = Map.empty
+  , _activeDef = Map.empty
+  , _catcodeMap = Map.empty
+  , _lccodeMap = Map.empty
+  , _uccodeMap = Map.empty
+  , _mathcodeMap = Map.empty
+  , _delcodeMap = Map.empty
+  , _endlinechar = ord '\r'
+  , _escapechar = ord '\\'
+  , _countReg = Map.empty
+  , _dimenReg = Map.empty
+  , _skipReg = Map.empty
+  , _muskipReg = Map.empty
+  , _toksReg = Map.empty
+  , _thinmuskip = Glue { glueSpace = mu 3, glueStretch = zeroQ, glueShrink = zeroQ } -- 3mu
+  , _medmuskip = Glue { glueSpace = mu 4, glueStretch = FixedSS (mu 2), glueShrink = FixedSS (mu 4) } -- 4mu plus 2mu minus 4mu
+  , _thickmuskip = Glue { glueSpace = mu 5, glueStretch = FixedSS (mu 5), glueShrink = zeroQ } -- 5mu plus 5mu
+  }
 
 initialState :: String -> CommonState (CommonLocalState e v)
 initialState input = CommonState
-  { _tokenizerState = TokenizerState
-                      { tsInput         = input
-                      , tsSpacingState  = SSNewLine
-                      -- , tsCurrentLine   = 0
-                      -- , tsCurrentColumn = 0
-                      }
+  { _inputStateStack = [InputState
+                        { _inputTokenizerState = TokenizerState
+                          { tsInput         = input
+                          , tsSpacingState  = SSNewLine
+                          -- , tsCurrentLine   = 0
+                          -- , tsCurrentColumn = 0
+                          }
+                        , _inputPendingTokenList = []
+                        }
+                       ]
   , _esMaxDepth = 100
   , _esMaxPendingToken = 100
-  , _esPendingTokenList = []
+  , _conditionals = []
+  , _nameInProgress = False
   , _localStates = [initialLocalState]
   , _mode = VerticalMode
-  , _conditionals = []
   }
 
 initialStateWithLocalState :: l -> String -> CommonState l
 initialStateWithLocalState localState input = CommonState
-  { _tokenizerState = TokenizerState
-                      { tsInput         = input
-                      , tsSpacingState  = SSNewLine
-                      -- , tsCurrentLine   = 0
-                      -- , tsCurrentColumn = 0
-                      }
+  { _inputStateStack = [InputState
+                        { _inputTokenizerState = TokenizerState
+                          { tsInput         = input
+                          , tsSpacingState  = SSNewLine
+                          -- , tsCurrentLine   = 0
+                          -- , tsCurrentColumn = 0
+                          }
+                        , _inputPendingTokenList = []
+                        }
+                       ]
   , _esMaxDepth = 100
   , _esMaxPendingToken = 100
-  , _esPendingTokenList = []
+  , _conditionals = []
+  , _nameInProgress = False
   , _localStates = [localState]
   , _mode = VerticalMode
-  , _conditionals = []
   }
 
 defaultCategoryCodeOf :: Char -> CatCode

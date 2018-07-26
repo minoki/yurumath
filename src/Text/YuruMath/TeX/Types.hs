@@ -294,7 +294,7 @@ data CommonState localstate
     { _inputStateStack    :: ![InputState] -- must be non-empty
     , _esMaxDepth         :: !Int
     , _esMaxPendingToken  :: !Int
-    , _conditionals       :: [ConditionalKind]
+    , _conditionalStack   :: [ConditionalKind]
     , _nameInProgress     :: !Bool
     , _localStates        :: [localstate] -- must be non-empty
     , _mode               :: !Mode
@@ -371,12 +371,12 @@ tokenizerState     = inputState . inputTokenizerState
 esMaxDepth         :: (IsState state) => Lens' state Int -- read-only?
 esMaxPendingToken  :: (IsState state) => Lens' state Int -- read-only?
 esPendingTokenList :: (IsState state) => Lens' state [ExpansionToken]
-conditionals       :: (IsState state) => Lens' state [ConditionalKind]
+conditionalStack   :: (IsState state) => Lens' state [ConditionalKind]
 nameInProgress     :: (IsState state) => Lens' state Bool
 esMaxDepth         = commonState . lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
 esMaxPendingToken  = commonState . lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
 esPendingTokenList = commonState . inputState . inputPendingTokenList
-conditionals       = commonState . lens _conditionals       (\s v -> s { _conditionals = v })
+conditionalStack   = commonState . lens _conditionalStack   (\s v -> s { _conditionalStack = v })
 nameInProgress     = commonState . lens _nameInProgress     (\s v -> s { _nameInProgress = v })
 
 -- others

@@ -813,21 +813,22 @@ skipUntilOr !level = do
       | isConditional c -> skipUntilOr (level + 1)
     _ -> skipUntilOr level
 
+-- TODO: Do something for '\if\iftrue abc\else d\fi'
 doBooleanConditional :: (MonadTeXState s m, MonadError String m) => Bool -> m ()
 doBooleanConditional True = do
-  modifying conditionals (\(CondTest:xs) -> CondTruthy:xs)
+  modifying conditionalStack (\(CondTest:xs) -> CondTruthy:xs)
 doBooleanConditional False = do
   e <- skipUntilElse 0
   if e
-    then modifying conditionals (\(CondTest:xs) -> CondFalsy:xs)
-    else modifying conditionals tail
+    then modifying conditionalStack (\(CondTest:xs) -> CondFalsy:xs)
+    else modifying conditionalStack tail
 
 expandBooleanConditional :: (MonadTeXState s m, MonadError String m) => m Bool -> m [ExpansionToken]
 expandBooleanConditional c = do
-    modifying conditionals (CondTest:)
-    b <- c
-    doBooleanConditional b
-    return []
+  modifying conditionalStack (CondTest:)
+  b <- c
+  doBooleanConditional b
+  return []
 
 meaningWithoutExpansion :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m (Value s)
 meaningWithoutExpansion t = do

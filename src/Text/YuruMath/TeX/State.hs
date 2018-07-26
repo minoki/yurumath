@@ -45,7 +45,7 @@ initialState input = CommonState
                        ]
   , _esMaxDepth = 100
   , _esMaxPendingToken = 100
-  , _conditionals = []
+  , _conditionalStack = []
   , _nameInProgress = False
   , _localStates = [initialLocalState]
   , _mode = VerticalMode
@@ -65,7 +65,7 @@ initialStateWithLocalState localState input = CommonState
                        ]
   , _esMaxDepth = 100
   , _esMaxPendingToken = 100
-  , _conditionals = []
+  , _conditionalStack = []
   , _nameInProgress = False
   , _localStates = [localState]
   , _mode = VerticalMode

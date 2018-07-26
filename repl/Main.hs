@@ -47,7 +47,7 @@ repl = do
     Just input -> do
       assign tokenizerState (TokenizerState input SSNewLine)
       assign esPendingTokenList []
-      assign conditionals []
+      assign conditionalStack []
       result <- runExceptT $ runMMDGlobal <$> readMathMaterial
       output <- use outputLines
       lift $ forM_ output outputStrLn

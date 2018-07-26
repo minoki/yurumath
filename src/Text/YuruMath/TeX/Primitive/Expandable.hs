@@ -103,17 +103,17 @@ insertedRelax = ETCommandName { etDepth = 0, etFlavor = ECNFIsRelax, etName = NC
 
 elseCommand :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
 elseCommand self = do
-  cs <- use conditionals
+  cs <- use conditionalStack
   case cs of
     CondTruthy:css -> do
       -- \iftrue ... >>>\else<<< ... \fi
       skipUntilFi 0
-      assign conditionals css
+      assign conditionalStack css
       return []
     CondCase:css -> do
       -- \ifcase ... \or ... >>>\else<<< ... \fi
       skipUntilFi 0
-      assign conditionals css
+      assign conditionalStack css
       return []
     CondTest:_ -> do
       -- \else in a conditional test: insert a \relax
@@ -123,7 +123,7 @@ elseCommand self = do
 
 fiCommand :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
 fiCommand self = do
-  cs <- use conditionals
+  cs <- use conditionalStack
   case cs of
     [] -> throwError "Extra \\fi"
     CondTest:_ -> do
@@ -134,17 +134,17 @@ fiCommand self = do
       -- \iftrue ... >>>\fi<<<
       -- OR
       -- \iffalse ... \else ... >>>\fi<<<
-      assign conditionals css
+      assign conditionalStack css
       return []
 
 orCommand :: (MonadTeXState s m, MonadError String m) => ExpansionToken -> m [ExpansionToken]
 orCommand self = do
-  cs <- use conditionals
+  cs <- use conditionalStack
   case cs of
     CondCase:css -> do
       -- \ifcase N ... >>>\or<<< ... \fi
       skipUntilFi 0
-      assign conditionals css
+      assign conditionalStack css
       return []
     CondTest:_ -> do
       -- \or in a conditional test: insert a \relax
@@ -182,12 +182,12 @@ instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand Condition
 
 doIfCase :: (MonadTeXState s m, MonadError String m) => Integer -> m ()
 doIfCase 0 = do
-  modifying conditionals (CondCase:)
+  modifying conditionalStack (CondCase:)
 doIfCase n = do
   k <- skipUntilOr 0
   case k of
     FoundFi -> return ()
-    FoundElse -> modifying conditionals (CondFalsy:)
+    FoundElse -> modifying conditionalStack (CondFalsy:)
     FoundOr -> doIfCase (n - 1)
 
 ifcaseCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]

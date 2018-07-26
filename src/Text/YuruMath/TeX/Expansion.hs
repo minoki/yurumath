@@ -18,7 +18,7 @@ import Control.Monad.Reader.Class
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import Control.Lens.Getter (use,view)
-import Control.Lens.Setter (assign,modifying)
+import Control.Lens.Setter (assign,modifying,set)
 
 toEToken :: TeXToken -> ExpansionToken
 toEToken (TTCommandName name) = ETCommandName { etDepth = 0, etFlavor = ECNFPlain, etName = name }
@@ -338,14 +338,16 @@ required m = do a <- m
                   Just a -> return a
 
 -- used by \csname and \ifcsname
-readUntilEndcsname :: (MonadTeXState s m, MonadError String m) => [Char] -> m [Char]
-readUntilEndcsname revName = do
-  (t,v) <- required nextExpandedToken
-  case toCommonValue v of
-    Just Endcsname -> return (reverse revName)
-    _ -> case t of
-      ETCommandName { etName = name } -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
-      ETCharacter { etChar = c } -> readUntilEndcsname (c:revName) -- non-active character
+readUntilEndcsname :: (MonadTeXState s m, MonadError String m) => m String
+readUntilEndcsname = local (set isInCsname True) $ loop []
+  where
+    loop revName = do
+      (t,v) <- required nextExpandedToken
+      case toCommonValue v of
+        Just Endcsname -> return (reverse revName)
+        _ -> case t of
+          ETCommandName { etName = name } -> throwError $ "unexpected " ++ show name ++ " while looking for \\endcsname" -- not expandable, or \noexpand-ed
+          ETCharacter { etChar = c } -> loop (c:revName) -- non-active character
 
 stringToEToken :: String -> [ExpansionToken]
 stringToEToken = map charToEToken

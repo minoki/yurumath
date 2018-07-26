@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 import Control.Monad
 import Control.Monad.Error.Class
-import Control.Lens.Getter (use,views)
+import Control.Lens.Getter (use,view,views)
 import Control.Lens.Setter (assign,modifying)
 import Data.OpenUnion
 import TypeFun.Data.List (SubList)
@@ -43,7 +43,7 @@ noexpandCommand = do
 
 csnameCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 csnameCommand = do
-  name <- readUntilEndcsname []
+  name <- readUntilEndcsname
   let tname = T.pack name
 
   -- THE DREADED SIDE EFFECT OF \csname
@@ -56,7 +56,7 @@ csnameCommand = do
 -- LuaTeX extension: \begincsname
 begincsnameCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 begincsnameCommand = do
-  name <- readUntilEndcsname []
+  name <- readUntilEndcsname
   let tname = T.pack name
   return [ETCommandName { etDepth = 0, etFlavor = ECNFPlain, etName = NControlSeq tname }]
 
@@ -288,7 +288,7 @@ ifdefinedCommand = do
 -- e-TeX extension: \ifcsname
 ifcsnameCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifcsnameCommand = do
-  name <- readUntilEndcsname []
+  name <- readUntilEndcsname
   let tname = T.pack name
   d <- use (localState . controlSeqDef)
   return (Map.member tname d)
@@ -350,6 +350,9 @@ strcmpCommand = do
              LT -> stringToEToken "-1"
              EQ -> stringToEToken "0"
              GT -> stringToEToken "1"
+
+ifincsnameCommand :: (MonadTeXState s m, MonadError String m) => m Bool
+ifincsnameCommand = view isInCsname
 
 data CommonExpandable = Eexpandafter
                       | Enoexpand
@@ -448,6 +451,7 @@ data CommonBoolean = Eiftrue
 
                    -- pdfTeX extension:
                    | Eifabsnum
+                   | Eifincsname
                    deriving (Eq,Show,Enum,Bounded)
 
 instance IsExpandable CommonBoolean where
@@ -470,6 +474,7 @@ instance IsPrimitive CommonBoolean where
   primitiveName Eifdefined = "ifdefined"
   primitiveName Eifcsname = "ifcsname"
   primitiveName Eifabsnum = "ifabsnum"
+  primitiveName Eifincsname = "ifincsname"
 
 instance Meaning CommonBoolean
 
@@ -489,6 +494,7 @@ evalCommonBoolean Eifinner = ifinnerCommand
 evalCommonBoolean Eifdefined = ifdefinedCommand
 evalCommonBoolean Eifcsname = ifcsnameCommand
 evalCommonBoolean Eifabsnum = ifabsnumCommand
+evalCommonBoolean Eifincsname = ifincsnameCommand
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand CommonBoolean m where
   doExpand e _ = expandBooleanConditional (evalCommonBoolean e)
@@ -539,6 +545,7 @@ expandableDefinitions = Map.fromList
   ,("strcmp",      liftUnion Estrcmp) -- XeTeX name
   ,("expanded",    liftUnion Eexpanded)
   ,("ifabsnum",    liftUnion Eifabsnum) -- LuaTeX name (\ifpdfabsnum in pdfTeX)
+  ,("ifincsname",  liftUnion Eifincsname)
 
   -- LuaTeX extension:
   ,("begincsname", liftUnion Ebegincsname)
@@ -554,10 +561,13 @@ expandableDefinitions = Map.fromList
 --   \ifvoid
 --   \input
 --   \jobname
--- e-TeX:
---   \scantokens
 -- pdfTeX:
---   \ifincsname
+--   \ifpdfabsdim (\ifabsdim in LuaTeX)
+--   \pdfuniformdeviate (without pdf prefix in LuaTeX)
+--   \pdfnormaldeviate (without pdf prefix in LuaTeX)
+--   (\pdfrandomseed / \pdfsetrandomseed: non-expandable) (without pdf prefix in LuaTeX)
+--   \ifpdfprimitive (\ifprimitive in XeTeX, LuaTeX)
+--   \pdfprimitive (\primitive in XeTeX, LuaTeX)
 -- LuaTeX:
 --   \lastnamedcs
 -- LaTeX

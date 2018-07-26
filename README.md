@@ -72,7 +72,7 @@ Some commands are from e-TeX or XeTeX/LuaTeX.
 
 - `\expandafter`, `\noexpand`, `\csname`, `\string`, `\number`, `\romannumeral`, `\the`, `\meaning`
 - `\if`, `\ifcat`, `\ifx`, `\iftrue`, `\iffalse`, `\ifnum`, `\ifdim`, `\ifodd`, `\ifcase`
-- `\ifhmode`, `\ifvmode`, `\ifmmode`, `\ifinner`, `\ifdefined`, `\ifcsname`, `\ifabsnum`
+- `\ifhmode`, `\ifvmode`, `\ifmmode`, `\ifinner`, `\ifdefined`, `\ifcsname`, `\ifabsnum`, `\ifincsname`
 - `\unless`, `\else`, `\fi`, `\or`
 - `\begincsname`, `\csstring`, `\Uchar`, `\mathstyle`
 - `\unexpanded`, `\detokenize`, `\scantokens`, `\strcmp` (or `\pdfstrcmp`), `\expanded`

@@ -13,6 +13,7 @@ import Text.YuruMath.TeX.LaTeX
 import Text.YuruMath.Convert.TeXToMML
 import Text.YuruMath.Builder.MathML3
 import Text.Blaze.Renderer.Pretty as Pretty
+import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Getter (use)
@@ -48,7 +49,7 @@ repl = do
       assign tokenizerState (TokenizerState input SSNewLine)
       assign esPendingTokenList []
       assign conditionalStack []
-      result <- runExceptT $ runMMDGlobal <$> readMathMaterial
+      result <- runExceptT $ runReaderT (runMMDGlobal <$> readMathMaterial) (initialContext DisplayMathMode)
       output <- use outputLines
       lift $ forM_ output outputStrLn
       assign outputLines []

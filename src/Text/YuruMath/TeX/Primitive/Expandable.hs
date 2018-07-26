@@ -18,7 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 import Control.Monad
 import Control.Monad.Error.Class
-import Control.Lens.Getter (use,uses)
+import Control.Lens.Getter (use,views)
 import Control.Lens.Setter (assign,modifying)
 import Data.OpenUnion
 import TypeFun.Data.List (SubList)
@@ -268,16 +268,16 @@ ifoddCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifoddCommand = odd <$> readNumber
 
 ifhmodeCommand :: (MonadTeXState s m, MonadError String m) => m Bool
-ifhmodeCommand = uses mode isHMode
+ifhmodeCommand = views mode isHMode
 
 ifvmodeCommand :: (MonadTeXState s m, MonadError String m) => m Bool
-ifvmodeCommand = uses mode isVMode
+ifvmodeCommand = views mode isVMode
 
 ifmmodeCommand :: (MonadTeXState s m, MonadError String m) => m Bool
-ifmmodeCommand = uses mode isMMode
+ifmmodeCommand = views mode isMMode
 
 ifinnerCommand :: (MonadTeXState s m, MonadError String m) => m Bool
-ifinnerCommand = uses mode isInnerMode
+ifinnerCommand = views mode isInnerMode
 
 -- e-TeX extension: \ifdefined
 ifdefinedCommand :: (MonadTeXState s m, MonadError String m) => m Bool

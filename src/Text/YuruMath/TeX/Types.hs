@@ -16,6 +16,7 @@ import Data.Word
 import Data.Bits
 import Data.Char
 import Data.Text (Text)
+import Control.Monad.Reader.Class
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
@@ -227,6 +228,33 @@ isVMode m     = m == VerticalMode   || m == InternalVerticalMode
 isMMode m     = m == MathMode       || m == DisplayMathMode
 isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m == MathMode
 
+data Context
+  = Context { _isInCsname :: !Bool
+            , _nameInProgress :: !Bool
+            , _mode :: Mode
+            , _maxExpansionDepth :: !Int
+            , _maxPendingTokenListLength :: !Int
+            }
+
+initialContext :: Mode -> Context
+initialContext m = Context { _isInCsname = False
+                           , _nameInProgress = False
+                           , _mode = m
+                           , _maxExpansionDepth = 100
+                           , _maxPendingTokenListLength = 100
+                           }
+
+isInCsname :: Lens' Context Bool
+isInCsname = lens _isInCsname (\s v -> s { _isInCsname = v })
+nameInProgress :: Lens' Context Bool
+nameInProgress = lens _nameInProgress (\s v -> s { _nameInProgress = v })
+maxExpansionDepth :: Lens' Context Int
+maxExpansionDepth = lens _maxExpansionDepth (\s v -> s { _maxExpansionDepth = v })
+maxPendingTokenListLength :: Lens' Context Int
+maxPendingTokenListLength = lens _maxPendingTokenListLength (\s v -> s { _maxPendingTokenListLength = v })
+mode :: Lens' Context Mode
+mode = lens _mode (\s v -> s { _mode = v })
+
 data SpacingState = SSNewLine
                   | SSSkipSpaces
                   | SSMiddleOfLine
@@ -292,12 +320,8 @@ data ConditionalKind = CondTruthy
 data CommonState localstate
   = CommonState
     { _inputStateStack    :: ![InputState] -- must be non-empty
-    , _esMaxDepth         :: !Int
-    , _esMaxPendingToken  :: !Int
     , _conditionalStack   :: [ConditionalKind]
-    , _nameInProgress     :: !Bool
     , _localStates        :: [localstate] -- must be non-empty
-    , _mode               :: !Mode
     }
 
 class (IsExpandable (Union (ExpandableSetT localstate)), IsNValue (Union (NValueSetT localstate)), Elem CommonValue (NValueSetT localstate)) => IsLocalState localstate where
@@ -368,23 +392,15 @@ tokenizerState     :: (IsState state) => Lens' state TokenizerState
 tokenizerState     = inputState . inputTokenizerState
 
 -- expansion processor
-esMaxDepth         :: (IsState state) => Lens' state Int -- read-only?
-esMaxPendingToken  :: (IsState state) => Lens' state Int -- read-only?
 esPendingTokenList :: (IsState state) => Lens' state [ExpansionToken]
 conditionalStack   :: (IsState state) => Lens' state [ConditionalKind]
-nameInProgress     :: (IsState state) => Lens' state Bool
-esMaxDepth         = commonState . lens _esMaxDepth         (\s v -> s { _esMaxDepth = v })
-esMaxPendingToken  = commonState . lens _esMaxPendingToken  (\s v -> s { _esMaxPendingToken = v })
 esPendingTokenList = commonState . inputState . inputPendingTokenList
 conditionalStack   = commonState . lens _conditionalStack   (\s v -> s { _conditionalStack = v })
-nameInProgress     = commonState . lens _nameInProgress     (\s v -> s { _nameInProgress = v })
 
 -- others
 localStates        :: (IsState state) => Lens' state [LocalState state]
 localState         :: (IsState state) => Lens' state (LocalState state)
-mode               :: (IsState state) => Lens' state Mode
 localStates        = commonState . lens _localStates        (\s v -> s { _localStates = v })
-mode               = commonState . lens _mode               (\s v -> s { _mode = v })
 localState = localStates . lens head setter
   where setter [] _ = error "Invalid local state"
         setter (_:xs) x = x:xs
@@ -469,7 +485,12 @@ type Expandable s    = ExpandableT (LocalState s)
 type NValue s        = NValueT (LocalState s)
 type Value s         = ValueT (LocalState s)
 
-type MonadTeXState s m = (IsState s, MonadState s m, DoExpand (Expandable s) m, DoExecute (NValue s) m)
+type MonadTeXState s m = (IsState s
+                         ,MonadReader Context m
+                         ,MonadState s m
+                         ,DoExpand (Expandable s) m
+                         ,DoExecute (NValue s) m
+                         )
 
 instance Show ConditionalMarker where
   show Eelse = "\\else"

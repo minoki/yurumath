@@ -28,7 +28,7 @@ import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
 import Control.Monad.State (MonadState)
 import Control.Monad.Except (MonadError,throwError)
-import Control.Lens.Getter (use)
+import Control.Lens.Getter (use,view)
 import Data.OpenUnion
 import TypeFun.Data.List (Delete)
 import Data.Typeable (Typeable)
@@ -70,7 +70,7 @@ class Meaning a where
 can'tUseThisCommandInCurrentMode :: (Meaning a, MonadTeXState s m, MonadError String m) => a -> m b
 can'tUseThisCommandInCurrentMode value = do
   name <- showMessageStringM (meaningString value)
-  m <- use mode
+  m <- view mode
   let modeStr = case m of
         HorizontalMode -> "horizontal mode"
         RestrictedHorizontalMode -> "restricted horizontal mode"

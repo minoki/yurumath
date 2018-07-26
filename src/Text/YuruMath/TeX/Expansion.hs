@@ -14,9 +14,10 @@ import Data.Bits
 import qualified Data.Text as T
 import Data.Monoid ((<>))
 import Control.Monad
+import Control.Monad.Reader.Class
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
-import Control.Lens.Getter (use)
+import Control.Lens.Getter (use,view)
 import Control.Lens.Setter (assign,modifying)
 
 toEToken :: TeXToken -> ExpansionToken
@@ -46,27 +47,27 @@ nextUnexpandedToken = do
       assign esPendingTokenList ts
       return (Just t)
 
-unreadTokens' :: (MonadState s m, IsState s, MonadError String m) => [ExpansionToken] -> m ()
+unreadTokens' :: (MonadReader Context m, MonadState s m, IsState s, MonadError String m) => [ExpansionToken] -> m ()
 unreadTokens' ts = do
-  limit <- use esMaxPendingToken
+  limit <- view maxPendingTokenListLength
   ts' <- use esPendingTokenList
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (ts ++ ts')
 
-unreadTokens :: (MonadState s m, IsState s, MonadError String m) => Int -> [ExpansionToken] -> m ()
+unreadTokens :: (MonadReader Context m, MonadState s m, IsState s, MonadError String m) => Int -> [ExpansionToken] -> m ()
 unreadTokens !depth ts = do
-  limit <- use esMaxPendingToken
+  limit <- view maxPendingTokenListLength
   ts' <- use esPendingTokenList
-  maxDepth <- use esMaxDepth
+  maxDepth <- view maxExpansionDepth
   when (depth >= maxDepth) $ throwError "recursion too deep"
   when (length ts' + length ts > limit) $ throwError "token list too long"
   assign esPendingTokenList (map (\t -> t { etDepth = depth }) ts ++ ts')
 
-unreadToken :: (MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m ()
+unreadToken :: (MonadReader Context m, MonadState s m, IsState s, MonadError String m) => ExpansionToken -> m ()
 unreadToken t = do
-  limit <- use esMaxPendingToken
+  limit <- view maxPendingTokenListLength
   ts' <- use esPendingTokenList
-  maxDepth <- use esMaxDepth
+  maxDepth <- view maxExpansionDepth
   when (etDepth t >= maxDepth) $ throwError "recursion too deep"
   when (length ts' + 1 > limit) $ throwError "token list too long"
   assign esPendingTokenList (t : ts')

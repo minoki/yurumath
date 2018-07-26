@@ -52,7 +52,7 @@ initialLocalMathState
 
 initialMathState :: Bool -> CommonState localstate -> MathState localstate
 initialMathState !isDisplay !commonState
-  = MathState { _mCommonState = commonState { _mode = if isDisplay then DisplayMathMode else MathMode }
+  = MathState { _mCommonState = commonState
               , _currentMathStyle = Just $ if isDisplay then DisplayStyle else TextStyle
               }
 

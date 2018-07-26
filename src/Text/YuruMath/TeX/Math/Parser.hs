@@ -23,8 +23,9 @@ import Data.Word
 import Data.Bits
 import qualified Data.Text as T
 import Data.Monoid (mempty,Any(..),First(..))
+import Control.Monad.Reader (local)
 import Control.Monad.Except
-import Control.Lens.Getter (use)
+import Control.Lens.Getter (use,view)
 import Control.Lens.Setter (set,assign)
 import Control.Lens.Iso (non)
 import Control.Lens.Tuple (_1,_2,_3,_4,_5)
@@ -96,7 +97,7 @@ readMathToken = do
       Character _ CCBeginGroup   -> return $ Just (et,MTLBrace)
       Character _ CCEndGroup     -> return $ Just (et,MTRBrace)
       Character _ CCMathShift -> do
-        m <- use mode
+        m <- view mode
         if m == DisplayMathMode
           then do et' <- nextUnexpandedToken -- without expansion
                   case et' of

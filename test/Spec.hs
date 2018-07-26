@@ -11,6 +11,7 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Primitive
 import Text.YuruMath.TeX.Interaction
 import Text.YuruMath.TeX.Math
+import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Getter (use)
@@ -33,7 +34,7 @@ tokenizeAll = do
     Just t -> (t:) <$> tokenizeAll
 
 tokenizeAllString :: String -> Either String [TeXToken]
-tokenizeAllString input = runExcept (evalStateT tokenizeAll (initialState input))
+tokenizeAllString input = runExcept (runReaderT (evalStateT tokenizeAll (initialState input)) (initialContext DisplayMathMode))
 
 expandAll :: (MonadTeXState s m, MonadError String m) => m [NValue s]
 expandAll = do
@@ -43,7 +44,7 @@ expandAll = do
     Just (_,v) -> (v:) <$> expandAll
 
 expandAllString :: String -> Either String [NValue (CommonState (CommonLocalState ExpandablePrimitiveList NonExpandablePrimitiveList))]
-expandAllString input = runExcept (evalStateT (defineBuiltins >> expandAll) (initialState input))
+expandAllString input = runExcept (runReaderT (evalStateT (defineBuiltins >> expandAll) (initialState input)) (initialContext DisplayMathMode))
 
 type MathExpandableT = ExpandablePrimitiveList :++: MathExpandableList
 type MathValue = NonExpandablePrimitiveList :++: MathNonExpandablePrimitiveList
@@ -58,7 +59,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
                         ,mathDefinitions
                         ,m
                         ]
-      runMMDGlobal <$> readMathMaterial
+      runReaderT (runMMDGlobal <$> readMathMaterial) (initialContext (if isDisplay then DisplayMathMode else MathMode))
 
 runMessage :: String -> Either String [String]
 runMessage input = runExcept $ evalStateT (action >> use outputLines) initialState
@@ -73,7 +74,7 @@ runMessage input = runExcept $ evalStateT (action >> use outputLines) initialSta
                         ,interactionCommands
                         ,m
                         ]
-      runMMDGlobal <$> readMathMaterial
+      runReaderT (runMMDGlobal <$> readMathMaterial) (initialContext DisplayMathMode)
 
 ttest1 = TestCase $ assertEqual "Tokenize \\foo bar \\ 1\\23" expected (tokenizeAllString "\\foo bar \\ 1\\23")
   where

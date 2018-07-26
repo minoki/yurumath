@@ -12,6 +12,7 @@ import Text.YuruMath.TeX.LaTeX
 import Text.YuruMath.Convert.TeXToMML
 import Text.YuruMath.Builder.MathML3
 import Text.Blaze.Renderer.Pretty as Pretty
+import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Lens.Setter (modifying)
@@ -32,7 +33,7 @@ runMathList !isDisplay input = runExcept $ evalStateT action (initialMathState i
                         ,latexDefinitions
                         ,m
                         ]
-      runMMDGlobal <$> readMathMaterial
+      runReaderT (runMMDGlobal <$> readMathMaterial) (initialContext DisplayMathMode)
 
 main :: IO ()
 main = do

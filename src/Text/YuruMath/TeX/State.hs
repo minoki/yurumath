@@ -43,12 +43,8 @@ initialState input = CommonState
                         , _inputPendingTokenList = []
                         }
                        ]
-  , _esMaxDepth = 100
-  , _esMaxPendingToken = 100
   , _conditionalStack = []
-  , _nameInProgress = False
   , _localStates = [initialLocalState]
-  , _mode = VerticalMode
   }
 
 initialStateWithLocalState :: l -> String -> CommonState l
@@ -63,12 +59,8 @@ initialStateWithLocalState localState input = CommonState
                         , _inputPendingTokenList = []
                         }
                        ]
-  , _esMaxDepth = 100
-  , _esMaxPendingToken = 100
   , _conditionalStack = []
-  , _nameInProgress = False
   , _localStates = [localState]
-  , _mode = VerticalMode
   }
 
 defaultCategoryCodeOf :: Char -> CatCode

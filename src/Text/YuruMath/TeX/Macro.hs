@@ -20,6 +20,7 @@ import TypeFun.Data.List (Elem)
 import qualified Data.Map.Strict as Map
 import Control.Lens.Getter (use)
 import Control.Lens.Setter (assign,mapped)
+import Data.Maybe
 
 data MacroDefPrefix = MacroDefPrefix
                       { prefixGlobal    :: !Bool
@@ -72,13 +73,13 @@ data MacroParamSpec
   -- TODO: 'g', embellishments
   deriving (Eq,Show)
 
-data Macro = Macro { macroIsOuter :: !Bool
+data Macro = Macro { macroIsOuter :: !Bool -- not really supported
                    , macroIsProtected :: !Bool
                    , macroDelimiterBeforeFirstParam :: ParamDelimiter
                    , macroParamSpec :: [MacroParamSpec]
                    , macroReplacement :: [TeXToken] -- TODO: Generate 'parameter token'
                    }
-           deriving (Eq,Show)
+           deriving (Eq)
 
 -- Make a macro.
 -- TODO: parameter token?
@@ -89,6 +90,32 @@ mkSimpleMacro param rep = Macro { macroIsOuter = False
                                 , macroParamSpec = param
                                 , macroReplacement = rep
                                 }
+
+defaultMacro :: Macro
+defaultMacro = Macro { macroIsOuter = False
+                     , macroIsProtected = False
+                     , macroDelimiterBeforeFirstParam = ParamDelimiter
+                       { delimiterToken = []
+                       , delimitedByLBrace = False
+                       }
+                     , macroParamSpec = []
+                     , macroReplacement = []
+                     }
+
+instance Show Macro where
+  showsPrec d m = showParen (d > 10)
+                  $ showString "defaultMacro {"
+                  . foldr (.) (showString "}") (intersperse (showString ", ") $ catMaybes
+                                                 [showComponent "macroIsOuter" macroIsOuter
+                                                 ,showComponent "macroIsProtected" macroIsProtected
+                                                 ,showComponent "macroDelimiterBeforeFirstParam" macroDelimiterBeforeFirstParam
+                                                 ,showComponent "macroParamSpec" macroParamSpec
+                                                 ,showComponent "macroReplacement" macroReplacement
+                                                 ])
+    where
+      showComponent :: (Eq a, Show a) => String -> (Macro -> a) -> Maybe ShowS
+      showComponent name get | get m == get defaultMacro = Nothing
+                             | otherwise = Just (showString name . showString " = " . showsPrec 0 (get m))
 
 -- \def, defCommand
 -- \gdef, gdefCommand

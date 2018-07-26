@@ -21,7 +21,7 @@ import Text.YuruMath.TeX.Expansion
 import Text.YuruMath.TeX.Execution
 import Data.String
 import Data.Text (Text)
-import Data.Monoid
+import Data.Monoid ((<>))
 import qualified Data.Map.Strict as Map
 import Control.Monad.Error.Class
 import Control.Lens.Lens (Lens')

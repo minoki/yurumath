@@ -13,7 +13,7 @@ import Control.Lens.Lens (Lens',lens)
 import Control.Lens.Setter (modifying)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Data.Monoid
+import Data.Monoid ((<>))
 import Data.OpenUnion (Union,liftUnion)
 import TypeFun.Data.List (Elem)
 

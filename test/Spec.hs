@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 import Test.HUnit
-import Data.Semigroup
+import Data.Semigroup ((<>))
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.State
 import qualified Text.YuruMath.TeX.Tokenizer as Tok

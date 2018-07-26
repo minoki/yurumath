@@ -240,6 +240,18 @@ ifnumCommand = do
     ETCharacter { etChar = '>', etCatCode = CCOther } -> return $ x > y
     _ -> throwError "unrecognized relation for \\ifnum"
 
+ifabsnumCommand :: (MonadTeXState s m, MonadError String m) => m Bool
+ifabsnumCommand = do
+  x <- abs <$> readNumber
+  readOptionalSpaces
+  (rel,_) <- required nextExpandedToken
+  y <- abs <$> readNumber
+  case rel of
+    ETCharacter { etChar = '<', etCatCode = CCOther } -> return $ x < y
+    ETCharacter { etChar = '=', etCatCode = CCOther } -> return $ x == y
+    ETCharacter { etChar = '>', etCatCode = CCOther } -> return $ x > y
+    _ -> throwError "unrecognized relation for \\ifabsnum"
+
 ifdimCommand :: (MonadTeXState s m, MonadError String m) => m Bool
 ifdimCommand = do
   x <- readDimension
@@ -433,6 +445,9 @@ data CommonBoolean = Eiftrue
                    -- e-TeX extension:
                    | Eifdefined
                    | Eifcsname
+
+                   -- pdfTeX extension:
+                   | Eifabsnum
                    deriving (Eq,Show,Enum,Bounded)
 
 instance IsExpandable CommonBoolean where
@@ -454,6 +469,7 @@ instance IsPrimitive CommonBoolean where
   primitiveName Eifinner = "ifinner"
   primitiveName Eifdefined = "ifdefined"
   primitiveName Eifcsname = "ifcsname"
+  primitiveName Eifabsnum = "ifabsnum"
 
 instance Meaning CommonBoolean
 
@@ -472,6 +488,7 @@ evalCommonBoolean Eifmmode = ifmmodeCommand
 evalCommonBoolean Eifinner = ifinnerCommand
 evalCommonBoolean Eifdefined = ifdefinedCommand
 evalCommonBoolean Eifcsname = ifcsnameCommand
+evalCommonBoolean Eifabsnum = ifabsnumCommand
 
 instance (Monad m, MonadTeXState s m, MonadError String m) => DoExpand CommonBoolean m where
   doExpand e _ = expandBooleanConditional (evalCommonBoolean e)
@@ -521,6 +538,7 @@ expandableDefinitions = Map.fromList
   ,("pdfstrcmp",   liftUnion Estrcmp) -- pdfTeX name
   ,("strcmp",      liftUnion Estrcmp) -- XeTeX name
   ,("expanded",    liftUnion Eexpanded)
+  ,("ifabsnum",    liftUnion Eifabsnum) -- LuaTeX name (\ifpdfabsnum in pdfTeX)
 
   -- LuaTeX extension:
   ,("begincsname", liftUnion Ebegincsname)

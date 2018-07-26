@@ -294,7 +294,6 @@ data CommonState localstate
     { _inputStateStack    :: ![InputState] -- must be non-empty
     , _esMaxDepth         :: !Int
     , _esMaxPendingToken  :: !Int
-    -- , _esPendingTokenList :: [ExpansionToken]
     , _conditionals       :: [ConditionalKind]
     , _nameInProgress     :: !Bool
     , _localStates        :: [localstate] -- must be non-empty

@@ -304,6 +304,20 @@ detokenizeCommand = do
   content <- readUnexpandedGeneralText
   stringToEToken <$> showMessageStringM (mconcat $ map showToken content)
 
+-- e-TeX extension: \scantokens<general text>
+scantokensCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
+scantokensCommand = do
+  content <- readUnexpandedGeneralText
+  inputText <- showMessageStringM (mconcat $ map showToken content)
+  let ts = TokenizerState { tsInput = inputText
+                          , tsSpacingState = SSNewLine
+                          }
+      is = InputState { _inputTokenizerState = ts
+                      , _inputPendingTokenList = []
+                      }
+  modifying inputStateStack (is :)
+  return []
+
 -- LuaTeX extension: \Uchar
 ucharCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionToken]
 ucharCommand = do
@@ -338,6 +352,7 @@ data CommonExpandable = Eexpandafter
                       | Eunless
                       | Eunexpanded
                       | Edetokenize
+                      | Escantokens
 
                       -- pdfTeX extension
                       | Estrcmp
@@ -368,6 +383,7 @@ instance (Monad m, MonadTeXState s m, MonadError String m, Meaning (Expandable s
     Eunless -> unlessCommand
     Eunexpanded -> unexpandedCommand
     Edetokenize -> detokenizeCommand
+    Escantokens -> scantokensCommand
     Estrcmp -> strcmpCommand
     Eexpanded -> expandedCommand
     Ebegincsname -> begincsnameCommand
@@ -391,6 +407,7 @@ instance IsPrimitive CommonExpandable where
   primitiveName Eunless = "unless"
   primitiveName Eunexpanded = "unexpanded"
   primitiveName Edetokenize = "detokenize"
+  primitiveName Escantokens = "scantokens"
   primitiveName Estrcmp = "strcmp" -- \strcmp rather than \pdfstrcmp
   primitiveName Eexpanded = "expanded"
   primitiveName Ebegincsname = "begincsname"
@@ -498,6 +515,7 @@ expandableDefinitions = Map.fromList
   ,("unless",      liftUnion Eunless)
   ,("unexpanded",  liftUnion Eunexpanded)
   ,("detokenize",  liftUnion Edetokenize)
+  ,("scantokens",  liftUnion Escantokens)
 
   -- pdfTeX extension:
   ,("pdfstrcmp",   liftUnion Estrcmp) -- pdfTeX name

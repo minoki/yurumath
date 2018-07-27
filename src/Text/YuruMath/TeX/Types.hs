@@ -231,7 +231,7 @@ isInnerMode m = m == RestrictedHorizontalMode || m == InternalVerticalMode || m 
 data Context
   = Context { _isInCsname :: !Bool
             , _nameInProgress :: !Bool
-            , _mode :: Mode
+            , _mode :: !Mode
             , _maxExpansionDepth :: !Int
             , _maxPendingTokenListLength :: !Int
             }
@@ -261,7 +261,7 @@ data SpacingState = SSNewLine
                   deriving (Eq,Show)
 
 data TokenizerState = TokenizerState
-                      { tsInput :: String
+                      { tsInputLines :: [String]
                       , tsSpacingState :: !SpacingState
                       -- not implemented yet:
                       -- , tsCurrentLine :: !Int

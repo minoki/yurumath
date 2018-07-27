@@ -54,7 +54,7 @@ runTokenizer m = do
 tokenizeString :: TokenizerContext -> String -> Either String [TeXToken]
 tokenizeString context input = runExcept (evalStateT (runReaderT doAll context) initialState)
   where
-    initialState = TokenizerState { tsInput = input
+    initialState = TokenizerState { tsInputLines = lines input
                                   , tsSpacingState = SSNewLine
                                   }
     doAll = do t <- doNextTokenM
@@ -68,33 +68,50 @@ nextToken = runTokenizer doNextTokenM
 doNextTokenM :: TokenizerM (Maybe TeXToken)
 doNextTokenM = ReaderT (\ctx -> StateT (doNextToken ctx))
 
+appendEndlinechar :: Int -> String -> String
+appendEndlinechar !elchar line | isUnicodeScalarValue elchar = line ++ [chr elchar]
+                               | otherwise = line
+
+appendEndlinecharOnNextLine :: Int -> [String] -> [String]
+appendEndlinecharOnNextLine !_ [] = []
+appendEndlinecharOnNextLine !elchar (l:ls) = appendEndlinechar elchar l : ls
+
+data LineTokenizationResult = LineEnded !(Maybe TeXToken)
+                            | MiddleOfLine !TeXToken !SpacingState !String
+
 doNextToken :: TokenizerContext -> TokenizerState -> Except String (Maybe TeXToken, TokenizerState)
 doNextToken (TokenizerContext { tcCatcodeMap = !ccmap, tcEndlineChar = !elchar })
-  (TokenizerState { tsInput = input, tsSpacingState = ss }) = doNextTokenLoop False input ss
+  (TokenizerState { tsInputLines = inputLines, tsSpacingState = ss }) = doNextTokenLoop inputLines ss
   where
     catCodeOf !c = Map.findWithDefault (defaultCategoryCodeOf c) c ccmap
-    isTeXLetter !c = catCodeOf c == CCLetter && c /= '\n'
-    isSup !c = catCodeOf c == CCSup && c /= '\n'
-    doNextTokenLoop :: Bool -> String -> SpacingState -> Except String (Maybe TeXToken, TokenizerState)
-    doNextTokenLoop !_synthesized [] !ss
-      = return (Nothing, (TokenizerState { tsInput = []
-                                         , tsSpacingState = ss
-                                         }))
-    doNextTokenLoop False ('\n':cs) !ss
-      = let newState = TokenizerState { tsInput = cs, tsSpacingState = SSNewLine }
-        in case ss of -- real line break
-             SSNewLine -> return (Just $ TTCommandName (NControlSeq "par"), newState)
-             SSSkipSpaces -> doNextTokenLoop False cs ss
-             SSMiddleOfLine -> do
-               return (Just $ TTCharacter ' ' CCSpace, newState)
-    doNextTokenLoop !synthesized (c:cs) !ss
+    isTeXLetter !c = catCodeOf c == CCLetter
+    isSup !c = catCodeOf c == CCSup
+
+    doNextTokenLoop :: [String] -> SpacingState -> Except String (Maybe TeXToken, TokenizerState)
+    doNextTokenLoop [] _ = return (Nothing, TokenizerState { tsInputLines = [], tsSpacingState = ss }) -- end of input
+    doNextTokenLoop (currentLine : nextLines) ss = do
+      result <- doNextTokenInLine False currentLine ss
+      let nextLines' = appendEndlinecharOnNextLine elchar nextLines
+      case result of
+        Nothing ->
+          doNextTokenLoop nextLines' SSNewLine -- move to new line
+
+        Just (tok, _ {-should be empty-}, SSNewLine) ->
+          return (Just tok, TokenizerState { tsInputLines = nextLines', tsSpacingState = SSNewLine }) -- move to new line
+
+        Just (tok, restOfLine, ss) ->
+          return (Just tok, TokenizerState { tsInputLines = restOfLine : nextLines, tsSpacingState = ss }) -- middle of line
+
+    doNextTokenInLine :: Bool -> String -> SpacingState -> Except String (Maybe (TeXToken, String, SpacingState))
+
+    -- reached end of line without an end-of-line character
+    doNextTokenInLine _ "" !_ss = return Nothing
+
+    doNextTokenInLine !_synthesized (c:cs) !ss
       = case catCodeOf c of
         { CCEscape -> case cs of
-            [] -> throwError $ "Unexpected end of input after escape char `" ++ [c] ++ "'"
-            '\n':css -> do
-              return (Just $ TTCommandName $ NControlSeq $ if isUnicodeScalarValue elchar then T.singleton (chr elchar) else ""
-                     ,TokenizerState { tsInput = css, tsSpacingState = SSNewLine }
-                     )
+            [] -> return $ Just (TTCommandName $ NControlSeq "", "", SSNewLine)
+
             -- ^^ notation
             c1:c2:css | isSup c1, c1 == c2, Just res <- parseSuperscriptNotation c2 css ->
                         case res of
@@ -102,37 +119,42 @@ doNextToken (TokenizerContext { tcCatcodeMap = !ccmap, tcEndlineChar = !elchar }
                           Right (ch,csss)
                             | isTeXLetter ch -> throwError "^^ notation in control word is not supported"
                             | otherwise -> doEscapeChar ch csss
+
             c1:css -> doEscapeChar c1 css
-        ; CCEndLine -> doNextTokenLoop False (dropWhile (/= '\n') cs) ss
+
+        ; CCEndLine -> case ss of
+                         SSNewLine ->      return $ Just (TTCommandName (NControlSeq "par"), "", SSNewLine)
+                         SSSkipSpaces ->   return Nothing -- generate no token at line end
+                         SSMiddleOfLine -> return $ Just (TTCharacter ' ' CCSpace, "", SSNewLine)
+
         ; CCSpace -> case ss of
-            SSNewLine -> doNextTokenLoop False cs SSNewLine
-            SSSkipSpaces -> doNextTokenLoop False cs SSSkipSpaces
+            SSNewLine -> doNextTokenInLine False cs SSNewLine
+            SSSkipSpaces -> doNextTokenInLine False cs SSSkipSpaces
             SSMiddleOfLine ->
-              return (Just $ TTCharacter ' ' CCSpace -- always produce a token with character code 32
-                     ,TokenizerState { tsInput = cs, tsSpacingState = SSSkipSpaces }
-                     )
-        ; CCComment -> doNextTokenLoop False (doComment cs) SSNewLine
-        ; CCIgnored -> doNextTokenLoop False cs SSNewLine
+               -- always produce a token with character code 32
+              return $ Just (TTCharacter ' ' CCSpace, cs, SSSkipSpaces)
+
+        ; CCComment -> return Nothing -- move to next line without producting a token
+
+        ; CCIgnored -> doNextTokenInLine False cs ss
+
         ; CCSup -- ^^ notation
-          | not synthesized
-          , c2:css <- cs
+          | c2:css <- cs
           , c2 == c
           , Just res <- parseSuperscriptNotation c2 css ->
               case res of
                 Left err -> throwError err
-                Right (ch,csss) -> doNextTokenLoop True (ch:csss) ss
+                Right (ch,csss) -> doNextTokenInLine True (ch:csss) ss
 
-        ; CCActive -> return (Just $ TTCommandName (NActiveChar c)
-                             ,TokenizerState { tsInput = cs, tsSpacingState = SSMiddleOfLine }
-                             )
+        ; CCActive -> return $ Just (TTCommandName (NActiveChar c), cs, SSMiddleOfLine)
+
         ; cc ->
             -- CCBeginGroup, CCEndGroup, CCMathShift, CCAlignmentTab
             -- CCParam, CCSup, CCSub, CCLetter, CCOther
-            return (Just $ TTCharacter c cc
-                   ,TokenizerState { tsInput = cs, tsSpacingState = SSMiddleOfLine }
-                   )
+            return $ Just (TTCharacter c cc, cs, SSMiddleOfLine)
         }
-    doEscapeChar :: Char -> String -> Except String (Maybe TeXToken, TokenizerState)
+
+    doEscapeChar :: Char -> String -> Except String (Maybe (TeXToken, String, SpacingState))
     doEscapeChar !c1 css = case catCodeOf c1 of
       { CCLetter -> do -- control word
           let (w,csss) = span isTeXLetter css
@@ -142,23 +164,13 @@ doNextToken (TokenizerContext { tcCatcodeMap = !ccmap, tcEndlineChar = !elchar }
             s1:s2:cssss | s1 == s2 && isSup s1
                         , Just (Right (ch,_)) <- parseSuperscriptNotation s2 cssss
                         , isTeXLetter ch -> throwError "^^ notation in control word is not supported"
-            _ -> return (Just $ TTCommandName $ NControlSeq $ T.pack $ c1:w
-                        ,TokenizerState { tsInput = csss, tsSpacingState = SSSkipSpaces }
-                        )
-      ; CCEndLine ->
-          return (Just $ TTCommandName $ NControlSeq $ if isUnicodeScalarValue elchar then T.singleton (chr elchar) else ""
-                 ,TokenizerState { tsInput = dropWhile (/= '\n') css, tsSpacingState = SSNewLine }
-                 )
+            _ -> return $ Just (TTCommandName $ NControlSeq $ T.pack $ c1:w, csss, SSSkipSpaces)
 
       ; CCSpace -> -- control space: always produce a token with character code 32
-          return (Just $ TTCommandName $ NControlSeq " "
-                 ,TokenizerState { tsInput = css, tsSpacingState = SSSkipSpaces }
-                 )
+          return $ Just (TTCommandName $ NControlSeq " ", css, SSSkipSpaces)
 
       ; _ -> -- control symbol
-          return (Just $ TTCommandName $ NControlSeq $ T.singleton c1
-                 ,TokenizerState { tsInput = css, tsSpacingState = SSMiddleOfLine }
-                 )
+          return $ Just (TTCommandName $ NControlSeq $ T.singleton c1, css, SSMiddleOfLine)
       }
 
 parseSuperscriptNotation :: Char -> String -> Maybe (Either String (Char,String))
@@ -184,14 +196,13 @@ parseSuperscriptNotation !c2 (c3:c4:css)
             else throwError "Invalid Unicode character"
       _ -> throwError "^^^^ needs four hex digits"
 
--- TeX3: ^^xx
+-- TeX3: ^^xx (two hex digits)
 parseSuperscriptNotation _c2 (x1:x2:css)
   | isLowerHexDigit x1 && isLowerHexDigit x2 =
       Just $ Right (chr (16 * digitToInt x1 + digitToInt x2), css)
 
--- ^^X, like ^^M, ^^?
+-- ^^X, like ^^M (carriage return), ^^I (tab), ^^? (delete)
 parseSuperscriptNotation _c2 (d:css)
-  -- TODO: If d == '\n', then return <endlinechar> `xor` 0x40
   | ord d < 0x80 = Just $ Right (chr (ord d `xor` 0x40), css)
 
 parseSuperscriptNotation _c2 _ = Nothing

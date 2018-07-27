@@ -13,6 +13,7 @@ module Text.YuruMath.TeX.Primitive.Expandable
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Meaning
 import Text.YuruMath.TeX.Expansion
+import Text.YuruMath.TeX.State (splitInputIntoLines)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
@@ -321,7 +322,7 @@ scantokensCommand :: (MonadTeXState s m, MonadError String m) => m [ExpansionTok
 scantokensCommand = do
   content <- readUnexpandedGeneralText
   inputText <- showMessageStringM (mconcat $ map showToken content)
-  let ts = TokenizerState { tsInput = inputText
+  let ts = TokenizerState { tsInputLines = splitInputIntoLines inputText
                           , tsSpacingState = SSNewLine
                           }
       is = InputState { _inputTokenizerState = ts

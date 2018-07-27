@@ -3,11 +3,15 @@ module Text.YuruMath.TeX.State where
 import Text.YuruMath.TeX.Types
 import Text.YuruMath.TeX.Quantity
 import Data.Char
+import Data.List
 import Control.Monad.State.Class
 import Control.Monad.Error.Class
 import qualified Data.Map.Strict as Map
 import Control.Lens.Getter (view,use)
 import Control.Lens.Setter (set,assign,modifying)
+
+splitInputIntoLines :: String -> [String]
+splitInputIntoLines s = map (dropWhileEnd (== ' ')) $ lines s
 
 initialLocalState :: CommonLocalState e v
 initialLocalState = CommonLocalState
@@ -35,7 +39,7 @@ initialState :: String -> CommonState (CommonLocalState e v)
 initialState input = CommonState
   { _inputStateStack = [InputState
                         { _inputTokenizerState = TokenizerState
-                          { tsInput         = input
+                          { tsInputLines    = splitInputIntoLines input
                           , tsSpacingState  = SSNewLine
                           -- , tsCurrentLine   = 0
                           -- , tsCurrentColumn = 0
@@ -51,7 +55,7 @@ initialStateWithLocalState :: l -> String -> CommonState l
 initialStateWithLocalState localState input = CommonState
   { _inputStateStack = [InputState
                         { _inputTokenizerState = TokenizerState
-                          { tsInput         = input
+                          { tsInputLines    = splitInputIntoLines input
                           , tsSpacingState  = SSNewLine
                           -- , tsCurrentLine   = 0
                           -- , tsCurrentColumn = 0
